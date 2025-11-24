@@ -1,4 +1,4 @@
-There are many publicly available live camera feeds from all sorts of public places. In Prague, there is a network of cameras available from bezpecnost.praha.eu which is mostly focused on traffic monitoring. There are also publicly available livestreams from airports and other possible places of interest. There are a lot of these cameras, so human monitoring is not feasible. This diploma thesis will focus on the usage of multi-modal models to assess the current situations in the monitored places and provide an interpretation of this information.
+There are many publicly available live camera feeds. In Prague, there is a network of cameras available from bezpecnost.praha.eu which is mostly focused on traffic monitoring. It also monitors famous public places like the Charles bridge. There are also publicly available livestreams from airports which also contain a lot of valuable information. There are a lot of these cameras, so human monitoring is not feasible which calls for an automated approach. This diploma thesis will focus on the usage of multi-modal models to assess the current situations in the monitored places and provide an interpretation of this information.
 
 The goals of this thesis are:
 
@@ -9,3 +9,11 @@ The goals of this thesis are:
 5. Implement a prototype of the selected approach, attempting to connect information from multiple cameras to get a more comprehensive understanding of the situation.
 6. Evaluate the prototype on the gathered data and assess its performance.
 7. Formulate conclusions and possible future directions for research in this area.
+
+Possible usecases are:
+- Detecting traffic jams and accidents
+- Monitoring overcrowding in public places
+- Analyzing weather conditions
+- Assesing the situation on an airport apron - refuelling, boarding, cargo handling..
+- Using this information to assess trends and make predictions
+- Connecting this information together for a better understanding of the overall situation
