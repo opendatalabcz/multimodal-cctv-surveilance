@@ -1,19 +1,20 @@
-There are many publicly available live camera feeds. In Prague, there is a network of cameras available from bezpecnost.praha.eu which is mostly focused on traffic monitoring. It also monitors famous public places like the Charles bridge. There are also publicly available livestreams from airports which also contain a lot of valuable information. There are a lot of these cameras, so human monitoring is not feasible which calls for an automated approach. This diploma thesis will focus on the usage of multi-modal models to assess the current situations in the monitored places and provide an interpretation of this information.
+There are many publicly available live camera feeds. In Prague, there is a network of cameras available from bezpecnost.praha.eu which is mostly focused on traffic monitoring. It also monitors famous public places like the Charles Bridge. There are also publicly available livestreams from airports which also contain a lot of valuable information. The large number of these cameras means that human monitoring is not feasible which calls for an automated approach. This diploma thesis will focus on the usage of multi-modal models to assess the current situations in the monitored places and provide an interpretation of this information.
 
 The goals of this thesis are:
 
 1. Gather the data necessary for the task. This includes finding suitable cameras and gathering the footage.
 2. Explore the current state of the art in multi-modal models for video understanding and assess their suitability for the task.
-3. Define possible use cases and try to gather as much relevant information from the cameras as possible.
-4. Come up with possible approaches to the task and select the most suitable one.
-5. Implement a prototype of the selected approach, attempting to connect information from multiple cameras to get a more comprehensive understanding of the situation.
-6. Evaluate the prototype on the gathered data and assess its performance.
+3. Use one of the existing multi-modal models which is best suited for the task.
+4. Define possible use cases and try to gather as much relevant information from the cameras as possible.
+5. Come up with possible approaches to the task and select the best one.
+6. Implement a prototype of the selected approach and evaluate it on the gathered data and assess its performance.
 7. Formulate conclusions and possible future directions for research in this area.
 
-Possible usecases are:
+Possible use cases are:
 - Detecting traffic jams and accidents
 - Monitoring overcrowding in public places
 - Analyzing weather conditions
-- Assesing the situation on an airport apron - refuelling, boarding, cargo handling..
+- Assessing the situation on an airport apron - refueling, boarding, cargo handling...
 - Using this information to assess trends and make predictions
 - Connecting this information together for a better understanding of the overall situation
+- Anomaly detection
