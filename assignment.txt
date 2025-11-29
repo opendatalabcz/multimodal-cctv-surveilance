@@ -1,14 +1,14 @@
-There are many publicly available live camera feeds. In Prague, there is a network of cameras available from bezpecnost.praha.eu which is mostly focused on traffic monitoring. It also monitors famous public places like the Charles Bridge. There are also publicly available livestreams from airports which also contain a lot of valuable information. The large number of these cameras means that human monitoring is not feasible which calls for an automated approach. This diploma thesis will focus on the usage of multi-modal models to assess the current situations in the monitored places and provide an interpretation of this information.
+There are many publicly available live camera feeds that offer valuable monitoring opportunities. In Prague, there is a network of cameras available from bezpecnost.praha.eu which is primarily focused on traffic monitoring. It also monitors famous public places like the Charles Bridge. There are also publicly available livestreams from airports which also contain a lot of valuable information. The large number of these cameras means that continuous human monitoring is not feasible, which calls for an automated approach. This diploma thesis will focus on using multi-modal models to assess current situations in the monitored locations and provide automated interpretation of this information.
 
 The goals of this thesis are:
 
-1. Gather the data necessary for the task. This includes finding suitable cameras and gathering the footage.
-2. Explore the current state of the art in multi-modal models for video understanding and assess their suitability for the task.
-3. Use one of the existing multi-modal models which is best suited for the task.
-4. Define possible use cases and try to gather as much relevant information from the cameras as possible.
-5. Come up with possible approaches to the task and select the best one.
-6. Implement a prototype of the selected approach and evaluate it on the gathered data and assess its performance.
-7. Formulate conclusions and possible future directions for research in this area.
+1. Gather the necessary data for the task, including identifying suitable camera sources and collecting relevant footage.
+2. Explore the current state-of-the-art in multi-modal models for video understanding and assess their suitability for surveillance tasks.
+3. Select and implement one of the existing multi-modal models that is best suited for the task.
+4. Define potential use cases and develop methods to extract relevant information from the camera feeds.
+5. Design possible approaches to the problem and select the most promising one.
+6. Implement a prototype of the selected approach and evaluate its performance on the gathered data.
+7. Draw conclusions and identify future research directions in this area.
 
 Possible use cases are:
 - Detecting traffic jams and accidents
