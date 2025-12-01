@@ -195,3 +195,32 @@ $RECYCLE.BIN/
 # config/secrets.json
 # data/raw/
 # models/trained/
+
+# LaTeX auxiliary files
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.lof
+*.lol
+*.lot
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+*.xmpdata
+*.xmpi
+*.nav
+*.snm
+*.vrb
+*.gz
+*.fls
+*.figlist
+*.makefile
+*.xdv
+
+# Optional: Uncomment if you don't want PDFs in git
+# *.pdf
