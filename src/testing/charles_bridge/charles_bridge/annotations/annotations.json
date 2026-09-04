@@ -1,0 +1,17 @@
+{
+  "dataset_info": {
+    "name": "Charles bridge Crowdedness Dataset",
+    "version": "1.0",
+    "description": "Dataset for evaluating crowdedness of Charles Bridge (0-10 scale)"
+  },
+  "annotations": [
+    {
+      "image_names": ["camera_101200_20251129_120603.jpg", "camera_101201_20251129_120604.jpg"],
+      "crowdedness_score": 9
+    },
+    {
+      "image_names": ["camera_101200_20251125_095232.jpg", "camera_101201_20251125_095233.jpg"],
+      "crowdedness_score": 2
+    }
+  ]
+}

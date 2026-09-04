@@ -1,0 +1,13 @@
+{
+  "cameras": {
+    "charles_bridge": ["101200", "101201"],
+    "holesovicky": ["500066", "500067"],
+    "budejovicka": ["500002"],
+    "nuselak": ["404033", "404032"],
+    "barandak": ["500473", "500475"],
+    "dejvice": ["106040"]
+  },
+  "interval": "10m",
+  "duration": "30d",
+  "output_base": "camera_images"
+}
