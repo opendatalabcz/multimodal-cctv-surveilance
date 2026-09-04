@@ -1,0 +1,30 @@
+[project]
+name = "multimodal-cctv-surveilance"
+version = "0.1.0"
+description = "Multimodal CCTV surveillance analysis from public camera feeds"
+requires-python = ">=3.11,<3.13"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "accelerate",
+    "aiohttp",
+    "bitsandbytes",
+    "huggingface-hub",
+    "matplotlib",
+    "open-clip-torch",
+    "pandas",
+    "pillow",
+    "python-dotenv",
+    "requests",
+    "torch",
+    "torchvision",
+    "transformers",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel",
+    "jupyter",
+]
+
+[tool.uv]
+package = false
