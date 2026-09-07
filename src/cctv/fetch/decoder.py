@@ -143,7 +143,8 @@ class CameraImageFetcher:
                     
                     if save_to_file:
                         # Save image
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        now = datetime.now()
+                        timestamp = f"{now:%Y%m%d_%H%M%S}_{now.microsecond // 1000:03d}"
                         filename = f"camera_{camera_id}_{timestamp}.jpg"
                         filepath = os.path.join(output_dir, filename)
                         
@@ -198,7 +199,8 @@ class CameraImageFetcher:
                         img = Image.open(BytesIO(image_bytes))
                         
                         if save_to_file:
-                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            now = datetime.now()
+                            timestamp = f"{now:%Y%m%d_%H%M%S}_{now.microsecond // 1000:03d}"
                             filename = f"camera_{camera_id}_{timestamp}.jpg"
                             filepath = os.path.join(output_dir, filename)
                             
