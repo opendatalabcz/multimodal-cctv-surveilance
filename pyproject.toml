@@ -14,6 +14,7 @@ dependencies = [
     "pandas",
     "pillow",
     "python-dotenv",
+    "pyyaml>=6.0.3",
     "requests",
     "torch",
     "torchvision",
@@ -26,5 +27,17 @@ dev = [
     "jupyter",
 ]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cctv"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/cctv/prompts/template.md" = "cctv/prompts/template.md"
+"src/cctv/prompts/fillers" = "cctv/prompts/fillers"
+"src/cctv/fetch/monitor_config.json" = "cctv/fetch/monitor_config.json"
+
 [tool.uv]
-package = false
+package = true

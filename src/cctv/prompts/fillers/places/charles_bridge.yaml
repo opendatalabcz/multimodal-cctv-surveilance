@@ -1,0 +1,14 @@
+# Site-specific filler. Merge on top of fillers/types/{type}.yaml
+# (type keys first, then this file; place keys win on conflict).
+type: public_walking_space
+
+place: Charles Bridge in Prague
+
+# Optional. Unique layout the type file cannot know.
+# Include the markdown heading in this block. Set to "" to omit the section.
+place_context: |
+  ## Place-specific context
+  - Pedestrian-only historic stone bridge over the Vltava, lined with statues, with towers at both ends
+  - One end leads toward Old Town; the other toward Malá Strana
+  - Two cameras typically show opposite directions along the same span; treat them as one scene
+  - Statue niches and tower gateways can look empty even when the roadway is busy; judge crowdedness on the walkable deck

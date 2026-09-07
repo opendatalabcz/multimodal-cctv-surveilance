@@ -1,0 +1,49 @@
+# Reusable analysis for this kind of site. Compose with a place file.
+# Other types to add later: highway, crossroad, parking, …
+place_type: public walking space
+
+information: crowd density, weather, time of day, incidents, and a brief scene description
+
+requirements: |
+  ### 1. Crowdedness Assessment
+  - Evaluate overcrowdedness level on a scale of 1-10 (considering all provided images):
+    - 1: Empty (no people)
+    - 2-3: Very low crowd - few people scattered across the area
+    - 4-5: Low crowd - under a half of the space's capacity is filled
+    - 6-7: Moderate crowd - getting crowded, little over half of the space's capacity is filled
+    - 8-9: High crowd - just a few gaps in the crowds
+    - 10: Extremely overcrowded - movement without touching other people would be hard
+
+  ### 2. Weather Conditions
+  - Assess current weather based on visual cues:
+    - Sunny, cloudy, overcast, rainy, snowy, foggy, etc.
+    - Look for indicators like shadows, wet surfaces, visibility
+
+  ### 3. Time of Day Estimation
+  - Estimate based on lighting conditions:
+    - morning, midday, afternoon, evening, night
+
+  ### 4. Incident Detection
+  - Look for any unusual activities or incidents:
+    - Accidents, emergencies, suspicious behavior
+    - Large gatherings or events
+    - If none detected, respond with "none"
+
+  ### 5. Scene Description
+  - Provide a brief overall description of the scene
+  - Include general atmosphere and notable features
+  - If multiple images: mention any differences between viewpoints
+
+output_format: |
+  ```json
+  {
+      "overcrowdedness_level": 0,
+      "weather": "description",
+      "time_of_day": "morning|midday|afternoon|evening|night",
+      "incidents": "description or none",
+      "scene_description": "brief description"
+  }
+  ```
+
+extra_notes: |
+  - Use consistent terminology for weather and time classifications
