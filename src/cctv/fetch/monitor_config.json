@@ -5,7 +5,9 @@
     "budejovicka": ["500002"],
     "nuselak": ["404033", "404032"],
     "barandak": ["500473", "500475"],
-    "dejvice": ["106040"]
+    "dejvice": ["106040"],
+    "hybernska": ["101048"],
+    "belocerekevska": ["510034"]
   },
   "interval": "10m",
   "duration": "30d",
