@@ -1,0 +1,41 @@
+{
+  "place_id": "hybernska",
+  "kind": "batch",
+  "success": true,
+  "analysis": {
+    "congestion_level": 3,
+    "traffic_flow": "light",
+    "vehicles": {
+      "cars": 9,
+      "vans": 2,
+      "trucks": 1,
+      "buses": 0,
+      "trams": 0,
+      "motorcycles": 0,
+      "bicycles": 0
+    },
+    "parked_vehicles": 25,
+    "pedestrians": 8,
+    "construction": {
+      "present": true,
+      "occupies": "both",
+      "description": "White metal fencing, red-and-white bollards, construction materials, paving debris, and a site container occupy the right side of the street, narrowing the carriageway and restricting the sidewalk."
+    },
+    "violations": [],
+    "weather": "Overcast or partly cloudy, dry pavement, good visibility, no visible precipitation.",
+    "time_of_day": "afternoon",
+    "incidents": "none",
+    "interesting": "The road is narrowed by a construction pinch and temporary yellow lane markings, but vehicles continue through with visible gaps and no major queue. Numerous cars are parked along both curbs, especially beyond the works area. The Powder Tower is visible in the distance.",
+    "scene_description": "Urban street view toward the Powder Tower with light, steadily moving traffic on the remaining carriageway. Construction fencing and materials occupy the right lane and sidewalk, while pedestrians use the sidewalks and vehicles remain parked along the curbs."
+  },
+  "image_paths": [
+    "camera_images/hybernska/camera_101048_20260907_143634_894.jpg",
+    "camera_images/hybernska/camera_101048_20260907_143637_019.jpg",
+    "camera_images/hybernska/camera_101048_20260907_143640_721.jpg",
+    "camera_images/hybernska/camera_101048_20260907_143642_802.jpg",
+    "camera_images/hybernska/camera_101048_20260907_143644_903.jpg"
+  ],
+  "image_count": 5,
+  "model": "gpt-5.6-luna",
+  "source": "notebook azure_vision_experiment (already-run cell)"
+}

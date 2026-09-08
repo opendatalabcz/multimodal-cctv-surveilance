@@ -19,8 +19,9 @@ Cameras overlooking the charles bridge
 
 
 ## budejovicka
-Camera position on the D1 highway entry into prague
+Camera position on the D1 highway entry into Prague (Budějovická). Multi-lane motorway looking outbound toward Brno / Pražský okruh / Chodov signs.
 ### 500002
+High-angle view along the carriageway with a central median, KFC signs on a median pole, and overhead destination gantries. No pedestrians expected on the motorway.
 
 
 ## nuselak
@@ -48,9 +49,17 @@ Square in dejvice, now problematic vision conditions
 
 
 ## hybernska
+Long urban street looking toward the Powder Tower, with curb parking and an active construction enclosure on the right.
 
 ### 101048
-Long road with parking on the side (and now a construction)
+High-angle view along Hybernská. Live lane is pinched by white fencing and cones; parked cars along the right; pedestrians on both sidewalks. Still refresh is about 1–2 s; hash frames to skip duplicates.
+
+
+## jecna
+Busy urban intersection (Ječná), camera 202020. Traffic queues at a wide zebra crossing; tram/trolley wires overhead.
+
+### 202020
+High-angle view of the junction, stop line and crosswalk in the near field, no-entry sign on the right corner. Still refresh is about 1–1.25 s; hash frames to skip duplicates.
 
 
 ## belocerekevska

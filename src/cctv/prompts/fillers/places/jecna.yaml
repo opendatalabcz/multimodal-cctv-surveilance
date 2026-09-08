@@ -1,0 +1,14 @@
+# Site-specific filler. Merge on top of fillers/types/{type}.yaml
+type: urban_intersection
+
+place: Ječná street intersection in Prague
+
+place_context: |
+  ## Place-specific context
+  - High-angle municipal CCTV of a busy multi-lane urban junction (camera 202020), typically with the PRAHA / PRAGUE watermark
+  - A wide zebra crossing and a white stop line sit in the near-to-mid field; one traffic stream often queues there while perpendicular traffic crosses in the foreground
+  - Overhead tram or trolley wires cross the view; treat rails/wires as context, and only report a tram if the vehicle itself is visible
+  - A no-entry (red disc, white bar) sign is on the right-hand sidewalk corner; use it when judging wrong-way or illegal entry
+  - The right sidewalk corner is a usual pedestrian wait/gather point before the crossing
+  - Judge congestion on moving lanes and the stop-line queue, not on cars parked along the far curb
+  - Buildings are typical Prague street facades; ignore shop signs unless they help locate the view

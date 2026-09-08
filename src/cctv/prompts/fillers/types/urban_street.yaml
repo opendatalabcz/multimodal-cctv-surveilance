@@ -1,0 +1,93 @@
+# Reusable analysis for urban streets with parking, works, and mixed traffic.
+place_type: urban street
+
+information: traffic congestion, parked versus moving vehicles, construction, traffic-rule violations, weather, time of day, incidents, and other noteworthy observations
+
+requirements: |
+  ### 1. Traffic congestion
+  - Rate congestion on a scale of 1-10 on the live (driveable) carriageway only:
+    - 1: Empty or free-flowing, no queues
+    - 2-3: Light traffic, vehicles moving with little delay
+    - 4-5: Moderate, short queues or tight gaps, still moving
+    - 6-7: Heavy, slow or stop-and-go on most of the remaining lanes
+    - 8-9: Severe, little movement, the narrowed roadway is nearly blocked
+    - 10: Gridlock, no usable gap through the works or parked vehicles
+  - Count visible vehicles by type (cars, vans, trucks, buses, trams, motorcycles/scooters, bicycles). Use 0 if none.
+  - Split parked vehicles (along the curb or in a marked bay) from vehicles in the live lane. Do not treat parked cars as congestion.
+  - Count pedestrians on sidewalks, crossings, and near works.
+
+  ### 2. Construction and lane occupancy
+  - Say whether roadworks are visible (fencing, cones, bollards, materials, containers, excavators).
+  - Note whether the works occupy a lane, the sidewalk, or both, and whether a narrowed contraflow or one-way pinch remains.
+  - If no works are visible, say so explicitly.
+
+  ### 3. Traffic-rule violations
+  - Report only what is clearly visible. Do not invent a signal color if the light is not readable.
+  - Look for, among other things:
+    - Parking or standing in a live lane, on a crossing, or inside a fenced works zone
+    - Blocking the remaining carriageway or a pedestrian path
+    - Pedestrians walking in a live lane without an obvious crossing
+    - Entering a closed works area
+    - Driving on the sidewalk
+    - Encroaching on a zebra crossing while people are on it
+  - If none are visible, use an empty list.
+
+  ### 4. Weather Conditions
+  - Assess current weather from visual cues (sun, cloud, rain, wet pavement, snow, fog, visibility).
+
+  ### 5. Time of Day Estimation
+  - Estimate from lighting and shadows: morning, midday, afternoon, evening, night.
+
+  ### 6. Incident Detection
+  - Accidents, breakdowns, emergency vehicles, fights, crowds spilling into the roadway, a blocked remaining lane.
+  - If none, use "none".
+
+  ### 7. Other interesting observations
+  - Anything else worth reporting: unusual vehicles, how the works change the street, visibility problems, notable pedestrian behavior, or patterns across a sequence of frames.
+  - This field is open-ended; mention what a human operator might flag. Use "none" only if the scene is truly unremarkable.
+
+  ### 8. Scene Description
+  - Brief overall description of the street, traffic state, works, and atmosphere.
+  - If multiple images: note what changed between frames (queue, a vehicle clearing the pinch, pedestrians, works activity).
+
+output_format: |
+  ```json
+  {
+      "congestion_level": 0,
+      "traffic_flow": "free|light|moderate|heavy|standstill",
+      "vehicles": {
+          "cars": 0,
+          "vans": 0,
+          "trucks": 0,
+          "buses": 0,
+          "trams": 0,
+          "motorcycles": 0,
+          "bicycles": 0
+      },
+      "parked_vehicles": 0,
+      "pedestrians": 0,
+      "construction": {
+          "present": false,
+          "occupies": "none|lane|sidewalk|both",
+          "description": "short description or none"
+      },
+      "violations": [
+          {
+              "type": "short label",
+              "description": "what is visible",
+              "confidence": "low|medium|high"
+          }
+      ],
+      "weather": "description",
+      "time_of_day": "morning|midday|afternoon|evening|night",
+      "incidents": "description or none",
+      "interesting": "free-form observations or none",
+      "scene_description": "brief description"
+  }
+  ```
+
+extra_notes: |
+  - Prefer "not visible" over guessing signal state, plate text, or driver intent
+  - Parked cars and works fencing are context, not congestion, unless they block the remaining live lane
+  - For a frame sequence, describe congestion trend (building, clearing, unchanged) in interesting or scene_description
+  - Use consistent terms for weather, time of day, and traffic_flow

@@ -5,27 +5,33 @@ from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
+V1_SUFFIX = "/openai/v1"
+
 
 @dataclass(frozen=True)
 class AzureOpenAIConfig:
+    """Settings for the Azure OpenAI ``/openai/v1`` API.
+
+    This route needs no ``api-version``; the deployment travels in the request
+    body as ``model``.
+    """
+
     api_key: str | None
     endpoint: str | None
-    api_version: str | None
     model: str | None
 
     @property
     def api_url(self) -> str | None:
-        if not self.endpoint or not self.model or not self.api_version:
+        if not self.endpoint:
             return None
-        endpoint = self.endpoint if self.endpoint.endswith("/") else f"{self.endpoint}/"
-        return (
-            f"{endpoint}openai/deployments/{self.model}/chat/completions"
-            f"?api-version={self.api_version}"
-        )
+        base = self.endpoint.rstrip("/")
+        if not base.endswith(V1_SUFFIX):
+            base += V1_SUFFIX
+        return f"{base}/chat/completions"
 
     @property
     def is_configured(self) -> bool:
-        return all([self.api_key, self.endpoint, self.api_version, self.model])
+        return bool(self.api_key and self.endpoint and self.model)
 
 
 def load_azure_openai_config() -> AzureOpenAIConfig:
@@ -33,6 +39,5 @@ def load_azure_openai_config() -> AzureOpenAIConfig:
     return AzureOpenAIConfig(
         api_key=os.getenv("AZURE_OPENAI_API_KEY"),
         endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
         model=os.getenv("AZURE_OPENAI_MODEL"),
     )

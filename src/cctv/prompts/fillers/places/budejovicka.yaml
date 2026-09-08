@@ -1,0 +1,14 @@
+# Site-specific filler. Merge on top of fillers/types/{type}.yaml
+type: highway
+
+place: Budějovická D1 highway entry into Prague
+
+place_context: |
+  ## Place-specific context
+  - High-angle municipal CCTV (camera 500002) looking along a multi-lane motorway at the D1 / Prague entry near Budějovická; traffic typically recedes away from the camera
+  - A concrete median with a metal guardrail splits the view; judge congestion on the live carriageway lanes, not the median or off-road areas
+  - Overhead green destination signs in the mid-distance typically read Brno, Pražský okruh, Chodov, Hradec Králové, Spořilov — use them only as location context
+  - Red KFC signs often sit on a median pole in the foreground; ignore commercial signs unless they obstruct the view
+  - A PRAHA / PRAGUE city-entry board may appear on the right; this is a watermark/sign, not an incident
+  - Pedestrians and cyclists should not be on this carriageway; if any are visible, report them
+  - Trees, billboards, and overpasses in the background are scenery; do not treat them as traffic

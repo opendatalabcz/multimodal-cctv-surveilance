@@ -1,0 +1,84 @@
+# Reusable analysis for signalized / unsignalized urban intersections.
+place_type: urban intersection
+
+information: traffic congestion, traffic-rule violations, weather, time of day, incidents, and other noteworthy observations
+
+requirements: |
+  ### 1. Traffic congestion
+  - Rate congestion on a scale of 1-10 across the visible intersection:
+    - 1: Empty or free-flowing, no queues
+    - 2-3: Light traffic, vehicles moving with little delay
+    - 4-5: Moderate, short queues, some stop-and-go
+    - 6-7: Heavy, long queues occupying most visible lanes
+    - 8-9: Severe congestion, little movement, junction nearly blocked
+    - 10: Gridlock, vehicles blocking the crossing or box, no usable gaps
+  - Count visible vehicles by type (cars, vans, trucks, buses, trams, motorcycles/scooters, bicycles). Use 0 if none.
+  - Count pedestrians visible on sidewalks and on the crossing.
+  - Note whether a queue is waiting at a stop line / traffic light, and whether cross traffic is moving.
+
+  ### 2. Traffic-rule violations
+  - Report only what is clearly visible. Do not invent a signal color if the light is not readable.
+  - Look for, among other things:
+    - Encroaching on or stopping past the stop line
+    - Occupying or blocking the zebra crossing while pedestrians are on it
+    - Entering a no-entry / one-way street
+    - Failing to yield to pedestrians already on the crossing
+    - Driving on tram tracks or sidewalks
+    - Parking or standing in a restricted area (crossing, stop line, tram lane)
+    - Obvious red-light running only if the signal face is clearly visible
+  - Motorcycle or bicycle filtering to the front of a queue is common in Prague; mention it as an observation, and call it a violation only if it clearly breaks a visible restriction.
+  - If none are visible, use an empty list.
+
+  ### 3. Weather Conditions
+  - Assess current weather from visual cues (sun, cloud, rain, wet pavement, snow, fog, visibility).
+
+  ### 4. Time of Day Estimation
+  - Estimate from lighting and shadows: morning, midday, afternoon, evening, night.
+
+  ### 5. Incident Detection
+  - Accidents, breakdowns, emergency vehicles, fights, crowds spilling into the roadway, blocked tram/bus path.
+  - If none, use "none".
+
+  ### 6. Other interesting observations
+  - Anything else worth reporting that is not covered above: unusual vehicles, roadworks, visibility problems, tram/trolley activity, notable pedestrian behavior, infrastructure (signs, lights, markings), or patterns across a sequence of frames.
+  - This field is open-ended; mention what a human operator might flag. Use "none" only if the scene is truly unremarkable.
+
+  ### 7. Scene Description
+  - Brief overall description of the intersection, traffic state, and atmosphere.
+  - If multiple images: note what changed between frames (queue growth, a vehicle clearing the junction, pedestrians finishing the crossing).
+
+output_format: |
+  ```json
+  {
+      "congestion_level": 0,
+      "traffic_flow": "free|light|moderate|heavy|standstill",
+      "vehicles": {
+          "cars": 0,
+          "vans": 0,
+          "trucks": 0,
+          "buses": 0,
+          "trams": 0,
+          "motorcycles": 0,
+          "bicycles": 0
+      },
+      "pedestrians": 0,
+      "queue_at_stop_line": false,
+      "violations": [
+          {
+              "type": "short label",
+              "description": "what is visible",
+              "confidence": "low|medium|high"
+          }
+      ],
+      "weather": "description",
+      "time_of_day": "morning|midday|afternoon|evening|night",
+      "incidents": "description or none",
+      "interesting": "free-form observations or none",
+      "scene_description": "brief description"
+  }
+  ```
+
+extra_notes: |
+  - Prefer "not visible" over guessing signal state, plate text, or driver intent
+  - For a frame sequence, describe congestion trend (building, clearing, unchanged) in interesting or scene_description
+  - Use consistent terms for weather, time of day, and traffic_flow

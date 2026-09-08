@@ -1,0 +1,37 @@
+{
+  "place_id": "hybernska",
+  "kind": "single",
+  "success": true,
+  "analysis": {
+    "congestion_level": 4,
+    "traffic_flow": "moderate",
+    "vehicles": {
+      "cars": 8,
+      "vans": 0,
+      "trucks": 1,
+      "buses": 0,
+      "trams": 0,
+      "motorcycles": 0,
+      "bicycles": 0
+    },
+    "parked_vehicles": 10,
+    "pedestrians": 4,
+    "construction": {
+      "present": true,
+      "occupies": "both",
+      "description": "White metal fencing, red-and-white bollards, paving materials, and a site container occupy the right side of the roadway and sidewalk, leaving a narrowed contraflow passage."
+    },
+    "violations": [],
+    "weather": "Dry pavement with partly cloudy daylight and good visibility",
+    "time_of_day": "afternoon",
+    "incidents": "none",
+    "interesting": "The works create a narrow two-way pinch with temporary yellow lane markings. Traffic is passing through, but the available carriageway is substantially narrowed. The Powder Tower is visible in the distance.",
+    "scene_description": "Urban street view toward the Powder Tower with moderate moving traffic, several curb-parked cars, and active-looking construction fencing and materials along the right side. Pedestrians are using the sidewalks, and no clear traffic violations or incidents are visible."
+  },
+  "image_paths": [
+    "camera_images/hybernska/camera_101048_20260907_143634_894.jpg"
+  ],
+  "image_count": 1,
+  "model": "gpt-5.6-luna",
+  "source": "notebook azure_vision_experiment (already-run cell)"
+}

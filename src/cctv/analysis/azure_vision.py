@@ -8,6 +8,7 @@ from pathlib import Path
 import requests
 
 from cctv.utils.azure import AzureOpenAIConfig, load_azure_openai_config
+from cctv.utils.paths import experiments_dir
 
 
 def encode_image_to_base64(image_path: str | Path) -> str:
@@ -30,8 +31,13 @@ def analyze_images(
     *,
     parse_json: bool = True,
     max_tokens: int = 1500,
+    temperature: float | None = None,
 ) -> dict:
-    """Send one or more JPEG images plus a prompt to Azure OpenAI vision."""
+    """Send one or more JPEG images plus a prompt to Azure OpenAI vision.
+
+    ``max_tokens`` is sent as ``max_completion_tokens``. ``temperature`` is only
+    included when set, since newer deployments accept the default value only.
+    """
     config = config or load_azure_openai_config()
     if not config.is_configured or not config.api_url:
         return {"error": "Azure OpenAI configuration missing"}
@@ -53,11 +59,13 @@ def analyze_images(
             }
         )
 
-    payload = {
+    payload: dict = {
+        "model": config.model,
         "messages": [{"role": "user", "content": content}],
-        "max_tokens": max_tokens,
-        "temperature": 0.1,
+        "max_completion_tokens": max_tokens,
     }
+    if temperature is not None:
+        payload["temperature"] = temperature
     headers = {
         "Content-Type": "application/json",
         "api-key": config.api_key,
@@ -91,6 +99,17 @@ def analyze_images(
         return {"error": f"Azure API request failed: {exc}"}
     except Exception as exc:
         return {"error": f"Unexpected error: {exc}"}
+
+
+def save_experiment(result: dict, place_id: str, kind: str = "run") -> Path:
+    """Write an analysis result to ``experiments/<place>/<kind>_<timestamp>.json``."""
+    folder = experiments_dir(place_id)
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+    path = folder / f"{kind}_{stamp}.json"
+    payload = {"place_id": place_id, "kind": kind, **result}
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    return path
 
 
 _DEFAULT_TRAFFIC_PROMPT = """

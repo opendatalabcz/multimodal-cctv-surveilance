@@ -1,0 +1,81 @@
+# Reusable analysis for multi-lane highways and motorway entries.
+place_type: highway
+
+information: traffic congestion, traffic-rule violations, weather, time of day, incidents, and other noteworthy observations
+
+requirements: |
+  ### 1. Traffic congestion
+  - Rate congestion on a scale of 1-10 across the visible carriageway:
+    - 1: Empty or free-flowing, large gaps between vehicles
+    - 2-3: Light traffic, vehicles moving freely with some spacing
+    - 4-5: Moderate, denser packing but still moving
+    - 6-7: Heavy, slow-moving or stop-and-go, most lanes occupied
+    - 8-9: Severe congestion, little movement, long queues
+    - 10: Standstill / jam, vehicles packed bumper-to-bumper with no usable gaps
+  - Count visible vehicles by type (cars, vans, trucks, buses, motorcycles). Use 0 if none.
+  - Note how many lanes are visible and which look occupied versus empty.
+  - Do not count vehicles that are clearly parked off the carriageway, if any.
+
+  ### 2. Traffic-rule violations
+  - Report only what is clearly visible. Do not invent speed or intent.
+  - Look for, among other things:
+    - Driving or stopping on the hard shoulder / emergency lane
+    - Stopped or broken-down vehicle in a live lane
+    - Wrong-way driving
+    - Crossing the solid median or guardrail
+    - Pedestrians or cyclists on the motorway
+    - Obvious illegal parking on ramps or the median
+  - Lane changes and close following are normal motorway behavior; mention them as observations, and call them a violation only if a restriction is clearly broken (e.g. a solid line that is crossed, or a vehicle on the shoulder).
+  - If none are visible, use an empty list.
+
+  ### 3. Weather Conditions
+  - Assess current weather from visual cues (sun, cloud, rain, wet pavement, snow, fog, spray, visibility).
+
+  ### 4. Time of Day Estimation
+  - Estimate from lighting and shadows: morning, midday, afternoon, evening, night.
+
+  ### 5. Incident Detection
+  - Accidents, breakdowns, emergency vehicles, debris, roadworks, blocked lanes, smoke or fire.
+  - If none, use "none".
+
+  ### 6. Other interesting observations
+  - Anything else worth reporting that is not covered above: unusual vehicles, roadworks, visibility problems, signage, weather effects on the road surface, or patterns across a sequence of frames.
+  - This field is open-ended; mention what a human operator might flag. Use "none" only if the scene is truly unremarkable.
+
+  ### 7. Scene Description
+  - Brief overall description of the highway view, traffic state, and atmosphere.
+  - If multiple images: note what changed between frames (queue growth, a lane clearing, a stopped vehicle appearing).
+
+output_format: |
+  ```json
+  {
+      "congestion_level": 0,
+      "traffic_flow": "free|light|moderate|heavy|standstill",
+      "lanes_visible": 0,
+      "vehicles": {
+          "cars": 0,
+          "vans": 0,
+          "trucks": 0,
+          "buses": 0,
+          "motorcycles": 0
+      },
+      "pedestrians": 0,
+      "violations": [
+          {
+              "type": "short label",
+              "description": "what is visible",
+              "confidence": "low|medium|high"
+          }
+      ],
+      "weather": "description",
+      "time_of_day": "morning|midday|afternoon|evening|night",
+      "incidents": "description or none",
+      "interesting": "free-form observations or none",
+      "scene_description": "brief description"
+  }
+  ```
+
+extra_notes: |
+  - Prefer "not visible" over guessing speed, destination, or driver intent
+  - For a frame sequence, describe congestion trend (building, clearing, unchanged) in interesting or scene_description
+  - Use consistent terms for weather, time of day, and traffic_flow

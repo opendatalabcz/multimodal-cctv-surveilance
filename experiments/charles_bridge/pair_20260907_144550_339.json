@@ -1,0 +1,45 @@
+{
+  "place_id": "charles_bridge",
+  "kind": "pair",
+  "success": true,
+  "analysis": {
+    "overcrowdedness_level": 6,
+    "weather": "Partly cloudy to overcast, dry, with good visibility",
+    "time_of_day": "midday",
+    "incidents": "none",
+    "scene_description": "Charles Bridge is busy with a steady flow of pedestrians across the walkable deck, but noticeable gaps remain and movement does not appear constrained. The two elevated viewpoints show both directions of the bridge, surrounding historic red-roofed buildings, the Vltava River, boats, and Prague Castle in the background."
+  },
+  "raw_response": "{\n  \"overcrowdedness_level\": 6,\n  \"weather\": \"Partly cloudy to overcast, dry, with good visibility\",\n  \"time_of_day\": \"midday\",\n  \"incidents\": \"none\",\n  \"scene_description\": \"Charles Bridge is busy with a steady flow of pedestrians across the walkable deck, but noticeable gaps remain and movement does not appear constrained. The two elevated viewpoints show both directions of the bridge, surrounding historic red-roofed buildings, the Vltava River, boats, and Prague Castle in the background.\"\n}",
+  "usage": {
+    "completion_tokens": 178,
+    "completion_tokens_details": {
+      "accepted_prediction_tokens": 0,
+      "audio_tokens": 0,
+      "reasoning_tokens": 52,
+      "rejected_prediction_tokens": 0
+    },
+    "latency_checkpoint": {
+      "engine_tbt_ms": 10,
+      "engine_ttft_ms": 400,
+      "engine_ttlt_ms": 2220,
+      "pre_inference_ms": 144,
+      "service_tbt_ms": 10,
+      "service_ttft_ms": 1264,
+      "service_ttlt_ms": 3042,
+      "user_visible_ttft_ms": 1120
+    },
+    "prompt_tokens": 1637,
+    "prompt_tokens_details": {
+      "audio_tokens": 0,
+      "cached_tokens": 0
+    },
+    "total_tokens": 1815
+  },
+  "timestamp": "2026-09-07T14:45:50.336713",
+  "image_paths": [
+    "/home/k8s/Work/Thesis/Project/multimodal-cctv-surveilance/camera_images/charles_bridge/camera_101200_20260907_144546_044.jpg",
+    "/home/k8s/Work/Thesis/Project/multimodal-cctv-surveilance/camera_images/charles_bridge/camera_101201_20260907_144546_049.jpg"
+  ],
+  "image_count": 2,
+  "model": "gpt-5.6-luna"
+}

@@ -1,0 +1,14 @@
+# Site-specific filler. Merge on top of fillers/types/{type}.yaml
+type: urban_street
+
+place: Hybernská street in Prague
+
+place_context: |
+  ## Place-specific context
+  - High-angle municipal CCTV (camera 101048) looking along Hybernská toward the Powder Tower (Prašná brána) in the far distance; typical PRAHA / PRAGUE watermark in the corner
+  - A long urban street, not a signalized junction: judge flow on the remaining live carriageway, not on curb parking
+  - The right side of the view is often a construction enclosure (white metal fencing, red-and-white cones or bollards, paving materials, a site container); treat that as works, not as parked traffic
+  - Cars commonly park along the right curb beyond or beside the works; count them as parked
+  - A faded zebra crossing may appear in the near foreground; pedestrians use both sidewalks
+  - Temporary yellow lane markings may reroute traffic around the pinch; yellow paint is layout, not an incident
+  - Historic facades and the distant tower are scenery; ignore shop signs unless they help locate the view
