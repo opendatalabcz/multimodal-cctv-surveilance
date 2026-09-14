@@ -25,6 +25,7 @@ dependencies = [
 dev = [
     "ipykernel",
     "jupyter",
+    "pytest",
 ]
 
 [build-system]

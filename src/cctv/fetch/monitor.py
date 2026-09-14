@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import sys
-from importlib.resources import files
 
+from cctv.fetch.config import load_monitor_config
 from cctv.fetch.decoder import CameraImageFetcher
 from cctv.utils.paths import data_root, logs_dir
 
 
 async def run_monitoring() -> None:
-    config = json.loads(files("cctv.fetch").joinpath("monitor_config.json").read_text(encoding="utf-8"))
+    config = load_monitor_config()
     logs_dir().mkdir(parents=True, exist_ok=True)
 
     output_base = data_root() / config["output_base"]
