@@ -1,12 +1,14 @@
 import asyncio
 import base64
 from io import BytesIO
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import requests
 from PIL import Image
 
 from cctv.fetch.decoder import CameraImageFetcher
+from cctv.fetch.http import get_url
 
 
 def _jpeg_base64(color: tuple[int, int, int]) -> str:
@@ -45,3 +47,18 @@ def test_fetch_place_snapshot_unknown_place() -> None:
     fetcher = CameraImageFetcher(verbose=False)
     with pytest.raises(KeyError, match="not found"):
         asyncio.run(fetcher.fetch_place_snapshot("unknown_place"))
+
+
+def test_get_url_retries_without_verify_on_ssl_error() -> None:
+    ok = MagicMock()
+    ok.status_code = 200
+
+    def fake_get(url, headers=None, timeout=None, verify=True):
+        if verify is True:
+            raise requests.exceptions.SSLError("self-signed certificate in certificate chain")
+        return ok
+
+    with patch("cctv.fetch.http.requests.get", side_effect=fake_get):
+        response = get_url("https://bezpecnost.praha.eu/cameras/1/image")
+
+    assert response is ok

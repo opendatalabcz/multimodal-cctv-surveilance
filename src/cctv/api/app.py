@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -15,6 +16,8 @@ from cctv.api.schemas import (
 from cctv.api.store import ConversationStore
 from cctv.config.agent_yaml import load_agent_config, save_agent_config
 from cctv.utils.paths import data_root
+
+logger = logging.getLogger("cctv.api")
 
 store = ConversationStore()
 
@@ -61,7 +64,9 @@ def create_app() -> FastAPI:
 
         conversation, result = run_chat_turn(conversation, body.content)
         if not result.get("success"):
-            raise HTTPException(status_code=502, detail=result.get("error", "Chat turn failed"))
+            error = result.get("error", "Chat turn failed")
+            logger.error("Chat turn failed for %s: %s", conversation_id, error)
+            raise HTTPException(status_code=502, detail=error)
         return conversation.to_response()
 
     @app.get("/api/images/{file_path:path}")

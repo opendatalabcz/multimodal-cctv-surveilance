@@ -10,10 +10,10 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
-import requests
 from PIL import Image
 
 from cctv.fetch.decoder import CameraImageFetcher
+from cctv.fetch.http import get_url
 from cctv.fetch.sources import SourceType, camera_place_id, classify_source
 from cctv.fetch.youtube import extract_video_id, fetch_livestream_frame
 from cctv.utils.paths import images_dir, place_data_dir
@@ -80,7 +80,7 @@ def _http_output_dir(url: str, output_dir: Path | None) -> Path:
 def _fetch_http_image(url: str, output_dir: Path, fetcher: CameraImageFetcher) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     try:
-        response = requests.get(url, headers=fetcher.headers, timeout=fetcher.timeout)
+        response = get_url(url, headers=fetcher.headers, timeout=fetcher.timeout)
         if response.status_code != 200:
             return _failure(url, f"HTTP {response.status_code}", source_type=SourceType.HTTP_IMAGE.value)
 

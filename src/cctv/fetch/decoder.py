@@ -10,10 +10,10 @@ from io import BytesIO
 from typing import Any
 
 import aiohttp
-import requests
 from PIL import Image
 
 from cctv.fetch.config import load_monitor_config
+from cctv.fetch.http import get_url
 from cctv.utils.paths import place_data_dir
 
 
@@ -125,7 +125,7 @@ class CameraImageFetcher:
         self._print(f"Downloading data from camera {camera_id}...")
 
         try:
-            response = requests.get(url, headers=self.headers, timeout=self.timeout)
+            response = get_url(url, headers=self.headers, timeout=self.timeout)
             if response.status_code != 200:
                 self._print(f"❌ HTTP Error: {response.status_code}")
                 return self._failure(camera_id, f"HTTP {response.status_code}")

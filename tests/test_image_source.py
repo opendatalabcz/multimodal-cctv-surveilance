@@ -67,7 +67,7 @@ def test_get_image_prague_path(tmp_path, monkeypatch) -> None:
         def json() -> dict:
             return payload
 
-    with patch("cctv.fetch.decoder.requests.get", return_value=FakeResponse()):
+    with patch("cctv.fetch.decoder.get_url", return_value=FakeResponse()):
         result = get_image("101048", verbose=False)
 
     assert result["success"] is True
@@ -89,7 +89,7 @@ def test_get_image_http_raw_image(tmp_path, monkeypatch) -> None:
         def json() -> dict:
             raise ValueError("not json")
 
-    with patch("cctv.fetch.image_source.requests.get", return_value=FakeResponse()):
+    with patch("cctv.fetch.image_source.get_url", return_value=FakeResponse()):
         result = get_image("https://example.com/live.jpg", verbose=False)
 
     assert result["success"] is True
@@ -109,7 +109,7 @@ def test_get_image_http_json_base64(tmp_path, monkeypatch) -> None:
         def json() -> dict:
             return {"contentBase64": _jpeg_base64((7, 8, 9))}
 
-    with patch("cctv.fetch.image_source.requests.get", return_value=FakeResponse()):
+    with patch("cctv.fetch.image_source.get_url", return_value=FakeResponse()):
         result = get_image("https://example.com/api/frame", verbose=False)
 
     assert result["success"] is True
@@ -129,7 +129,7 @@ def test_likely_unavailable_placeholder(tmp_path, monkeypatch) -> None:
         def json() -> dict:
             return payload
 
-    with patch("cctv.fetch.decoder.requests.get", return_value=FakeResponse()):
+    with patch("cctv.fetch.decoder.get_url", return_value=FakeResponse()):
         result = get_image("101048", verbose=False)
 
     assert result["success"] is True
@@ -147,7 +147,7 @@ def test_execute_get_image_metadata_only(tmp_path, monkeypatch) -> None:
         def json() -> dict:
             return payload
 
-    with patch("cctv.fetch.decoder.requests.get", return_value=FakeResponse()):
+    with patch("cctv.fetch.decoder.get_url", return_value=FakeResponse()):
         exec_result = execute_get_image("101048")
 
     meta = json.loads(exec_result["tool_content"])
