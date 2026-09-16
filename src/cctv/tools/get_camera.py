@@ -149,6 +149,7 @@ def execute_get_camera_image(arguments: dict[str, Any] | None = None) -> dict[st
             ),
             "image_path": None,
             "image_paths": [],
+            "image_labels": [],
         }
 
     skipped: list[str] = []
@@ -169,10 +170,17 @@ def execute_get_camera_image(arguments: dict[str, Any] | None = None) -> dict[st
     rows = _fetch_many(queries)
     results: list[dict[str, Any]] = []
     image_paths: list[str] = []
+    image_labels: list[dict[str, str]] = []
     for meta, path in rows:
         results.append(meta)
         if path:
             image_paths.append(path)
+            label: dict[str, str] = {"path": path}
+            if meta.get("camera_id"):
+                label["camera_id"] = str(meta["camera_id"])
+            if meta.get("camera_name"):
+                label["camera_name"] = str(meta["camera_name"])
+            image_labels.append(label)
 
     payload: dict[str, Any] = {
         "success": bool(image_paths) or (len(results) == 1 and results[0].get("success") is True),
@@ -191,4 +199,5 @@ def execute_get_camera_image(arguments: dict[str, Any] | None = None) -> dict[st
         "tool_content": json.dumps(payload, ensure_ascii=False),
         "image_path": image_paths[0] if image_paths else None,
         "image_paths": image_paths,
+        "image_labels": image_labels,
     }

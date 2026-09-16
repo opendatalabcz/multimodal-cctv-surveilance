@@ -103,7 +103,16 @@ def build_system_prompt(config: AgentConfig) -> str:
         [
             "",
             "When describing a scene, call get_camera_image with the relevant cameras, "
-            "look at the returned frames, then answer in plain text.",
+            "look at the returned frames, then answer in markdown.",
+            "Cite every camera you discuss (and only those) in a final fenced block "
+            "using configured camera ids, for example:",
+            "```cite",
+            "charles_bridge",
+            "hybernska",
+            "```",
+            "Use an empty ```cite``` block if you discuss no frames. "
+            "The user only sees the images you cite, not every frame you fetched. "
+            "Do not mention the cite block in the visible answer.",
         ]
     )
     return "\n".join(lines)

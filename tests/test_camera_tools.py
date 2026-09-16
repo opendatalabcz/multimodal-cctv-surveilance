@@ -114,6 +114,8 @@ def test_get_camera_image_list_fetches_each_source(tmp_path, monkeypatch) -> Non
     assert [row["camera_id"] for row in meta["results"]] == ["charles_bridge", "airport"]
     assert result["image_paths"] == ["/tmp/bridge.jpg", "/tmp/airport.jpg"]
     assert result["image_path"] == "/tmp/bridge.jpg"
+    assert result["image_labels"][0]["camera_id"] == "charles_bridge"
+    assert result["image_labels"][1]["camera_id"] == "airport"
 
 
 def test_get_camera_image_partial_unknown(tmp_path, monkeypatch) -> None:

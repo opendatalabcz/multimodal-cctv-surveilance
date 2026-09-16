@@ -223,4 +223,156 @@ def test_batch_camera_tool_injects_all_image_paths() -> None:
         "/tmp/cam_a.jpg",
         "/tmp/cam_b.jpg",
     ]
+    assert "id=cam_a" in sent[-1]["content"][0]["text"]
+    assert "id=cam_b" in sent[-1]["content"][0]["text"]
     assert result["image_count"] == 2
+
+
+def test_cited_cameras_filter_displayed_image_paths() -> None:
+    responses = [
+        {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_batch",
+                                "type": "function",
+                                "function": {
+                                    "name": "get_camera_image",
+                                    "arguments": '{"cameras": ["cam_a", "cam_b"]}',
+                                },
+                            }
+                        ],
+                    }
+                }
+            ],
+            "usage": {},
+        },
+        {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Only A is busy.\n```cite\ncam_a\n```",
+                    }
+                }
+            ],
+            "usage": {},
+        },
+    ]
+    posted_payloads: list[dict] = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        posted_payloads.append(json)
+        response = MagicMock()
+        response.json.return_value = responses[len(posted_payloads) - 1]
+        return response
+
+    def fake_execute(name, arguments):
+        cameras = arguments["cameras"]
+        return {
+            "tool_content": '{"success": true}',
+            "image_paths": [f"/tmp/{camera}.jpg" for camera in cameras],
+            "image_labels": [
+                {
+                    "path": f"/tmp/{camera}.jpg",
+                    "camera_id": camera,
+                    "camera_name": camera,
+                }
+                for camera in cameras
+            ],
+        }
+
+    def fake_image_part(path):
+        return {"type": "image_url", "image_url": {"url": str(path)}}
+
+    with (
+        patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post),
+        patch("cctv.analysis.azure_vision.execute_tool", side_effect=fake_execute),
+        patch("cctv.analysis.azure_vision._vision_image_part", side_effect=fake_image_part),
+    ):
+        result = chat_with_tools(
+            [{"role": "user", "content": "Compare both cameras."}],
+            config=_fake_config(),
+            system_prompt="You are a CCTV assistant.",
+            parse_json=False,
+        )
+
+    assert result["success"] is True
+    assert result["analysis"] == "Only A is busy."
+    assert result["image_count"] == 1
+    assert str(result["image_paths"][0]).endswith("cam_a.jpg")
+    assert result["messages"][-1]["content"] == "Only A is busy."
+
+
+def test_empty_cite_block_hides_all_fetched_images() -> None:
+    responses = [
+        {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_one",
+                                "type": "function",
+                                "function": {
+                                    "name": "get_camera_image",
+                                    "arguments": '{"camera": "cam_a"}',
+                                },
+                            }
+                        ],
+                    }
+                }
+            ],
+            "usage": {},
+        },
+        {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "I will not show a frame.\n```cite\n```",
+                    }
+                }
+            ],
+            "usage": {},
+        },
+    ]
+    posted_payloads: list[dict] = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        posted_payloads.append(json)
+        response = MagicMock()
+        response.json.return_value = responses[len(posted_payloads) - 1]
+        return response
+
+    def fake_execute(name, arguments):
+        camera = arguments["camera"]
+        return {
+            "tool_content": '{"success": true}',
+            "image_path": f"/tmp/{camera}.jpg",
+            "image_paths": [f"/tmp/{camera}.jpg"],
+            "image_labels": [{"path": f"/tmp/{camera}.jpg", "camera_id": camera}],
+        }
+
+    def fake_image_part(path):
+        return {"type": "image_url", "image_url": {"url": str(path)}}
+
+    with (
+        patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post),
+        patch("cctv.analysis.azure_vision.execute_tool", side_effect=fake_execute),
+        patch("cctv.analysis.azure_vision._vision_image_part", side_effect=fake_image_part),
+    ):
+        result = chat_with_tools(
+            [{"role": "user", "content": "Do not attach images."}],
+            config=_fake_config(),
+            parse_json=False,
+        )
+
+    assert result["image_paths"] == []
+    assert result["image_count"] == 0

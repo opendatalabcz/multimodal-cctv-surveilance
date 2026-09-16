@@ -9,6 +9,12 @@ from typing import Any
 import requests
 
 import cctv.tools  # noqa: F401  — register default tools
+from cctv.analysis.citations import (
+    FetchedFrame,
+    frames_from_tool_result,
+    parse_cited_cameras,
+    select_cited_paths,
+)
 from cctv.tools.registry import default_tool_schemas, execute_tool
 from cctv.utils.azure import AzureOpenAIConfig, load_azure_openai_config
 from cctv.utils.paths import data_root, experiments_dir
@@ -200,25 +206,25 @@ def _vision_image_part(image_path: str | Path) -> dict[str, Any]:
     }
 
 
-def _image_paths_from_tool(exec_result: dict[str, Any]) -> list[str]:
-    paths = exec_result.get("image_paths")
-    if isinstance(paths, list):
-        return [str(path) for path in paths if path]
-    path = exec_result.get("image_path")
-    return [str(path)] if path else []
-
-
-def _fetched_images_message(image_paths: list[str]) -> dict[str, Any]:
+def _fetched_images_message(frames: list[FetchedFrame]) -> dict[str, Any]:
+    labels: list[str] = []
+    for index, frame in enumerate(frames, start=1):
+        camera_id = frame.camera_id or Path(frame.path).stem
+        if frame.camera_name:
+            labels.append(f"{index}. id={camera_id} name={frame.camera_name}")
+        else:
+            labels.append(f"{index}. id={camera_id}")
     content: list[dict[str, Any]] = [
         {
             "type": "text",
             "text": (
-                "Here are the fetched frames for analysis, in tool-call order: "
-                + ", ".join(Path(path).name for path in image_paths)
+                "Here are the fetched frames for analysis, in this order. "
+                "Cite by camera id in a ```cite``` block when you answer.\n"
+                + "\n".join(labels)
             ),
         }
     ]
-    content.extend(_vision_image_part(path) for path in image_paths)
+    content.extend(_vision_image_part(frame.path) for frame in frames)
     return {"role": "user", "content": content}
 
 
@@ -227,19 +233,22 @@ def _finalize_tool_chat_result(
     result: dict[str, Any],
     *,
     messages: list[dict[str, Any]],
-    fetched_images: list[str],
+    fetched_frames: list[FetchedFrame],
     tool_rounds: int,
     parse_json: bool,
     config: AzureOpenAIConfig,
 ) -> dict[str, Any]:
     analysis_text = message.get("content") or ""
+    display_text, citations = parse_cited_cameras(analysis_text)
+    display_paths = select_cited_paths(fetched_frames, citations)
+    message = {**message, "content": display_text}
     if parse_json:
         try:
-            analysis = _parse_json_payload(analysis_text)
+            analysis = _parse_json_payload(display_text)
         except json.JSONDecodeError:
-            analysis = {"raw_response": analysis_text}
+            analysis = {"raw_response": display_text}
     else:
-        analysis = analysis_text
+        analysis = display_text
     final_messages = messages + [message]
     return {
         "success": True,
@@ -247,8 +256,8 @@ def _finalize_tool_chat_result(
         "raw_response": analysis_text,
         "usage": result.get("usage", {}),
         "timestamp": datetime.now().isoformat(),
-        "image_paths": [_relative_to_data_root(path) for path in fetched_images],
-        "image_count": len(fetched_images),
+        "image_paths": [_relative_to_data_root(path) for path in display_paths],
+        "image_count": len(display_paths),
         "model": config.model,
         "tool_rounds": tool_rounds,
         "messages": final_messages,
@@ -272,9 +281,10 @@ def chat_with_tools(
     Default tools are ``list_cameras`` and ``get_camera_image``. ``messages``
     uses the Azure chat format (roles such as user/assistant/tool). When a
     tool returns ``image_path`` / ``image_paths``, the JPEGs are injected in a
-    follow-up user message so the VLM can see the frames. On success,
-    ``messages`` in the result is the full history including the final
-    assistant reply.
+    follow-up user message so the VLM can see the frames. ``image_paths`` in
+    the result are the frames cited in the final reply (or all fetched frames
+    if the model omitted the cite block). On success, ``messages`` is the full
+    history including the final assistant reply with the cite fence stripped.
     """
     config = config or load_azure_openai_config()
     if not config.is_configured or not config.api_url:
@@ -286,7 +296,7 @@ def chat_with_tools(
     if system_prompt:
         conversation.append({"role": "system", "content": system_prompt})
     conversation.extend(history)
-    fetched_images: list[str] = []
+    fetched_frames: list[FetchedFrame] = []
     tool_rounds = 0
 
     try:
@@ -307,14 +317,14 @@ def chat_with_tools(
                     message,
                     result,
                     messages=conversation,
-                    fetched_images=fetched_images,
+                    fetched_frames=fetched_frames,
                     tool_rounds=tool_rounds,
                     parse_json=parse_json,
                     config=config,
                 )
 
             conversation.append(message)
-            round_images: list[str] = []
+            round_frames: list[FetchedFrame] = []
             for tool_call in tool_calls:
                 fn = tool_call.get("function") or {}
                 name = fn.get("name") or ""
@@ -333,14 +343,14 @@ def chat_with_tools(
                     }
                 )
 
-                for image_path in _image_paths_from_tool(exec_result):
-                    fetched_images.append(image_path)
-                    round_images.append(image_path)
+                frames = frames_from_tool_result(exec_result, args)
+                fetched_frames.extend(frames)
+                round_frames.extend(frames)
 
             # Azure rejects the request unless every tool_call_id is answered by an
             # uninterrupted run of tool messages, so images follow the whole batch.
-            if round_images:
-                conversation.append(_fetched_images_message(round_images))
+            if round_frames:
+                conversation.append(_fetched_images_message(round_frames))
 
             tool_rounds += 1
 

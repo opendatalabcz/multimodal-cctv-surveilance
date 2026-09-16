@@ -66,6 +66,8 @@ def test_prompt_camera_first_and_forecast_qualification() -> None:
     assert "soft cap of about 10 images" in prompt
     assert "Clearly label measured/forecast data" in prompt
     assert "Do not use web_search as a weather API" in prompt
+    assert "```cite" in prompt
+    assert "The user only sees the images you cite" in prompt
     assert "weather (get_weather): enabled" in prompt
     assert "internet search (web_search): enabled" in prompt
 
