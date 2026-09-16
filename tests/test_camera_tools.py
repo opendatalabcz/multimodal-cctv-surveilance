@@ -186,10 +186,9 @@ def test_system_prompt_named_tools(tmp_path, monkeypatch) -> None:
     prompt = build_system_prompt(load_agent_config())
     assert "get_camera_image" in prompt
     assert "cameras: [id or name, ...]" in prompt
-    assert "one camera per distinct place" in prompt
+    assert "one camera per configured location" in prompt
     assert "list_cameras" in prompt
     assert "charles_bridge" in prompt
     assert "internet search (web_search): disabled" in prompt
     assert "map access (search_map, reverse_geocode): disabled" in prompt
-    assert "one camera per distinct place" in prompt
     assert "101200" not in prompt

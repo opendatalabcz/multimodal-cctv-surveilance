@@ -2,27 +2,166 @@ sectors:
   - id: prague
     name: Prague
     enabled: true
+  - id: japan
+    name: Japan
+    enabled: true
+locations:
+  - id: charles_bridge
+    name: Charles Bridge
+    sector_id: prague
+    enabled: true
+    lat: 50.0865
+    lon: 14.4119
+  - id: holesovicky
+    name: Holešovičky
+    sector_id: prague
+    enabled: true
+    lat: 50.1080
+    lon: 14.4390
+  - id: budejovicka
+    name: Budějovická
+    sector_id: prague
+    enabled: true
+    lat: 50.0450
+    lon: 14.4490
+  - id: nuselak
+    name: Nuselský most
+    sector_id: prague
+    enabled: true
+    lat: 50.0650
+    lon: 14.4340
+  - id: barandak
+    name: Barrandovský most
+    sector_id: prague
+    enabled: true
+    lat: 50.0300
+    lon: 14.3940
+  - id: dejvice
+    name: Dejvice
+    sector_id: prague
+    enabled: true
+    lat: 50.0990
+    lon: 14.3930
+  - id: hybernska
+    name: Hybernská
+    sector_id: prague
+    enabled: true
+    lat: 50.0875
+    lon: 14.4316
+  - id: belocerekevska
+    name: Bělocerekevská
+    sector_id: prague
+    enabled: true
+    lat: 50.0690
+    lon: 14.4580
+  - id: jecna
+    name: Ječná
+    sector_id: prague
+    enabled: true
+    lat: 50.0754
+    lon: 14.4378
+  - id: marianske_namesti
+    name: Mariánské náměstí
+    sector_id: prague
+    enabled: true
+    lat: 50.0874
+    lon: 14.4174
+  - id: tokachi_obihiro
+    name: Tokachi-Obihiro
+    sector_id: japan
+    enabled: true
+    lat: 42.7335
+    lon: 143.2175
 cameras:
   - id: charles_bridge
     name: Charles Bridge
-    lat: 50.0865
-    lon: 14.4119
     source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/101200/image
     sector_id: prague
+    location_id: charles_bridge
+    enabled: true
+  - id: charles_bridge_101201
+    name: "101201"
+    source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/101201/image
+    sector_id: prague
+    location_id: charles_bridge
+    enabled: true
+  - id: holesovicky_500066
+    name: "500066"
+    source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500066/image
+    sector_id: prague
+    location_id: holesovicky
+    enabled: true
+  - id: holesovicky_500067
+    name: "500067"
+    source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500067/image
+    sector_id: prague
+    location_id: holesovicky
+    enabled: true
+  - id: budejovicka_500002
+    name: "500002"
+    source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500002/image
+    sector_id: prague
+    location_id: budejovicka
+    enabled: true
+  - id: nuselak_404033
+    name: "404033"
+    source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/404033/image
+    sector_id: prague
+    location_id: nuselak
+    enabled: true
+  - id: nuselak_404032
+    name: "404032"
+    source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/404032/image
+    sector_id: prague
+    location_id: nuselak
+    enabled: true
+  - id: barandak_500473
+    name: "500473"
+    source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500473/image
+    sector_id: prague
+    location_id: barandak
+    enabled: true
+  - id: barandak_500475
+    name: "500475"
+    source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500475/image
+    sector_id: prague
+    location_id: barandak
+    enabled: true
+  - id: dejvice_106040
+    name: "106040"
+    source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/106040/image
+    sector_id: prague
+    location_id: dejvice
     enabled: true
   - id: hybernska
     name: Hybernská
-    lat: 50.0875
-    lon: 14.4316
     source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/101048/image
     sector_id: prague
+    location_id: hybernska
+    enabled: true
+  - id: belocerekevska_510034
+    name: "510034"
+    source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/510034/image
+    sector_id: prague
+    location_id: belocerekevska
     enabled: true
   - id: jecna
-    name: Jecná
-    lat: 50.0754
-    lon: 14.4378
+    name: Ječná
     source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/202020/image
     sector_id: prague
+    location_id: jecna
+    enabled: true
+  - id: marianske_namesti
+    name: Mariánské náměstí
+    source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/101164/image
+    sector_id: prague
+    location_id: marianske_namesti
+    enabled: true
+  - id: tokachi_obihiro
+    name: Tokachi-Obihiro live
+    source: https://www.youtube.com/watch?v=IDXRscHtp2s
+    sector_id: japan
+    location_id: tokachi_obihiro
     enabled: true
 tools:
   internet: false

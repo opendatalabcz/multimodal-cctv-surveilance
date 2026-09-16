@@ -37,7 +37,11 @@ export function ChatPage() {
     updateSector,
     addSector,
     removeSector,
+    updateLocation,
+    addLocation,
+    removeLocation,
     setSectorEnabled,
+    setLocationEnabled,
     setCameraEnabled,
   } = useConfig()
 
@@ -113,6 +117,17 @@ export function ChatPage() {
     [setSectorEnabled, loadConfig],
   )
 
+  const handleToggleLocationEnabled = useCallback(
+    async (locationId: string, enabled: boolean) => {
+      try {
+        await setLocationEnabled(locationId, enabled)
+      } catch {
+        await loadConfig()
+      }
+    },
+    [setLocationEnabled, loadConfig],
+  )
+
   const handleToggleCameraEnabled = useCallback(
     async (cameraId: string, enabled: boolean) => {
       try {
@@ -181,7 +196,11 @@ export function ChatPage() {
               onUpdateSector={updateSector}
               onAddSector={addSector}
               onRemoveSector={removeSector}
+              onUpdateLocation={updateLocation}
+              onAddLocation={addLocation}
+              onRemoveLocation={removeLocation}
               onToggleSectorEnabled={handleToggleSectorEnabled}
+              onToggleLocationEnabled={handleToggleLocationEnabled}
               onToggleCameraEnabled={handleToggleCameraEnabled}
             />
           </Box>

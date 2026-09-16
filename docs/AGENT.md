@@ -22,30 +22,57 @@ Revisit Deep Agents only if you need long research traces, parallel subagents, o
 | `configs/agent.local.yaml` | Gitignored overlay: toggles, extra/edited cameras |
 | `src/cctv/fetch/image_source.py` | Low-level `get_image(source)` (URLs, Prague ids, YouTube live) |
 
-```
-Config panel --> agent.local.yaml overlay on agent.yaml
-Chat --> FastAPI run_chat_turn --> chat_with_tools
-chat_with_tools --> enabled tools for this turn (cameras + optional external)
-get_camera_image --> merged config --> fetch.get_image --> JPEG on disk
-JPEG --> VLM (injected image part) and UI (/api/images/...)
+```mermaid
+flowchart LR
+  configPanel[Config panel]
+  agentYaml[agent.yaml catalog]
+  agentLocal[agent.local.yaml overlay]
+  chatUI[Chat UI]
+  fastApi[FastAPI run_chat_turn]
+  chatLoop[chat_with_tools]
+  tools[Enabled tools]
+  getCamera[get_camera_image]
+  fetch[get_image]
+  jpeg[JPEG on disk]
+  vlm[VLM + UI image URLs]
+
+  configPanel --> agentLocal
+  agentLocal --> agentYaml
+  chatUI --> fastApi
+  fastApi --> chatLoop
+  chatLoop --> tools
+  tools --> getCamera
+  getCamera --> agentYaml
+  getCamera --> fetch
+  fetch --> jpeg
+  jpeg --> vlm
 ```
 
 ## Config (`configs/agent.yaml` + `configs/agent.local.yaml`)
 
-`configs/agent.yaml` is the committed catalog (demo cameras, default flags). `GET/PUT /api/config` merges that with gitignored `configs/agent.local.yaml`. The Config panel only writes the overlay: tool toggles, extra cameras, edits, and removals. Updating the catalog in git still applies unless the overlay overrides the same camera id.
+`configs/agent.yaml` is the committed catalog (demo cameras, default flags). `GET/PUT /api/config` merges that with gitignored `configs/agent.local.yaml`. The Config panel only writes the overlay: tool toggles, extra cameras/locations, edits, and removals. Updating the catalog in git still applies unless the overlay overrides the same id.
 
 ```yaml
 sectors:
   - id: prague
     name: Prague
     enabled: true
+  - id: japan
+    name: Japan
+    enabled: true
+locations:
+  - id: charles_bridge
+    name: Charles Bridge
+    sector_id: prague
+    enabled: true
+    lat: 50.0865
+    lon: 14.4119
 cameras:
   - id: charles_bridge
     name: Charles Bridge
-    lat: 50.0865      # optional
-    lon: 14.4119
-    source: "https://.../cameras/101200/image"  # GET URL or YouTube live URL
+    source: "https://.../cameras/101200/image"
     sector_id: prague
+    location_id: charles_bridge
     enabled: true
 tools:
   internet: false   # Internet search (web_search via DuckDuckGo)
@@ -53,29 +80,76 @@ tools:
   maps: false       # OpenStreetMap Nominatim place search / reverse geocode
 ```
 
-### Sectors and effective enablement
+### Catalog hierarchy
 
-Cameras are grouped into **sectors**. Each sector and each camera has an `enabled` toggle. A camera is **effectively enabled** only when **both** its sector and its own toggle are on (`sector.enabled AND camera.enabled`).
+Config is **sector → location → camera**. GPS lives on **locations**; cameras inherit location coordinates for routing and prompts unless a camera sets its own optional override.
 
-- Disabled entries stay in YAML; they are excluded from `list_cameras`, the system prompt, and successful `get_camera_image` fetches.
-- Legacy configs without `sectors` or `sector_id` load under an implicit **Unassigned** sector (`id: unassigned`), with both levels enabled by default.
-- The committed catalog uses an explicit **Prague** sector for the demo cameras.
+Committed catalog counts:
 
-The overlay merges sectors by id (like cameras): changed sectors, `remove_sector_ids`, changed cameras, `remove_camera_ids`, and optional `tools`. Saving rejects removing a sector while any camera still references it (HTTP 400 from `PUT /api/config`).
+| Level | Count | Notes |
+| --- | --- | --- |
+| Sectors | 2 | Prague, Japan (+ implicit Unassigned for legacy) |
+| Locations | 11 | 10 Prague + 1 Japan (Tokachi-Obihiro) |
+| Cameras | 15 | 14 Prague HTTP stills + 1 YouTube livestream |
+
+```mermaid
+flowchart TD
+  prague[Prague]
+  japan[Japan]
+  charlesBridge[Charles Bridge]
+  hybernska[Hybernska]
+  tokachi[Tokachi Obihiro]
+  camA[101200]
+  camB[101201]
+  camH[101048]
+  camJ[YouTube live]
+  prague --> charlesBridge
+  prague --> hybernska
+  japan --> tokachi
+  charlesBridge --> camA
+  charlesBridge --> camB
+  hybernska --> camH
+  tokachi --> camJ
+```
+
+Prague locations come from `src/cctv/fetch/monitor_config.json` plus Mariánské náměstí (`101164`). Japan uses the Tokachi-Obihiro YouTube livestream (`IDXRscHtp2s`).
+
+### Sectors, locations, and effective enablement
+
+Each **sector**, **location**, and **camera** has an `enabled` toggle. A camera is **effectively enabled** only when **all three** are on:
+
+`sector.enabled AND location.enabled AND camera.enabled`
+
+```mermaid
+flowchart LR
+  sectorSwitch[Sector on]
+  locationSwitch[Location on]
+  cameraSwitch[Camera on]
+  effective[Agent can fetch]
+  sectorSwitch --> effective
+  locationSwitch --> effective
+  cameraSwitch --> effective
+```
+
+- Disabled entries stay in YAML; child switches keep their saved state when a parent is off.
+- They are excluded from `list_cameras`, the system prompt, and successful `get_camera_image` fetches.
+- Legacy configs without `locations` or `location_id` load under an implicit **Unassigned** location under the camera’s sector (or global Unassigned).
+- The overlay merges sectors, locations, and cameras by id: changed entries, `remove_*_ids`, and optional `tools`.
+- Saving rejects removing a **location** while any camera still references it, or removing a **sector** while any location (or camera) still references it (HTTP 400 from `PUT /api/config`).
 
 Legacy overlays may still contain `google_maps`; it is loaded as `maps`. Turning `internet` on alone does **not** enable weather.
 
 `GET` returns the merged config. Tool toggles take effect on the **next chat message** without restarting the API.
 
-If a place is missing, the agent should tell the user to add it in the Config panel (name, optional GPS, source). It must not invent URLs.
+If a place is missing, the agent should tell the user to add it in the Config panel (name, location GPS, source). It must not invent URLs.
 
 ## Camera-first routing
 
 The system prompt (`src/cctv/config/prompt.py`) instructs the model to:
 
 - Fetch **all configured cameras** that match a named place (by name or GPS area) in **one** `get_camera_image` call (`cameras: [...]`), not a single random sample and not one tool call per camera.
-- For questions with **no location**, sample **one camera per distinct place** (group by rounded GPS; missing GPS counts as its own place).
-- Prefer a **soft cap of ~10 images** per turn; allow more when a place-wide question needs it.
+- For questions with **no location**, sample **one camera per configured location** when locations exist (otherwise fall back to GPS clustering).
+- Prefer a **soft cap of ~10 images** per turn; allow more when a place-wide question needs it (Prague-wide fetch is 14 frames; hard cap 16).
 - Describe **visible** conditions from camera frames first.
 - Use `get_weather` only when the Weather toggle is on, and clearly label measured/forecast data vs camera-observed conditions.
 - Use `web_search` for news/context when Internet search is on — **not** as a weather API.
@@ -89,7 +163,7 @@ Tools exposed to Azure depend on the current toggles (`cctv.tools.tool_schemas_f
 
 | Name | When enabled | Effect |
 | --- | --- | --- |
-| `list_cameras` | always | JSON list of **effectively enabled** cameras (id, name, GPS, source, source_type, sector_id) |
+| `list_cameras` | always | JSON list of **effectively enabled** cameras (id, name, GPS, source, source_type, sector_id, location_id, location_name) |
 | `get_camera_image` | always | Resolves YAML `source` for one or more **effectively enabled** cameras, fetches stills (in parallel), returns metadata + JPEG paths; disabled or unknown ids return a clear error per camera |
 | `web_search` | `internet` | Up to 5 DuckDuckGo text results (title, URL, snippet) via `ddgs` |
 | `get_weather` | `weather` | Open-Meteo current conditions + 3-day forecast (coordinates or place name) |
@@ -126,7 +200,7 @@ The chat loop already dispatches by name and injects any `image_path` / `image_p
 
 ## HTTP API (chat)
 
-- `GET/PUT /api/config` — `sectors`, `cameras`, `tools`: `{ "internet": bool, "weather": bool, "maps": bool }`
+- `GET/PUT /api/config` — `sectors`, `locations`, `cameras`, `tools`: `{ "internet": bool, "weather": bool, "maps": bool }`
 - `POST /api/conversations`
 - `GET /api/conversations/{id}`
 - `POST /api/conversations/{id}/messages` with `{ "content": "..." }` — full transcript after the turn
@@ -163,13 +237,14 @@ uv run pytest
 
 ## Config panel UI
 
-The sidebar groups cameras into collapsible **sector accordions**:
+The sidebar groups cameras into collapsible **sector accordions**, each containing nested **location accordions**:
 
-- **Sector switch** — parent enable toggle; persists immediately (optimistic update with rollback on failure).
-- **Camera switch** — child enable toggle; same immediate persistence. When the sector is disabled, child switches show saved state but are non-interactive; the sector is visually muted with “Sector disabled”.
-- **Active count** — number of cameras that are effectively enabled in that sector.
-- **Structural edits** (sector/camera names, assignments, add/remove) are local until **Save configuration**.
-- **Sector removal** is blocked while cameras are assigned; the UI shows the reason and the API returns 400.
+- **Sector switch** — top-level enable toggle; persists immediately (optimistic update with rollback on failure).
+- **Location switch** — middle-level enable toggle; same immediate persistence. When the sector is disabled, location switches show saved state but are non-interactive.
+- **Camera switch** — leaf enable toggle; same immediate persistence. When the sector or location is disabled, camera switches show saved state but are non-interactive; parents are visually muted.
+- **Active count** — number of cameras that are effectively enabled in that sector or location.
+- **Structural edits** (sector/location/camera names, assignments, add/remove) are local until **Save configuration**.
+- **Location removal** is blocked while cameras are assigned; **sector removal** is blocked while locations (or cameras) are assigned. The UI shows the reason and the API returns 400.
 - Accordion expand/collapse is UI-only and not persisted.
 
 ## Out of scope

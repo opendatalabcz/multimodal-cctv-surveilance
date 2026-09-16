@@ -101,7 +101,7 @@ def _disabled_result(query: str, camera: CameraConfig) -> dict[str, Any]:
         "camera_id": camera.id,
         "camera_name": camera.name,
         "error": (
-            f"Camera {query!r} is disabled. Enable its sector and camera toggles "
+            f"Camera {query!r} is disabled. Enable its sector, location, and camera toggles "
             "in the Config panel before fetching."
         ),
     }

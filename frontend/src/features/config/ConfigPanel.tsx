@@ -6,8 +6,8 @@ import FormControlLabel from '@mui/material/FormControlLabel'
 import Switch from '@mui/material/Switch'
 import Typography from '@mui/material/Typography'
 import { useState } from 'react'
-import type { AppConfig, Camera, Sector } from '../../shared/models/config'
-import { UNASSIGNED_SECTOR_ID, camerasInSector } from '../../shared/models/config'
+import type { AppConfig, Camera, Location, Sector } from '../../shared/models/config'
+import { UNASSIGNED_SECTOR_ID, locationsInSector } from '../../shared/models/config'
 import { SectorAccordion } from './SectorAccordion'
 
 interface ConfigPanelProps {
@@ -18,13 +18,17 @@ interface ConfigPanelProps {
   onSave: () => void
   onToggleTool: (key: keyof AppConfig['tools'], value: boolean) => void
   onUpdateCamera: (cameraId: string, camera: Camera) => void
-  onAddCamera: (sectorId: string) => void
+  onAddCamera: (sectorId: string, locationId: string) => void
   onRemoveCamera: (cameraId: string) => void
-  onMoveCamera: (cameraId: string, sectorId: string) => void
+  onMoveCamera: (cameraId: string, locationId: string, sectorId: string) => void
   onUpdateSector: (sectorId: string, sector: Sector) => void
   onAddSector: () => void
   onRemoveSector: (sectorId: string) => void
+  onUpdateLocation: (locationId: string, location: Location) => void
+  onAddLocation: (sectorId: string) => void
+  onRemoveLocation: (locationId: string) => void
   onToggleSectorEnabled: (sectorId: string, enabled: boolean) => void
+  onToggleLocationEnabled: (locationId: string, enabled: boolean) => void
   onToggleCameraEnabled: (cameraId: string, enabled: boolean) => void
 }
 
@@ -42,14 +46,20 @@ export function ConfigPanel({
   onUpdateSector,
   onAddSector,
   onRemoveSector,
+  onUpdateLocation,
+  onAddLocation,
+  onRemoveLocation,
   onToggleSectorEnabled,
+  onToggleLocationEnabled,
   onToggleCameraEnabled,
 }: ConfigPanelProps) {
   const [expandedSectors, setExpandedSectors] = useState<Record<string, boolean>>({})
+  const [expandedLocations, setExpandedLocations] = useState<Record<string, boolean>>({})
 
   const canSave =
     config !== null &&
     config.sectors.every((sector) => sector.name.trim()) &&
+    config.locations.every((location) => location.name.trim()) &&
     config.cameras.every((camera) => camera.name.trim() && camera.source.trim())
 
   const isSectorExpanded = (sectorId: string) => expandedSectors[sectorId] ?? true
@@ -85,34 +95,42 @@ export function ConfigPanel({
         {config && !isLoading && (
           <>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              Sectors & cameras
+              Sectors, locations & cameras
             </Typography>
             {config.sectors
               .filter(
                 (sector) =>
                   sector.id !== UNASSIGNED_SECTOR_ID ||
-                  camerasInSector(sector.id, config.cameras).length > 0,
+                  locationsInSector(sector.id, config.locations).length > 0,
               )
               .map((sector) => (
-              <SectorAccordion
-                key={sector.id}
-                sector={sector}
-                sectors={config.sectors}
-                cameras={config.cameras}
-                expanded={isSectorExpanded(sector.id)}
-                onExpandedChange={(expanded) =>
-                  setExpandedSectors((current) => ({ ...current, [sector.id]: expanded }))
-                }
-                onSectorChange={(next) => onUpdateSector(sector.id, next)}
-                onSectorEnabledChange={(enabled) => onToggleSectorEnabled(sector.id, enabled)}
-                onRemoveSector={() => onRemoveSector(sector.id)}
-                onAddCamera={() => onAddCamera(sector.id)}
-                onUpdateCamera={onUpdateCamera}
-                onMoveCamera={onMoveCamera}
-                onToggleCameraEnabled={onToggleCameraEnabled}
-                onRemoveCamera={onRemoveCamera}
-              />
-            ))}
+                <SectorAccordion
+                  key={sector.id}
+                  sector={sector}
+                  locations={config.locations}
+                  cameras={config.cameras}
+                  expanded={isSectorExpanded(sector.id)}
+                  expandedLocations={expandedLocations}
+                  onExpandedChange={(expanded) =>
+                    setExpandedSectors((current) => ({ ...current, [sector.id]: expanded }))
+                  }
+                  onLocationExpandedChange={(locationId, expanded) =>
+                    setExpandedLocations((current) => ({ ...current, [locationId]: expanded }))
+                  }
+                  onSectorChange={(next) => onUpdateSector(sector.id, next)}
+                  onSectorEnabledChange={(enabled) => onToggleSectorEnabled(sector.id, enabled)}
+                  onRemoveSector={() => onRemoveSector(sector.id)}
+                  onAddLocation={() => onAddLocation(sector.id)}
+                  onUpdateLocation={onUpdateLocation}
+                  onRemoveLocation={onRemoveLocation}
+                  onToggleLocationEnabled={onToggleLocationEnabled}
+                  onAddCamera={(locationId) => onAddCamera(sector.id, locationId)}
+                  onUpdateCamera={onUpdateCamera}
+                  onMoveCamera={onMoveCamera}
+                  onToggleCameraEnabled={onToggleCameraEnabled}
+                  onRemoveCamera={onRemoveCamera}
+                />
+              ))}
             <Button variant="outlined" fullWidth onClick={onAddSector} sx={{ mb: 3 }}>
               Add sector
             </Button>

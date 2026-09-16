@@ -11,50 +11,64 @@ import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import type { Camera, Sector } from '../../shared/models/config'
+import type { Camera, Location, Sector } from '../../shared/models/config'
 import {
   UNASSIGNED_SECTOR_ID,
-  camerasInSector,
   canRemoveSector,
   countEffectiveCameras,
+  locationsInSector,
 } from '../../shared/models/config'
-import { CameraEditor } from './CameraEditor'
+import { LocationAccordion } from './LocationAccordion'
 
 interface SectorAccordionProps {
   sector: Sector
-  sectors: Sector[]
+  locations: Location[]
   cameras: Camera[]
   expanded: boolean
+  expandedLocations: Record<string, boolean>
   onExpandedChange: (expanded: boolean) => void
+  onLocationExpandedChange: (locationId: string, expanded: boolean) => void
   onSectorChange: (sector: Sector) => void
   onSectorEnabledChange: (enabled: boolean) => void
   onRemoveSector: () => void
-  onAddCamera: () => void
+  onAddLocation: () => void
+  onUpdateLocation: (locationId: string, location: Location) => void
+  onRemoveLocation: (locationId: string) => void
+  onToggleLocationEnabled: (locationId: string, enabled: boolean) => void
+  onAddCamera: (locationId: string) => void
   onUpdateCamera: (cameraId: string, camera: Camera) => void
-  onMoveCamera: (cameraId: string, sectorId: string) => void
+  onMoveCamera: (cameraId: string, locationId: string, sectorId: string) => void
   onToggleCameraEnabled: (cameraId: string, enabled: boolean) => void
   onRemoveCamera: (cameraId: string) => void
 }
 
 export function SectorAccordion({
   sector,
-  sectors,
+  locations,
   cameras,
   expanded,
+  expandedLocations,
   onExpandedChange,
+  onLocationExpandedChange,
   onSectorChange,
   onSectorEnabledChange,
   onRemoveSector,
+  onAddLocation,
+  onUpdateLocation,
+  onRemoveLocation,
+  onToggleLocationEnabled,
   onAddCamera,
   onUpdateCamera,
   onMoveCamera,
   onToggleCameraEnabled,
   onRemoveCamera,
 }: SectorAccordionProps) {
-  const sectorCameras = camerasInSector(sector.id, cameras)
-  const activeCount = countEffectiveCameras(sector, cameras)
-  const removal = canRemoveSector(sector, cameras)
+  const sectorLocations = locationsInSector(sector.id, locations)
+  const activeCount = countEffectiveCameras(sector, locations, cameras)
+  const removal = canRemoveSector(sector, locations, cameras)
   const isDisabled = !sector.enabled
+
+  const isLocationExpanded = (locationId: string) => expandedLocations[locationId] ?? false
 
   return (
     <Accordion
@@ -137,20 +151,29 @@ export function SectorAccordion({
             {removal.reason}
           </Alert>
         )}
-        {sectorCameras.map((camera) => (
-          <CameraEditor
-            key={camera.id}
-            camera={camera}
-            sectors={sectors}
-            sectorEnabled={sector.enabled}
-            onChange={(next) => onUpdateCamera(camera.id, next)}
-            onMove={(sectorId) => onMoveCamera(camera.id, sectorId)}
-            onToggleEnabled={(enabled) => onToggleCameraEnabled(camera.id, enabled)}
-            onRemove={() => onRemoveCamera(camera.id)}
+        {sectorLocations.map((location) => (
+          <LocationAccordion
+            key={location.id}
+            location={location}
+            sector={sector}
+            locations={locations}
+            cameras={cameras}
+            expanded={isLocationExpanded(location.id)}
+            onExpandedChange={(nextExpanded) =>
+              onLocationExpandedChange(location.id, nextExpanded)
+            }
+            onLocationChange={(next) => onUpdateLocation(location.id, next)}
+            onLocationEnabledChange={(enabled) => onToggleLocationEnabled(location.id, enabled)}
+            onRemoveLocation={() => onRemoveLocation(location.id)}
+            onAddCamera={() => onAddCamera(location.id)}
+            onUpdateCamera={onUpdateCamera}
+            onMoveCamera={onMoveCamera}
+            onToggleCameraEnabled={onToggleCameraEnabled}
+            onRemoveCamera={onRemoveCamera}
           />
         ))}
-        <Button variant="outlined" fullWidth onClick={onAddCamera} sx={{ mt: 1 }}>
-          Add camera
+        <Button variant="outlined" fullWidth onClick={onAddLocation} sx={{ mt: 1 }}>
+          Add location
         </Button>
       </AccordionDetails>
     </Accordion>

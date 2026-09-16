@@ -6,9 +6,34 @@ Python package for multimodal CCTV analysis, with a FastAPI chat API and a React
 
 - [Agent runtime, camera tools, routing, and external services](docs/AGENT.md)
 
+## Camera catalog hierarchy
+
+Configured cameras are grouped **sector → location → camera**. The committed catalog has **Prague** (10 locations, 14 cameras) and **Japan** (1 location, 1 YouTube livestream) — 15 cameras total. See [AGENT.md](docs/AGENT.md) for schema, enablement rules, and runtime flow.
+
+```mermaid
+flowchart TD
+  prague[Prague]
+  japan[Japan]
+  charlesBridge[Charles Bridge]
+  hybernska[Hybernska]
+  tokachi[Tokachi Obihiro]
+  camA[101200]
+  camB[101201]
+  camH[101048]
+  camJ[YouTube live]
+  prague --> charlesBridge
+  prague --> hybernska
+  japan --> tokachi
+  charlesBridge --> camA
+  charlesBridge --> camB
+  hybernska --> camH
+  tokachi --> camJ
+```
+
 ## Features
 
 - **Camera-first chat**: the agent fetches live JPEGs from configured cameras before answering.
+- **Three-level enablement**: sector AND location AND camera toggles in the Config panel.
 - **Three independent tool toggles** (`internet`, `weather`, `maps`) via `GET/PUT /api/config`.
 - **External tools** (when enabled): DuckDuckGo web search, Open-Meteo weather, OpenStreetMap Nominatim map lookup.
 

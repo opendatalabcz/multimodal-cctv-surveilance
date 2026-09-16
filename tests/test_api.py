@@ -9,7 +9,7 @@ from PIL import Image
 from cctv.api.app import create_app
 from cctv.config.agent_yaml import save_agent_config
 from cctv.config.effective import UNASSIGNED_SECTOR_ID
-from cctv.config.models import AgentConfig, CameraConfig, SectorConfig, ToolsConfig
+from cctv.config.models import AgentConfig, CameraConfig, LocationConfig, SectorConfig, ToolsConfig
 
 
 @pytest.fixture
@@ -39,6 +39,7 @@ def test_get_and_put_config(client, tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay_path)
 
     payload = {
+        "locations": [],
         "cameras": [
             {
                 "id": "bridge",
@@ -46,6 +47,8 @@ def test_get_and_put_config(client, tmp_path, monkeypatch) -> None:
                 "lat": 50.1,
                 "lon": 14.4,
                 "source": "101200",
+                "location_id": None,
+                "enabled": True,
             }
         ],
         "tools": {"internet": False, "weather": False, "maps": True},
@@ -130,9 +133,25 @@ def test_put_config_rejects_sector_deletion_with_cameras(client, tmp_path, monke
                 SectorConfig(id="prague", name="Prague"),
                 SectorConfig(id="airport", name="Airport"),
             ],
+            locations=[
+                LocationConfig(id="bridge", name="Bridge", sector_id="prague"),
+                LocationConfig(id="gate", name="Gate", sector_id="airport"),
+            ],
             cameras=[
-                CameraConfig(id="bridge", name="Bridge", source="101200", sector_id="prague"),
-                CameraConfig(id="gate", name="Gate", source="101048", sector_id="airport"),
+                CameraConfig(
+                    id="bridge",
+                    name="Bridge",
+                    source="101200",
+                    sector_id="prague",
+                    location_id="bridge",
+                ),
+                CameraConfig(
+                    id="gate",
+                    name="Gate",
+                    source="101048",
+                    sector_id="airport",
+                    location_id="gate",
+                ),
             ],
         ),
         config_path,
@@ -142,6 +161,10 @@ def test_put_config_rejects_sector_deletion_with_cameras(client, tmp_path, monke
         "/api/config",
         json={
             "sectors": [{"id": "airport", "name": "Airport", "enabled": True}],
+            "locations": [
+                {"id": "bridge", "name": "Bridge", "sector_id": "prague", "enabled": True, "lat": None, "lon": None},
+                {"id": "gate", "name": "Gate", "sector_id": "airport", "enabled": True, "lat": None, "lon": None},
+            ],
             "cameras": [
                 {
                     "id": "bridge",
@@ -150,6 +173,7 @@ def test_put_config_rejects_sector_deletion_with_cameras(client, tmp_path, monke
                     "lon": None,
                     "source": "101200",
                     "sector_id": "prague",
+                    "location_id": "bridge",
                     "enabled": True,
                 },
                 {
@@ -159,6 +183,7 @@ def test_put_config_rejects_sector_deletion_with_cameras(client, tmp_path, monke
                     "lon": None,
                     "source": "101048",
                     "sector_id": "airport",
+                    "location_id": "gate",
                     "enabled": True,
                 },
             ],

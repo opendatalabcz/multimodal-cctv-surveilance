@@ -8,14 +8,14 @@ import Select from '@mui/material/Select'
 import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import type { Camera, Sector } from '../../shared/models/config'
+import type { Camera, Location } from '../../shared/models/config'
 
 interface CameraEditorProps {
   camera: Camera
-  sectors: Sector[]
-  sectorEnabled: boolean
+  locations: Location[]
+  locationEnabled: boolean
   onChange: (camera: Camera) => void
-  onMove: (sectorId: string) => void
+  onMove: (locationId: string, sectorId: string) => void
   onToggleEnabled: (enabled: boolean) => void
   onRemove: () => void
 }
@@ -31,8 +31,8 @@ function parseOptionalNumber(value: string): number | null {
 
 export function CameraEditor({
   camera,
-  sectors,
-  sectorEnabled,
+  locations,
+  locationEnabled,
   onChange,
   onMove,
   onToggleEnabled,
@@ -46,7 +46,7 @@ export function CameraEditor({
         borderRadius: 1,
         p: 2,
         mb: 1.5,
-        opacity: sectorEnabled ? 1 : 0.72,
+        opacity: locationEnabled ? 1 : 0.72,
       }}
     >
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
@@ -56,7 +56,7 @@ export function CameraEditor({
               size="small"
               checked={camera.enabled}
               onChange={(_, checked) => onToggleEnabled(checked)}
-              disabled={!sectorEnabled}
+              disabled={!locationEnabled}
             />
           }
           label={
@@ -64,9 +64,9 @@ export function CameraEditor({
               <Typography variant="subtitle2">
                 {camera.name.trim() || 'Camera'}
               </Typography>
-              {!sectorEnabled && (
+              {!locationEnabled && (
                 <Typography variant="caption" color="text.secondary">
-                  Inactive until sector is enabled
+                  Inactive until location is enabled
                 </Typography>
               )}
             </Box>
@@ -89,17 +89,18 @@ export function CameraEditor({
       <Box sx={{ display: 'flex', gap: 1 }}>
         <TextField
           fullWidth
-          label="Latitude"
+          label="Latitude override"
           size="small"
           margin="dense"
           value={camera.lat ?? ''}
           onChange={(event) =>
             onChange({ ...camera, lat: parseOptionalNumber(event.target.value) })
           }
+          helperText="Optional; inherits location GPS when empty"
         />
         <TextField
           fullWidth
-          label="Longitude"
+          label="Longitude override"
           size="small"
           margin="dense"
           value={camera.lon ?? ''}
@@ -119,16 +120,20 @@ export function CameraEditor({
         helperText="Direct image URL, Prague camera ID, or YouTube live URL"
       />
       <FormControl fullWidth size="small" margin="dense">
-        <InputLabel id={`sector-select-${camera.id}`}>Sector</InputLabel>
+        <InputLabel id={`location-select-${camera.id}`}>Location</InputLabel>
         <Select
-          labelId={`sector-select-${camera.id}`}
-          label="Sector"
-          value={camera.sector_id ?? ''}
-          onChange={(event) => onMove(String(event.target.value))}
+          labelId={`location-select-${camera.id}`}
+          label="Location"
+          value={camera.location_id ?? ''}
+          onChange={(event) => {
+            const locationId = String(event.target.value)
+            const location = locations.find((item) => item.id === locationId)
+            onMove(locationId, location?.sector_id ?? camera.sector_id ?? '')
+          }}
         >
-          {sectors.map((sector) => (
-            <MenuItem key={sector.id} value={sector.id}>
-              {sector.name.trim() || 'Untitled sector'}
+          {locations.map((location) => (
+            <MenuItem key={location.id} value={location.id}>
+              {location.name.trim() || 'Untitled location'}
             </MenuItem>
           ))}
         </Select>

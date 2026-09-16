@@ -9,6 +9,15 @@ class SectorConfig(BaseModel):
     enabled: bool = True
 
 
+class LocationConfig(BaseModel):
+    id: str
+    name: str
+    sector_id: str | None = None
+    enabled: bool = True
+    lat: float | None = None
+    lon: float | None = None
+
+
 class CameraConfig(BaseModel):
     id: str
     name: str
@@ -16,6 +25,7 @@ class CameraConfig(BaseModel):
     lon: float | None = None
     source: str
     sector_id: str | None = None
+    location_id: str | None = None
     enabled: bool = True
 
 
@@ -38,6 +48,7 @@ class ToolsConfig(BaseModel):
 
 class AgentConfig(BaseModel):
     sectors: list[SectorConfig] = Field(default_factory=list)
+    locations: list[LocationConfig] = Field(default_factory=list)
     cameras: list[CameraConfig] = Field(default_factory=list)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
 
@@ -47,6 +58,8 @@ class AgentOverlay(BaseModel):
 
     sectors: list[SectorConfig] = Field(default_factory=list)
     remove_sector_ids: list[str] = Field(default_factory=list)
+    locations: list[LocationConfig] = Field(default_factory=list)
+    remove_location_ids: list[str] = Field(default_factory=list)
     cameras: list[CameraConfig] = Field(default_factory=list)
     remove_camera_ids: list[str] = Field(default_factory=list)
     tools: ToolsConfig | None = None

@@ -16,10 +16,25 @@ from cctv.config.effective import (
     is_camera_effective,
     normalize_agent_config,
 )
-from cctv.config.models import AgentConfig, CameraConfig, SectorConfig, ToolsConfig
+from cctv.config.models import AgentConfig, CameraConfig, LocationConfig, SectorConfig, ToolsConfig
 from cctv.config.prompt import build_system_prompt
 from cctv.tools.get_camera import resolve_camera
 from cctv.tools.registry import execute_tool
+
+
+def _location(
+    location_id: str,
+    name: str,
+    *,
+    sector_id: str | None = None,
+    enabled: bool = True,
+) -> LocationConfig:
+    return LocationConfig(
+        id=location_id,
+        name=name,
+        sector_id=sector_id,
+        enabled=enabled,
+    )
 
 
 def _cam(
@@ -27,6 +42,7 @@ def _cam(
     name: str,
     *,
     sector_id: str | None = None,
+    location_id: str | None = None,
     enabled: bool = True,
     source: str = "101048",
 ) -> CameraConfig:
@@ -35,6 +51,7 @@ def _cam(
         name=name,
         source=source,
         sector_id=sector_id,
+        location_id=location_id,
         enabled=enabled,
     )
 
@@ -78,11 +95,15 @@ def test_effective_camera_and_combinations() -> None:
                 _sector("prague", "Prague", enabled=True),
                 _sector("tokyo", "Tokyo", enabled=False),
             ],
+            locations=[
+                _location("prague_loc", "Prague spot", sector_id="prague"),
+                _location("tokyo_loc", "Tokyo spot", sector_id="tokyo"),
+            ],
             cameras=[
-                _cam("a", "A", sector_id="prague", enabled=True),
-                _cam("b", "B", sector_id="prague", enabled=False),
-                _cam("c", "C", sector_id="tokyo", enabled=True),
-                _cam("d", "D", sector_id="tokyo", enabled=False),
+                _cam("a", "A", sector_id="prague", location_id="prague_loc", enabled=True),
+                _cam("b", "B", sector_id="prague", location_id="prague_loc", enabled=False),
+                _cam("c", "C", sector_id="tokyo", location_id="tokyo_loc", enabled=True),
+                _cam("d", "D", sector_id="tokyo", location_id="tokyo_loc", enabled=False),
             ],
         )
     )
@@ -98,16 +119,21 @@ def test_overlay_sector_round_trip(tmp_path, monkeypatch) -> None:
     _patch_paths(tmp_path, monkeypatch)
     base = AgentConfig(
         sectors=[_sector("prague", "Prague")],
-        cameras=[_cam("bridge", "Bridge", sector_id="prague")],
+        locations=[_location("bridge", "Bridge", sector_id="prague")],
+        cameras=[_cam("bridge", "Bridge", sector_id="prague", location_id="bridge")],
         tools=ToolsConfig(),
     )
     save_agent_config(base, tmp_path / "agent.yaml")
 
     updated = AgentConfig(
         sectors=[_sector("prague", "Prague", enabled=False), _sector("airport", "Airport")],
+        locations=[
+            _location("bridge", "Bridge", sector_id="prague"),
+            _location("gate", "Gate", sector_id="airport"),
+        ],
         cameras=[
-            _cam("bridge", "Bridge", sector_id="prague", enabled=False),
-            _cam("gate", "Gate", sector_id="airport"),
+            _cam("bridge", "Bridge", sector_id="prague", location_id="bridge", enabled=False),
+            _cam("gate", "Gate", sector_id="airport", location_id="gate"),
         ],
         tools=ToolsConfig(internet=True),
     )
@@ -130,9 +156,13 @@ def test_block_sector_deletion_with_assigned_cameras(tmp_path, monkeypatch) -> N
     _patch_paths(tmp_path, monkeypatch)
     base = AgentConfig(
         sectors=[_sector("prague", "Prague"), _sector("airport", "Airport")],
+        locations=[
+            _location("bridge", "Bridge", sector_id="prague"),
+            _location("gate", "Gate", sector_id="airport"),
+        ],
         cameras=[
-            _cam("bridge", "Bridge", sector_id="prague"),
-            _cam("gate", "Gate", sector_id="airport"),
+            _cam("bridge", "Bridge", sector_id="prague", location_id="bridge"),
+            _cam("gate", "Gate", sector_id="airport", location_id="gate"),
         ],
     )
     save_agent_config(base, tmp_path / "agent.yaml")
@@ -141,9 +171,13 @@ def test_block_sector_deletion_with_assigned_cameras(tmp_path, monkeypatch) -> N
         save_agent_config(
             AgentConfig(
                 sectors=[_sector("airport", "Airport")],
+                locations=[
+                    _location("bridge", "Bridge", sector_id="prague"),
+                    _location("gate", "Gate", sector_id="airport"),
+                ],
                 cameras=[
-                    _cam("bridge", "Bridge", sector_id="prague"),
-                    _cam("gate", "Gate", sector_id="airport"),
+                    _cam("bridge", "Bridge", sector_id="prague", location_id="bridge"),
+                    _cam("gate", "Gate", sector_id="airport", location_id="gate"),
                 ],
             )
         )
@@ -167,7 +201,8 @@ def test_list_cameras_only_effective(tmp_path, monkeypatch) -> None:
     save_agent_config(
         AgentConfig(
             sectors=[_sector("prague", "Prague", enabled=False)],
-            cameras=[_cam("bridge", "Bridge", sector_id="prague")],
+            locations=[_location("bridge", "Bridge", sector_id="prague")],
+            cameras=[_cam("bridge", "Bridge", sector_id="prague", location_id="bridge")],
         ),
         tmp_path / "agent.yaml",
     )
@@ -181,7 +216,10 @@ def test_get_camera_image_rejects_disabled_camera(tmp_path, monkeypatch) -> None
     save_agent_config(
         AgentConfig(
             sectors=[_sector("prague", "Prague")],
-            cameras=[_cam("bridge", "Bridge", sector_id="prague", enabled=False)],
+            locations=[_location("bridge", "Bridge", sector_id="prague")],
+            cameras=[
+                _cam("bridge", "Bridge", sector_id="prague", location_id="bridge", enabled=False)
+            ],
         ),
         tmp_path / "agent.yaml",
     )
@@ -199,9 +237,13 @@ def test_get_camera_image_partial_disabled_and_unknown(tmp_path, monkeypatch) ->
     save_agent_config(
         AgentConfig(
             sectors=[_sector("prague", "Prague", enabled=False), _sector("airport", "Airport")],
+            locations=[
+                _location("bridge", "Bridge", sector_id="prague"),
+                _location("gate", "Gate", sector_id="airport"),
+            ],
             cameras=[
-                _cam("bridge", "Bridge", sector_id="prague"),
-                _cam("gate", "Gate", sector_id="airport"),
+                _cam("bridge", "Bridge", sector_id="prague", location_id="bridge"),
+                _cam("gate", "Gate", sector_id="airport", location_id="gate"),
             ],
         ),
         tmp_path / "agent.yaml",
@@ -233,9 +275,13 @@ def test_system_prompt_lists_only_effective_cameras(tmp_path, monkeypatch) -> No
     save_agent_config(
         AgentConfig(
             sectors=[_sector("prague", "Prague"), _sector("tokyo", "Tokyo", enabled=False)],
+            locations=[
+                _location("bridge", "Bridge", sector_id="prague"),
+                _location("shibuya", "Shibuya", sector_id="tokyo"),
+            ],
             cameras=[
-                _cam("bridge", "Bridge", sector_id="prague"),
-                _cam("shibuya", "Shibuya", sector_id="tokyo"),
+                _cam("bridge", "Bridge", sector_id="prague", location_id="bridge"),
+                _cam("shibuya", "Shibuya", sector_id="tokyo", location_id="shibuya"),
             ],
         ),
         tmp_path / "agent.yaml",

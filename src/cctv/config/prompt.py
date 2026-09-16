@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from cctv.config.effective import effective_cameras, sector_for_camera
+from cctv.config.effective import (
+    camera_gps,
+    effective_cameras,
+    location_for_camera,
+    locations_by_id,
+    sector_for_camera,
+)
 from cctv.config.models import AgentConfig
 
 
@@ -23,6 +29,20 @@ def _capability_lines(config: AgentConfig) -> list[str]:
     return lines
 
 
+def _no_location_sampling_hint(config: AgentConfig) -> str:
+    if config.locations:
+        return (
+            "do not ask which camera. Sample one camera per configured location "
+            "(each location represents one place). "
+            "This lets you contrast regions (e.g. Prague vs Japan)."
+        )
+    return (
+        "do not ask which camera. Sample one camera per distinct place: group by rounded GPS "
+        "(~0.01°); cameras without GPS each count as their own place. "
+        "This lets you contrast regions (e.g. Prague vs Japan)."
+    )
+
+
 def build_system_prompt(config: AgentConfig) -> str:
     lines = [
         "You are a CCTV surveillance assistant.",
@@ -32,17 +52,15 @@ def build_system_prompt(config: AgentConfig) -> str:
         "- When the user names a place that matches one or more effectively enabled cameras "
         "(by name or GPS area), fetch those cameras in one get_camera_image call "
         "(cameras: [id, ...]) — not a single random sample, and not one tool call per camera.",
-        "- When the question has no location (e.g. 'what is the weather like today?'), "
-        "do not ask which camera. Sample one camera per distinct place: group by rounded GPS "
-        "(~0.01°); cameras without GPS each count as their own place. "
-        "This lets you contrast regions (e.g. Prague vs Japan).",
+        f"- When the question has no location (e.g. 'what is the weather like today?'), "
+        f"{_no_location_sampling_hint(config)}",
         "- Prefer staying near a soft cap of about 10 images per turn. "
         "If a place-wide question legitimately needs more (e.g. 12 Prague cameras), "
         "fetch them rather than refusing — but avoid flooding unrelated cameras.",
         "- If the user names a place with no matching configured camera, tell them to add it "
         "in the Config panel (name, optional GPS, source URL). "
         "If map or weather toggles are on, you may use those tools for context instead.",
-        "- Disabled sectors or cameras are hidden from list_cameras and cannot be fetched.",
+        "- Disabled sectors, locations, or cameras are hidden from list_cameras and cannot be fetched.",
         "",
         "Weather and traffic:",
         "- Describe visible conditions from camera frames first.",
@@ -60,13 +78,22 @@ def build_system_prompt(config: AgentConfig) -> str:
     ]
     active = effective_cameras(config)
     if active:
+        location_map = locations_by_id(config.locations)
+        by_location: dict[str, list] = {}
         for camera in active:
-            gps = ""
-            if camera.lat is not None and camera.lon is not None:
-                gps = f" (lat={camera.lat}, lon={camera.lon})"
-            sector = sector_for_camera(config, camera)
+            location = location_for_camera(config, camera)
+            key = location.id if location else camera.id
+            by_location.setdefault(key, []).append(camera)
+        for location_id, cameras in by_location.items():
+            location = location_map.get(location_id.lower())
+            location_label = location.name if location else location_id
+            sector = sector_for_camera(config, cameras[0])
             sector_label = f", sector={sector.name}" if sector else ""
-            lines.append(f"- {camera.name} [id={camera.id}{sector_label}]{gps}")
+            lines.append(f"- {location_label}{sector_label}:")
+            for camera in cameras:
+                lat, lon = camera_gps(config, camera)
+                gps = f" (lat={lat}, lon={lon})" if lat is not None and lon is not None else ""
+                lines.append(f"  - {camera.name} [id={camera.id}]{gps}")
     else:
         lines.append("- (none effectively enabled)")
 

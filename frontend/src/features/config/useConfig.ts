@@ -1,7 +1,11 @@
 import { useCallback, useState } from 'react'
 import { getConfig, putConfig } from '../../shared/api/configApi'
-import type { AppConfig, Camera, Sector } from '../../shared/models/config'
-import { createEmptyCamera, createEmptySector } from '../../shared/models/config'
+import type { AppConfig, Camera, Location, Sector } from '../../shared/models/config'
+import {
+  createEmptyCamera,
+  createEmptyLocation,
+  createEmptySector,
+} from '../../shared/models/config'
 
 interface UseConfigResult {
   config: AppConfig | null
@@ -11,13 +15,17 @@ interface UseConfigResult {
   loadConfig: () => Promise<void>
   saveConfig: (next: AppConfig) => Promise<void>
   updateCamera: (cameraId: string, camera: Camera) => void
-  addCamera: (sectorId: string) => void
+  addCamera: (sectorId: string, locationId: string) => void
   removeCamera: (cameraId: string) => void
-  moveCamera: (cameraId: string, sectorId: string) => void
+  moveCamera: (cameraId: string, locationId: string, sectorId: string) => void
   updateSector: (sectorId: string, sector: Sector) => void
   addSector: () => void
   removeSector: (sectorId: string) => void
+  updateLocation: (locationId: string, location: Location) => void
+  addLocation: (sectorId: string) => void
+  removeLocation: (locationId: string) => void
   setSectorEnabled: (sectorId: string, enabled: boolean) => Promise<void>
+  setLocationEnabled: (locationId: string, enabled: boolean) => Promise<void>
   setCameraEnabled: (cameraId: string, enabled: boolean) => Promise<void>
   setToolFlag: (key: keyof AppConfig['tools'], value: boolean) => void
 }
@@ -28,11 +36,17 @@ function updateById<T extends { id: string }>(items: T[], id: string, next: T): 
 
 function applyEnabledFlags(current: AppConfig, saved: AppConfig): AppConfig {
   const sectorEnabled = new Map(saved.sectors.map((sector) => [sector.id, sector.enabled]))
+  const locationEnabled = new Map(saved.locations.map((location) => [location.id, location.enabled]))
   const cameraEnabled = new Map(saved.cameras.map((camera) => [camera.id, camera.enabled]))
   return {
     ...current,
     sectors: current.sectors.map((sector) =>
       sectorEnabled.has(sector.id) ? { ...sector, enabled: sectorEnabled.get(sector.id)! } : sector,
+    ),
+    locations: current.locations.map((location) =>
+      locationEnabled.has(location.id)
+        ? { ...location, enabled: locationEnabled.get(location.id)! }
+        : location,
     ),
     cameras: current.cameras.map((camera) =>
       cameraEnabled.has(camera.id) ? { ...camera, enabled: cameraEnabled.get(camera.id)! } : camera,
@@ -91,14 +105,14 @@ export function useConfig(): UseConfigResult {
     })
   }, [])
 
-  const addCamera = useCallback((sectorId: string) => {
+  const addCamera = useCallback((sectorId: string, locationId: string) => {
     setConfig((current) => {
       if (!current) {
         return current
       }
       return {
         ...current,
-        cameras: [...current.cameras, createEmptyCamera(sectorId)],
+        cameras: [...current.cameras, createEmptyCamera(sectorId, locationId)],
       }
     })
   }, [])
@@ -115,7 +129,7 @@ export function useConfig(): UseConfigResult {
     })
   }, [])
 
-  const moveCamera = useCallback((cameraId: string, sectorId: string) => {
+  const moveCamera = useCallback((cameraId: string, locationId: string, sectorId: string) => {
     setConfig((current) => {
       if (!current) {
         return current
@@ -123,7 +137,9 @@ export function useConfig(): UseConfigResult {
       return {
         ...current,
         cameras: current.cameras.map((camera) =>
-          camera.id === cameraId ? { ...camera, sector_id: sectorId } : camera,
+          camera.id === cameraId
+            ? { ...camera, location_id: locationId, sector_id: sectorId }
+            : camera,
         ),
       }
     })
@@ -165,6 +181,42 @@ export function useConfig(): UseConfigResult {
     })
   }, [])
 
+  const updateLocation = useCallback((locationId: string, location: Location) => {
+    setConfig((current) => {
+      if (!current) {
+        return current
+      }
+      return {
+        ...current,
+        locations: updateById(current.locations, locationId, location),
+      }
+    })
+  }, [])
+
+  const addLocation = useCallback((sectorId: string) => {
+    setConfig((current) => {
+      if (!current) {
+        return current
+      }
+      return {
+        ...current,
+        locations: [...current.locations, createEmptyLocation(sectorId)],
+      }
+    })
+  }, [])
+
+  const removeLocation = useCallback((locationId: string) => {
+    setConfig((current) => {
+      if (!current) {
+        return current
+      }
+      return {
+        ...current,
+        locations: current.locations.filter((location) => location.id !== locationId),
+      }
+    })
+  }, [])
+
   const setSectorEnabled = useCallback(
     async (sectorId: string, enabled: boolean) => {
       if (!config) {
@@ -185,6 +237,43 @@ export function useConfig(): UseConfigResult {
         ...savedConfig,
         sectors: savedConfig.sectors.map((sector) =>
           sector.id === sectorId ? { ...sector, enabled } : sector,
+        ),
+      }
+      setError(null)
+      try {
+        const saved = await putConfig(payload)
+        setSavedConfig(saved)
+        setConfig((current) => (current ? applyEnabledFlags(current, saved) : saved))
+      } catch (err) {
+        setConfig(previous)
+        const message = err instanceof Error ? err.message : 'Failed to save config'
+        setError(message)
+        throw err instanceof Error ? err : new Error(message)
+      }
+    },
+    [config, savedConfig],
+  )
+
+  const setLocationEnabled = useCallback(
+    async (locationId: string, enabled: boolean) => {
+      if (!config) {
+        return
+      }
+      const previous = config
+      const nextLocal: AppConfig = {
+        ...config,
+        locations: config.locations.map((location) =>
+          location.id === locationId ? { ...location, enabled } : location,
+        ),
+      }
+      setConfig(nextLocal)
+      if (!savedConfig || !savedConfig.locations.some((location) => location.id === locationId)) {
+        return
+      }
+      const payload: AppConfig = {
+        ...savedConfig,
+        locations: savedConfig.locations.map((location) =>
+          location.id === locationId ? { ...location, enabled } : location,
         ),
       }
       setError(null)
@@ -265,7 +354,11 @@ export function useConfig(): UseConfigResult {
     updateSector,
     addSector,
     removeSector,
+    updateLocation,
+    addLocation,
+    removeLocation,
     setSectorEnabled,
+    setLocationEnabled,
     setCameraEnabled,
     setToolFlag,
   }
