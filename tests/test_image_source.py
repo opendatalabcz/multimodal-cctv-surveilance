@@ -156,11 +156,13 @@ def test_execute_get_image_metadata_only(tmp_path, monkeypatch) -> None:
     assert exec_result["image_path"]
 
 
+@patch("cctv.fetch.youtube.requests.get")
 @patch("cctv.fetch.youtube.subprocess.run")
 @patch("cctv.fetch.youtube.yt_dlp.YoutubeDL")
 def test_get_image_youtube_live(
     mock_ytdl_cls: MagicMock,
     mock_subprocess_run: MagicMock,
+    mock_requests_get: MagicMock,
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -174,6 +176,19 @@ def test_get_image_youtube_live(
     }
     mock_ytdl_cls.return_value.__enter__.return_value = ydl
 
+    def fake_get(url, headers=None, timeout=None):
+        response = MagicMock()
+        response.raise_for_status.return_value = None
+        if str(url).endswith(".m3u8"):
+            response.content = b"#EXTM3U\n#EXTINF:1,\nhttps://stream.example/last.ts\n"
+            response.text = response.content.decode()
+        else:
+            response.content = b"fake-ts-bytes"
+            response.text = ""
+        return response
+
+    mock_requests_get.side_effect = fake_get
+
     def _write_jpeg(cmd, **kwargs):
         output = Path(cmd[-1])
         Image.new("RGB", (16, 9), (0, 128, 255)).save(output, format="JPEG")
@@ -186,6 +201,93 @@ def test_get_image_youtube_live(
     assert result["source_type"] == "youtube"
     assert result["video_id"] == "IDXRscHtp2s"
     assert Path(result["filepath"]).is_file()
+    fetched_urls = [call.args[0] for call in mock_requests_get.call_args_list]
+    assert fetched_urls == [
+        "https://stream.example/live.m3u8",
+        "https://stream.example/last.ts",
+    ]
+    ffmpeg_cmd = mock_subprocess_run.call_args[0][0]
+    assert ffmpeg_cmd[ffmpeg_cmd.index("-i") + 1].endswith(".ts")
+    assert "-an" in ffmpeg_cmd
+    assert ffmpeg_cmd[ffmpeg_cmd.index("-frames:v") + 1] == "1"
+    assert str(ffmpeg_cmd[-1]).endswith(".jpg")
+
+
+@patch("cctv.fetch.youtube.requests.get")
+@patch("cctv.fetch.youtube.subprocess.run")
+@patch("cctv.fetch.youtube.yt_dlp.YoutubeDL")
+def test_get_image_youtube_picks_720p_video_only(
+    mock_ytdl_cls: MagicMock,
+    mock_subprocess_run: MagicMock,
+    mock_requests_get: MagicMock,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CCTV_DATA_DIR", str(tmp_path))
+    ydl = MagicMock()
+    ydl.extract_info.return_value = {
+        "id": "IDXRscHtp2s",
+        "is_live": True,
+        "formats": [
+            {
+                "url": "https://stream.example/audio.m4a",
+                "vcodec": "none",
+                "acodec": "mp4a.40.2",
+                "height": None,
+            },
+            {
+                "url": "https://stream.example/1080.m3u8",
+                "vcodec": "avc1",
+                "acodec": "none",
+                "height": 1080,
+            },
+            {
+                "url": "https://stream.example/720.m3u8",
+                "vcodec": "avc1",
+                "acodec": "none",
+                "height": 720,
+            },
+            {
+                "url": "https://stream.example/storyboard.mhtml",
+                "vcodec": "jpeg",
+                "acodec": "none",
+                "protocol": "mhtml",
+                "height": 90,
+            },
+        ],
+    }
+    mock_ytdl_cls.return_value.__enter__.return_value = ydl
+
+    def fake_get(url, headers=None, timeout=None):
+        response = MagicMock()
+        response.raise_for_status.return_value = None
+        if str(url).endswith(".m3u8"):
+            response.content = b"#EXTM3U\nhttps://stream.example/edge.ts\n"
+        else:
+            response.content = b"fake-ts-bytes"
+        return response
+
+    mock_requests_get.side_effect = fake_get
+
+    def _write_jpeg(cmd, **kwargs):
+        output = Path(cmd[-1])
+        Image.new("RGB", (16, 9), (0, 128, 255)).save(output, format="JPEG")
+
+    mock_subprocess_run.side_effect = _write_jpeg
+
+    result = get_image("https://www.youtube.com/watch?v=IDXRscHtp2s", verbose=False)
+
+    assert result["success"] is True
+    fetched_urls = [call.args[0] for call in mock_requests_get.call_args_list]
+    assert fetched_urls[0] == "https://stream.example/720.m3u8"
+    assert fetched_urls[1] == "https://stream.example/edge.ts"
+    ffmpeg_cmd = mock_subprocess_run.call_args[0][0]
+    assert ffmpeg_cmd[ffmpeg_cmd.index("-i") + 1].endswith(".ts")
+    assert "-an" in ffmpeg_cmd
+    assert ffmpeg_cmd[ffmpeg_cmd.index("-frames:v") + 1] == "1"
+    assert str(ffmpeg_cmd[-1]).endswith(".jpg")
+    ydl_opts = mock_ytdl_cls.call_args[0][0]
+    assert "format" not in ydl_opts
 
 
 @patch("cctv.fetch.youtube.yt_dlp.YoutubeDL")
