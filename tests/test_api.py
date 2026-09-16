@@ -7,7 +7,9 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from cctv.api.app import create_app
-from cctv.config.models import AgentConfig, CameraConfig, ToolsConfig
+from cctv.config.agent_yaml import save_agent_config
+from cctv.config.effective import UNASSIGNED_SECTOR_ID
+from cctv.config.models import AgentConfig, CameraConfig, SectorConfig, ToolsConfig
 
 
 @pytest.fixture
@@ -51,11 +53,15 @@ def test_get_and_put_config(client, tmp_path, monkeypatch) -> None:
 
     put_response = client.put("/api/config", json=payload)
     assert put_response.status_code == 200
-    assert put_response.json() == payload
+    body = put_response.json()
+    assert body["cameras"][0]["id"] == "bridge"
+    assert body["cameras"][0]["sector_id"] == UNASSIGNED_SECTOR_ID
+    assert any(sector["id"] == UNASSIGNED_SECTOR_ID for sector in body["sectors"])
+    assert body["tools"]["maps"] is True
 
     get_response = client.get("/api/config")
     assert get_response.status_code == 200
-    assert get_response.json() == payload
+    assert get_response.json() == body
 
 
 def test_conversation_message_flow(client) -> None:
@@ -111,6 +117,56 @@ def test_serve_image_under_data_root(client, tmp_path) -> None:
 
     traversal_response = client.get("/api/images/../agent.yaml")
     assert traversal_response.status_code == 404
+
+
+def test_put_config_rejects_sector_deletion_with_cameras(client, tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "agent.yaml"
+    overlay_path = tmp_path / "agent.local.yaml"
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: config_path)
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay_path)
+    save_agent_config(
+        AgentConfig(
+            sectors=[
+                SectorConfig(id="prague", name="Prague"),
+                SectorConfig(id="airport", name="Airport"),
+            ],
+            cameras=[
+                CameraConfig(id="bridge", name="Bridge", source="101200", sector_id="prague"),
+                CameraConfig(id="gate", name="Gate", source="101048", sector_id="airport"),
+            ],
+        ),
+        config_path,
+    )
+
+    response = client.put(
+        "/api/config",
+        json={
+            "sectors": [{"id": "airport", "name": "Airport", "enabled": True}],
+            "cameras": [
+                {
+                    "id": "bridge",
+                    "name": "Bridge",
+                    "lat": None,
+                    "lon": None,
+                    "source": "101200",
+                    "sector_id": "prague",
+                    "enabled": True,
+                },
+                {
+                    "id": "gate",
+                    "name": "Gate",
+                    "lat": None,
+                    "lon": None,
+                    "source": "101048",
+                    "sector_id": "airport",
+                    "enabled": True,
+                },
+            ],
+            "tools": {"internet": False, "weather": False, "maps": False},
+        },
+    )
+    assert response.status_code == 400
+    assert "Cannot remove sector" in response.json()["detail"]
 
 
 def test_post_message_chat_failure(client) -> None:

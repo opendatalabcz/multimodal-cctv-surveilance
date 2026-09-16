@@ -5,8 +5,10 @@ import CircularProgress from '@mui/material/CircularProgress'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Switch from '@mui/material/Switch'
 import Typography from '@mui/material/Typography'
-import type { AppConfig, Camera } from '../../shared/models/config'
-import { AddCameraButton, CameraEditor } from './CameraEditor'
+import { useState } from 'react'
+import type { AppConfig, Camera, Sector } from '../../shared/models/config'
+import { UNASSIGNED_SECTOR_ID, camerasInSector } from '../../shared/models/config'
+import { SectorAccordion } from './SectorAccordion'
 
 interface ConfigPanelProps {
   config: AppConfig | null
@@ -15,9 +17,15 @@ interface ConfigPanelProps {
   error: string | null
   onSave: () => void
   onToggleTool: (key: keyof AppConfig['tools'], value: boolean) => void
-  onUpdateCamera: (index: number, camera: Camera) => void
-  onAddCamera: () => void
-  onRemoveCamera: (index: number) => void
+  onUpdateCamera: (cameraId: string, camera: Camera) => void
+  onAddCamera: (sectorId: string) => void
+  onRemoveCamera: (cameraId: string) => void
+  onMoveCamera: (cameraId: string, sectorId: string) => void
+  onUpdateSector: (sectorId: string, sector: Sector) => void
+  onAddSector: () => void
+  onRemoveSector: (sectorId: string) => void
+  onToggleSectorEnabled: (sectorId: string, enabled: boolean) => void
+  onToggleCameraEnabled: (cameraId: string, enabled: boolean) => void
 }
 
 export function ConfigPanel({
@@ -30,10 +38,21 @@ export function ConfigPanel({
   onUpdateCamera,
   onAddCamera,
   onRemoveCamera,
+  onMoveCamera,
+  onUpdateSector,
+  onAddSector,
+  onRemoveSector,
+  onToggleSectorEnabled,
+  onToggleCameraEnabled,
 }: ConfigPanelProps) {
+  const [expandedSectors, setExpandedSectors] = useState<Record<string, boolean>>({})
+
   const canSave =
     config !== null &&
+    config.sectors.every((sector) => sector.name.trim()) &&
     config.cameras.every((camera) => camera.name.trim() && camera.source.trim())
+
+  const isSectorExpanded = (sectorId: string) => expandedSectors[sectorId] ?? true
 
   return (
     <Box
@@ -66,19 +85,39 @@ export function ConfigPanel({
         {config && !isLoading && (
           <>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              Cameras
+              Sectors & cameras
             </Typography>
-            {config.cameras.map((camera, index) => (
-              <CameraEditor
-                key={camera.id}
-                camera={camera}
-                onChange={(next) => onUpdateCamera(index, next)}
-                onRemove={() => onRemoveCamera(index)}
+            {config.sectors
+              .filter(
+                (sector) =>
+                  sector.id !== UNASSIGNED_SECTOR_ID ||
+                  camerasInSector(sector.id, config.cameras).length > 0,
+              )
+              .map((sector) => (
+              <SectorAccordion
+                key={sector.id}
+                sector={sector}
+                sectors={config.sectors}
+                cameras={config.cameras}
+                expanded={isSectorExpanded(sector.id)}
+                onExpandedChange={(expanded) =>
+                  setExpandedSectors((current) => ({ ...current, [sector.id]: expanded }))
+                }
+                onSectorChange={(next) => onUpdateSector(sector.id, next)}
+                onSectorEnabledChange={(enabled) => onToggleSectorEnabled(sector.id, enabled)}
+                onRemoveSector={() => onRemoveSector(sector.id)}
+                onAddCamera={() => onAddCamera(sector.id)}
+                onUpdateCamera={onUpdateCamera}
+                onMoveCamera={onMoveCamera}
+                onToggleCameraEnabled={onToggleCameraEnabled}
+                onRemoveCamera={onRemoveCamera}
               />
             ))}
-            <AddCameraButton onClick={onAddCamera} />
+            <Button variant="outlined" fullWidth onClick={onAddSector} sx={{ mb: 3 }}>
+              Add sector
+            </Button>
 
-            <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
               Tools
             </Typography>
             <FormControlLabel

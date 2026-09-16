@@ -1,13 +1,22 @@
 import Box from '@mui/material/Box'
-import Button from '@mui/material/Button'
+import FormControl from '@mui/material/FormControl'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
+import InputLabel from '@mui/material/InputLabel'
+import MenuItem from '@mui/material/MenuItem'
+import Select from '@mui/material/Select'
+import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import type { Camera } from '../../shared/models/config'
+import type { Camera, Sector } from '../../shared/models/config'
 
 interface CameraEditorProps {
   camera: Camera
+  sectors: Sector[]
+  sectorEnabled: boolean
   onChange: (camera: Camera) => void
+  onMove: (sectorId: string) => void
+  onToggleEnabled: (enabled: boolean) => void
   onRemove: () => void
 }
 
@@ -20,7 +29,15 @@ function parseOptionalNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-export function CameraEditor({ camera, onChange, onRemove }: CameraEditorProps) {
+export function CameraEditor({
+  camera,
+  sectors,
+  sectorEnabled,
+  onChange,
+  onMove,
+  onToggleEnabled,
+  onRemove,
+}: CameraEditorProps) {
   return (
     <Box
       sx={{
@@ -28,11 +45,33 @@ export function CameraEditor({ camera, onChange, onRemove }: CameraEditorProps) 
         borderColor: 'divider',
         borderRadius: 1,
         p: 2,
-        mb: 2,
+        mb: 1.5,
+        opacity: sectorEnabled ? 1 : 0.72,
       }}
     >
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-        <Typography variant="subtitle2">Camera</Typography>
+        <FormControlLabel
+          control={
+            <Switch
+              size="small"
+              checked={camera.enabled}
+              onChange={(_, checked) => onToggleEnabled(checked)}
+              disabled={!sectorEnabled}
+            />
+          }
+          label={
+            <Box>
+              <Typography variant="subtitle2">
+                {camera.name.trim() || 'Camera'}
+              </Typography>
+              {!sectorEnabled && (
+                <Typography variant="caption" color="text.secondary">
+                  Inactive until sector is enabled
+                </Typography>
+              )}
+            </Box>
+          }
+        />
         <IconButton size="small" color="error" onClick={onRemove} aria-label="Remove camera">
           ×
         </IconButton>
@@ -79,18 +118,21 @@ export function CameraEditor({ camera, onChange, onRemove }: CameraEditorProps) 
         onChange={(event) => onChange({ ...camera, source: event.target.value })}
         helperText="Direct image URL, Prague camera ID, or YouTube live URL"
       />
+      <FormControl fullWidth size="small" margin="dense">
+        <InputLabel id={`sector-select-${camera.id}`}>Sector</InputLabel>
+        <Select
+          labelId={`sector-select-${camera.id}`}
+          label="Sector"
+          value={camera.sector_id ?? ''}
+          onChange={(event) => onMove(String(event.target.value))}
+        >
+          {sectors.map((sector) => (
+            <MenuItem key={sector.id} value={sector.id}>
+              {sector.name.trim() || 'Untitled sector'}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
     </Box>
-  )
-}
-
-interface AddCameraButtonProps {
-  onClick: () => void
-}
-
-export function AddCameraButton({ onClick }: AddCameraButtonProps) {
-  return (
-    <Button variant="outlined" fullWidth onClick={onClick}>
-      Add camera
-    </Button>
   )
 }

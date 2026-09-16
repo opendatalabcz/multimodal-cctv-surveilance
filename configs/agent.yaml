@@ -1,19 +1,29 @@
+sectors:
+  - id: prague
+    name: Prague
+    enabled: true
 cameras:
   - id: charles_bridge
     name: Charles Bridge
     lat: 50.0865
     lon: 14.4119
     source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/101200/image
+    sector_id: prague
+    enabled: true
   - id: hybernska
     name: Hybernská
     lat: 50.0875
     lon: 14.4316
     source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/101048/image
+    sector_id: prague
+    enabled: true
   - id: jecna
     name: Jecná
     lat: 50.0754
     lon: 14.4378
     source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/202020/image
+    sector_id: prague
+    enabled: true
 tools:
   internet: false
   weather: false

@@ -35,17 +35,33 @@ JPEG --> VLM (injected image part) and UI (/api/images/...)
 `configs/agent.yaml` is the committed catalog (demo cameras, default flags). `GET/PUT /api/config` merges that with gitignored `configs/agent.local.yaml`. The Config panel only writes the overlay: tool toggles, extra cameras, edits, and removals. Updating the catalog in git still applies unless the overlay overrides the same camera id.
 
 ```yaml
+sectors:
+  - id: prague
+    name: Prague
+    enabled: true
 cameras:
   - id: charles_bridge
     name: Charles Bridge
     lat: 50.0865      # optional
     lon: 14.4119
     source: "https://.../cameras/101200/image"  # GET URL or YouTube live URL
+    sector_id: prague
+    enabled: true
 tools:
   internet: false   # Internet search (web_search via DuckDuckGo)
   weather: false    # Open-Meteo measured/forecast data
   maps: false       # OpenStreetMap Nominatim place search / reverse geocode
 ```
+
+### Sectors and effective enablement
+
+Cameras are grouped into **sectors**. Each sector and each camera has an `enabled` toggle. A camera is **effectively enabled** only when **both** its sector and its own toggle are on (`sector.enabled AND camera.enabled`).
+
+- Disabled entries stay in YAML; they are excluded from `list_cameras`, the system prompt, and successful `get_camera_image` fetches.
+- Legacy configs without `sectors` or `sector_id` load under an implicit **Unassigned** sector (`id: unassigned`), with both levels enabled by default.
+- The committed catalog uses an explicit **Prague** sector for the demo cameras.
+
+The overlay merges sectors by id (like cameras): changed sectors, `remove_sector_ids`, changed cameras, `remove_camera_ids`, and optional `tools`. Saving rejects removing a sector while any camera still references it (HTTP 400 from `PUT /api/config`).
 
 Legacy overlays may still contain `google_maps`; it is loaded as `maps`. Turning `internet` on alone does **not** enable weather.
 
@@ -73,8 +89,8 @@ Tools exposed to Azure depend on the current toggles (`cctv.tools.tool_schemas_f
 
 | Name | When enabled | Effect |
 | --- | --- | --- |
-| `list_cameras` | always | JSON list of id, name, GPS, source, source_type from YAML |
-| `get_camera_image` | always | Resolves YAML `source` for one or more cameras, fetches stills (in parallel), returns metadata + JPEG paths |
+| `list_cameras` | always | JSON list of **effectively enabled** cameras (id, name, GPS, source, source_type, sector_id) |
+| `get_camera_image` | always | Resolves YAML `source` for one or more **effectively enabled** cameras, fetches stills (in parallel), returns metadata + JPEG paths; disabled or unknown ids return a clear error per camera |
 | `web_search` | `internet` | Up to 5 DuckDuckGo text results (title, URL, snippet) via `ddgs` |
 | `get_weather` | `weather` | Open-Meteo current conditions + 3-day forecast (coordinates or place name) |
 | `search_map` | `maps` | Nominatim place search (≤5 results) |
@@ -110,7 +126,7 @@ The chat loop already dispatches by name and injects any `image_path` / `image_p
 
 ## HTTP API (chat)
 
-- `GET/PUT /api/config` — `tools`: `{ "internet": bool, "weather": bool, "maps": bool }`
+- `GET/PUT /api/config` — `sectors`, `cameras`, `tools`: `{ "internet": bool, "weather": bool, "maps": bool }`
 - `POST /api/conversations`
 - `GET /api/conversations/{id}`
 - `POST /api/conversations/{id}/messages` with `{ "content": "..." }` — full transcript after the turn
@@ -144,6 +160,17 @@ Default pytest uses mocked HTTP — no live network:
 ```bash
 uv run pytest
 ```
+
+## Config panel UI
+
+The sidebar groups cameras into collapsible **sector accordions**:
+
+- **Sector switch** — parent enable toggle; persists immediately (optimistic update with rollback on failure).
+- **Camera switch** — child enable toggle; same immediate persistence. When the sector is disabled, child switches show saved state but are non-interactive; the sector is visually muted with “Sector disabled”.
+- **Active count** — number of cameras that are effectively enabled in that sector.
+- **Structural edits** (sector/camera names, assignments, add/remove) are local until **Save configuration**.
+- **Sector removal** is blocked while cameras are assigned; the UI shows the reason and the API returns 400.
+- Accordion expand/collapse is UI-only and not persisted.
 
 ## Out of scope
 

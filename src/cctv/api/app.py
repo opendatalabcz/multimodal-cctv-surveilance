@@ -42,8 +42,11 @@ def create_app() -> FastAPI:
 
     @app.put("/api/config", response_model=ConfigResponse)
     def put_config(body: ConfigResponse) -> ConfigResponse:
-        save_agent_config(body)
-        return body
+        try:
+            save_agent_config(body)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return ConfigResponse.model_validate(load_agent_config().model_dump())
 
     @app.post("/api/conversations", response_model=ConversationResponse)
     def create_conversation() -> ConversationResponse:

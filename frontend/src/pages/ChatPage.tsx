@@ -33,6 +33,12 @@ export function ChatPage() {
     updateCamera,
     addCamera,
     removeCamera,
+    moveCamera,
+    updateSector,
+    addSector,
+    removeSector,
+    setSectorEnabled,
+    setCameraEnabled,
   } = useConfig()
 
   const {
@@ -96,6 +102,28 @@ export function ChatPage() {
     [config, saveConfig, loadConfig],
   )
 
+  const handleToggleSectorEnabled = useCallback(
+    async (sectorId: string, enabled: boolean) => {
+      try {
+        await setSectorEnabled(sectorId, enabled)
+      } catch {
+        await loadConfig()
+      }
+    },
+    [setSectorEnabled, loadConfig],
+  )
+
+  const handleToggleCameraEnabled = useCallback(
+    async (cameraId: string, enabled: boolean) => {
+      try {
+        await setCameraEnabled(cameraId, enabled)
+      } catch {
+        await loadConfig()
+      }
+    },
+    [setCameraEnabled, loadConfig],
+  )
+
   if (isBooting) {
     return (
       <ThemeProvider theme={theme}>
@@ -149,6 +177,12 @@ export function ChatPage() {
               onUpdateCamera={updateCamera}
               onAddCamera={addCamera}
               onRemoveCamera={removeCamera}
+              onMoveCamera={moveCamera}
+              onUpdateSector={updateSector}
+              onAddSector={addSector}
+              onRemoveSector={removeSector}
+              onToggleSectorEnabled={handleToggleSectorEnabled}
+              onToggleCameraEnabled={handleToggleCameraEnabled}
             />
           </Box>
         </Box>

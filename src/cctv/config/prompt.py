@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from cctv.config.effective import effective_cameras, sector_for_camera
 from cctv.config.models import AgentConfig
 
 
@@ -28,7 +29,7 @@ def build_system_prompt(config: AgentConfig) -> str:
         "Always prefer live camera evidence before external data.",
         "",
         "Camera routing:",
-        "- When the user names a place that matches one or more configured cameras "
+        "- When the user names a place that matches one or more effectively enabled cameras "
         "(by name or GPS area), fetch those cameras in one get_camera_image call "
         "(cameras: [id, ...]) — not a single random sample, and not one tool call per camera.",
         "- When the question has no location (e.g. 'what is the weather like today?'), "
@@ -41,6 +42,7 @@ def build_system_prompt(config: AgentConfig) -> str:
         "- If the user names a place with no matching configured camera, tell them to add it "
         "in the Config panel (name, optional GPS, source URL). "
         "If map or weather toggles are on, you may use those tools for context instead.",
+        "- Disabled sectors or cameras are hidden from list_cameras and cannot be fetched.",
         "",
         "Weather and traffic:",
         "- Describe visible conditions from camera frames first.",
@@ -54,16 +56,19 @@ def build_system_prompt(config: AgentConfig) -> str:
         "Fetch live frames with one get_camera_image call. Pass cameras: [id or name, ...].",
         "Call list_cameras if you are unsure which cameras are configured.",
         "",
-        "Configured cameras:",
+        "Configured cameras (effectively enabled):",
     ]
-    if config.cameras:
-        for camera in config.cameras:
+    active = effective_cameras(config)
+    if active:
+        for camera in active:
             gps = ""
             if camera.lat is not None and camera.lon is not None:
                 gps = f" (lat={camera.lat}, lon={camera.lon})"
-            lines.append(f"- {camera.name} [id={camera.id}]{gps}")
+            sector = sector_for_camera(config, camera)
+            sector_label = f", sector={sector.name}" if sector else ""
+            lines.append(f"- {camera.name} [id={camera.id}{sector_label}]{gps}")
     else:
-        lines.append("- (none configured)")
+        lines.append("- (none effectively enabled)")
 
     lines.append("")
     lines.extend(_capability_lines(config))

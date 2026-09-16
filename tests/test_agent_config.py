@@ -4,7 +4,8 @@ from cctv.config.agent_yaml import (
     overlay_from_diff,
     save_agent_config,
 )
-from cctv.config.models import AgentConfig, CameraConfig, ToolsConfig
+from cctv.config.effective import UNASSIGNED_SECTOR_ID
+from cctv.config.models import AgentConfig, CameraConfig, SectorConfig, ToolsConfig
 
 
 def _cam(camera_id: str, name: str, source: str = "101048") -> CameraConfig:
@@ -82,7 +83,10 @@ def test_save_agent_config_round_trip(tmp_path) -> None:
     save_agent_config(original, config_path)
     loaded = load_agent_config(config_path)
 
-    assert loaded.model_dump() == original.model_dump()
+    assert loaded.cameras[0].id == "hybernska"
+    assert loaded.cameras[0].sector_id == UNASSIGNED_SECTOR_ID
+    assert any(sector.id == UNASSIGNED_SECTOR_ID for sector in loaded.sectors)
+    assert loaded.tools.maps is True
 
 
 def test_load_missing_config_returns_defaults(tmp_path) -> None:

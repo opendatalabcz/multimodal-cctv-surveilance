@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from cctv.config.agent_yaml import load_agent_config
+from cctv.config.effective import effective_cameras
 from cctv.fetch.sources import classify_source
 
 LIST_CAMERAS_TOOL: dict[str, Any] = {
@@ -13,7 +14,7 @@ LIST_CAMERAS_TOOL: dict[str, Any] = {
     "function": {
         "name": "list_cameras",
         "description": (
-            "List cameras configured in the UI / agent.yaml. "
+            "List effectively enabled cameras configured in the UI / agent.yaml. "
             "Use this before get_camera_image if you are unsure of the id or name. "
             "Do not invent cameras that are not in this list; tell the user to add them "
             "in the Config panel."
@@ -38,7 +39,7 @@ def _source_type(source: str) -> str:
 def execute_list_cameras(_arguments: dict[str, Any] | None = None) -> dict[str, Any]:
     config = load_agent_config()
     cameras = []
-    for camera in config.cameras:
+    for camera in effective_cameras(config):
         cameras.append(
             {
                 "id": camera.id,
@@ -47,6 +48,7 @@ def execute_list_cameras(_arguments: dict[str, Any] | None = None) -> dict[str, 
                 "lon": camera.lon,
                 "source": camera.source,
                 "source_type": _source_type(camera.source),
+                "sector_id": camera.sector_id,
             }
         )
     payload = {"success": True, "cameras": cameras, "count": len(cameras)}

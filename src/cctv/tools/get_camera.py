@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from cctv.config.agent_yaml import load_agent_config
+from cctv.config.effective import is_camera_effective
 from cctv.config.models import CameraConfig
 from cctv.tools.get_image import execute_get_image
 
@@ -19,8 +20,8 @@ GET_CAMERA_IMAGE_TOOL: dict[str, Any] = {
     "function": {
         "name": "get_camera_image",
         "description": (
-            "Fetch current frames from cameras listed in the Config panel / agent.yaml. "
-            "Pass one or more camera ids or display names in `cameras` (preferred). "
+            "Fetch current frames from effectively enabled cameras listed in the Config panel / "
+            "agent.yaml. Pass one or more camera ids or display names in `cameras` (preferred). "
             "`camera` is accepted for a single name. Do not issue one tool call per camera. "
             "Prefer about 10 images; a place-wide question may go a little over. "
             "Unknown names: tell the user to add name, optional GPS, and source URL "
@@ -93,10 +94,26 @@ def _unknown_result(query: str) -> dict[str, Any]:
     }
 
 
+def _disabled_result(query: str, camera: CameraConfig) -> dict[str, Any]:
+    return {
+        "success": False,
+        "query": query,
+        "camera_id": camera.id,
+        "camera_name": camera.name,
+        "error": (
+            f"Camera {query!r} is disabled. Enable its sector and camera toggles "
+            "in the Config panel before fetching."
+        ),
+    }
+
+
 def _fetch_one(query: str) -> tuple[dict[str, Any], str | None]:
+    config = load_agent_config()
     camera = resolve_camera(query)
     if camera is None:
         return _unknown_result(query), None
+    if not is_camera_effective(config, camera):
+        return _disabled_result(query, camera), None
     result = execute_get_image(camera.source)
     meta = json.loads(result["tool_content"])
     meta["query"] = query

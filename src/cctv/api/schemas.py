@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from cctv.config.models import AgentConfig, CameraConfig, ToolsConfig
+from cctv.config.models import AgentConfig, CameraConfig, SectorConfig, ToolsConfig
 
 
 class ConfigResponse(AgentConfig):
@@ -33,5 +33,6 @@ __all__ = [
     "ConfigResponse",
     "ConversationResponse",
     "PostMessageRequest",
+    "SectorConfig",
     "ToolsConfig",
 ]
