@@ -14,7 +14,9 @@ from cctv.config.models import AgentConfig, CameraConfig, ToolsConfig
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("CCTV_DATA_DIR", str(tmp_path))
     config_path = tmp_path / "agent.yaml"
+    overlay_path = tmp_path / "agent.local.yaml"
     monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: config_path)
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay_path)
     monkeypatch.setattr("cctv.api.chat.load_agent_config", lambda: AgentConfig(
         cameras=[
             CameraConfig(
@@ -30,7 +32,9 @@ def client(tmp_path, monkeypatch):
 
 def test_get_and_put_config(client, tmp_path, monkeypatch) -> None:
     config_path = tmp_path / "agent.yaml"
+    overlay_path = tmp_path / "agent.local.yaml"
     monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: config_path)
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay_path)
 
     payload = {
         "cameras": [

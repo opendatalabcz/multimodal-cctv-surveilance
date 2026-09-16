@@ -18,18 +18,21 @@ Revisit Deep Agents only if you need long research traces, parallel subagents, o
 | `src/cctv/api/` | FastAPI: config, conversations, image files |
 | `src/cctv/analysis/azure_vision.py` | `chat_with_tools` loop |
 | `src/cctv/tools/` | Tool schemas + executors |
-| `configs/agent.yaml` | Cameras and capability flags (UI writes this) |
+| `configs/agent.yaml` | Committed camera catalog and default tool flags |
+| `configs/agent.local.yaml` | Gitignored overlay: toggles, extra/edited cameras |
 | `src/cctv/fetch/image_source.py` | Low-level `get_image(source)` (URLs, Prague ids, YouTube live) |
 
 ```
-Config panel --> agent.yaml
+Config panel --> agent.local.yaml overlay on agent.yaml
 Chat --> FastAPI run_chat_turn --> chat_with_tools
 chat_with_tools --> list_cameras / get_camera_image
-get_camera_image --> agent.yaml --> fetch.get_image --> JPEG on disk
+get_camera_image --> merged config --> fetch.get_image --> JPEG on disk
 JPEG --> VLM (injected image part) and UI (/api/images/...)
 ```
 
-## Config (`configs/agent.yaml`)
+## Config (`configs/agent.yaml` + `configs/agent.local.yaml`)
+
+`configs/agent.yaml` is the committed catalog (demo cameras, default flags). `GET/PUT /api/config` merges that with gitignored `configs/agent.local.yaml`. The Config panel only writes the overlay: tool toggles, extra cameras, edits, and removals. Updating the catalog in git still applies unless the overlay overrides the same camera id.
 
 ```yaml
 cameras:
@@ -43,7 +46,19 @@ tools:
   google_maps: false
 ```
 
-`GET/PUT /api/config` round-trips this file. Internet and Google Maps flags are **prompt text only**; they are not tools yet. Do not claim those capabilities in answers when they are disabled.
+```yaml
+cameras:
+  - id: charles_bridge
+    name: Charles Bridge
+    lat: 50.0865      # optional
+    lon: 14.4119
+    source: "https://.../cameras/101200/image"  # GET URL or YouTube live URL
+tools:
+  internet: false
+  google_maps: false
+```
+
+`GET` returns the merged config. Internet and Google Maps flags are **prompt text only**; they are not tools yet. Do not claim those capabilities in answers when they are disabled.
 
 If a place is missing, the agent should tell the user to add it in the Config panel (name, optional GPS, source). It must not invent URLs.
 

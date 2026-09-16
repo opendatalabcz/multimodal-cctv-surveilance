@@ -12,7 +12,9 @@ from cctv.tools.registry import default_tool_schemas, execute_tool
 
 def _write_config(tmp_path: Path, monkeypatch) -> Path:
     path = tmp_path / "agent.yaml"
+    overlay = tmp_path / "agent.local.yaml"
     monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: path)
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay)
     config = AgentConfig(
         cameras=[
             CameraConfig(

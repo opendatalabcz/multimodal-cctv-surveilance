@@ -227,3 +227,6 @@ camera_images/
 # Frontend (Vite)
 node_modules/
 frontend/dist/
+
+# Local agent overlay (toggles and experimental cameras)
+configs/agent.local.yaml

@@ -19,3 +19,11 @@ class ToolsConfig(BaseModel):
 class AgentConfig(BaseModel):
     cameras: list[CameraConfig] = Field(default_factory=list)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
+
+
+class AgentOverlay(BaseModel):
+    """Local deltas on top of the committed catalog."""
+
+    cameras: list[CameraConfig] = Field(default_factory=list)
+    remove_camera_ids: list[str] = Field(default_factory=list)
+    tools: ToolsConfig | None = None
