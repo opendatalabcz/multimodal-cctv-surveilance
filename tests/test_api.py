@@ -67,6 +67,34 @@ def test_get_and_put_config(client, tmp_path, monkeypatch) -> None:
     assert get_response.json() == body
 
 
+def test_analyze_camera_endpoint_returns_saved_metadata(client) -> None:
+    analyzed = CameraConfig(
+        id="test_cam",
+        name="Test Camera",
+        source="101048",
+        analysis={
+            "description": "A road carrying vehicles.",
+            "scene_tags": ["road"],
+            "source_fingerprint": "abc123",
+            "analyzed_at": "2026-09-16T12:00:00Z",
+        },
+    )
+    with patch("cctv.api.app.analyze_camera_metadata", return_value=analyzed):
+        response = client.post("/api/cameras/test_cam/analyze")
+    assert response.status_code == 200
+    assert response.json()["analysis"]["scene_tags"] == ["road"]
+
+
+def test_analyze_camera_endpoint_reports_fetch_failure(client) -> None:
+    with patch(
+        "cctv.api.app.analyze_camera_metadata",
+        side_effect=RuntimeError("Could not fetch camera frame"),
+    ):
+        response = client.post("/api/cameras/test_cam/analyze")
+    assert response.status_code == 502
+    assert "Could not fetch" in response.json()["detail"]
+
+
 def test_conversation_message_flow(client) -> None:
     create_response = client.post("/api/conversations")
     assert create_response.status_code == 200

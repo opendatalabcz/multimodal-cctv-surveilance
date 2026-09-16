@@ -53,6 +53,8 @@ def execute_list_cameras(_arguments: dict[str, Any] | None = None) -> dict[str, 
                 "sector_id": camera.sector_id,
                 "location_id": camera.location_id,
                 "location_name": location.name if location else None,
+                "description": camera.analysis.description if camera.analysis else None,
+                "scene_tags": camera.analysis.scene_tags if camera.analysis else [],
             }
         )
     payload = {"success": True, "cameras": cameras, "count": len(cameras)}

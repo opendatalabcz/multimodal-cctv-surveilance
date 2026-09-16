@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { getConfig, putConfig } from '../../shared/api/configApi'
+import { analyzeCamera as requestCameraAnalysis, getConfig, putConfig } from '../../shared/api/configApi'
 import type { AppConfig, Camera, Location, Sector } from '../../shared/models/config'
 import {
   createEmptyCamera,
@@ -28,6 +28,14 @@ interface UseConfigResult {
   setLocationEnabled: (locationId: string, enabled: boolean) => Promise<void>
   setCameraEnabled: (cameraId: string, enabled: boolean) => Promise<void>
   setToolFlag: (key: keyof AppConfig['tools'], value: boolean) => void
+  analysisStates: Record<string, CameraAnalysisState>
+  analyzeCameras: (cameraIds: string[]) => Promise<void>
+  analyzeMissingCameras: () => Promise<void>
+}
+
+export interface CameraAnalysisState {
+  status: 'queued' | 'analyzing' | 'failed' | 'ready'
+  error?: string
 }
 
 function updateById<T extends { id: string }>(items: T[], id: string, next: T): T[] {
@@ -61,6 +69,53 @@ export function useConfig(): UseConfigResult {
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [analysisStates, setAnalysisStates] = useState<Record<string, CameraAnalysisState>>({})
+
+  const analyzeCameras = useCallback(async (cameraIds: string[]) => {
+    const uniqueIds = [...new Set(cameraIds)]
+    if (!uniqueIds.length) {
+      return
+    }
+    setAnalysisStates((current) => {
+      const next = { ...current }
+      uniqueIds.forEach((id) => {
+        next[id] = { status: 'queued' }
+      })
+      return next
+    })
+    for (const cameraId of uniqueIds) {
+      setAnalysisStates((current) => ({
+        ...current,
+        [cameraId]: { status: 'analyzing' },
+      }))
+      try {
+        const analyzed = await requestCameraAnalysis(cameraId)
+        const mergeAnalyzed = (current: AppConfig | null) =>
+          current
+            ? {
+                ...current,
+                cameras: current.cameras.map((camera) =>
+                  camera.id === cameraId ? { ...camera, analysis: analyzed.analysis } : camera,
+                ),
+              }
+            : current
+        setConfig(mergeAnalyzed)
+        setSavedConfig(mergeAnalyzed)
+        setAnalysisStates((current) => ({
+          ...current,
+          [cameraId]: { status: 'ready' },
+        }))
+      } catch (err) {
+        setAnalysisStates((current) => ({
+          ...current,
+          [cameraId]: {
+            status: 'failed',
+            error: err instanceof Error ? err.message : 'Camera analysis failed',
+          },
+        }))
+      }
+    }
+  }, [])
 
   const loadConfig = useCallback(async () => {
     setIsLoading(true)
@@ -82,16 +137,25 @@ export function useConfig(): UseConfigResult {
     setIsSaving(true)
     setError(null)
     try {
+      const previous = savedConfig
       const saved = await putConfig(next)
       setConfig(saved)
       setSavedConfig(saved)
+      const previousById = new Map(previous?.cameras.map((camera) => [camera.id, camera]))
+      const needsAutomaticAnalysis = saved.cameras
+        .filter((camera) => {
+          const old = previousById.get(camera.id)
+          return camera.source.trim() && (!old || old.source !== camera.source)
+        })
+        .map((camera) => camera.id)
+      void analyzeCameras(needsAutomaticAnalysis)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save config')
       throw err
     } finally {
       setIsSaving(false)
     }
-  }, [])
+  }, [analyzeCameras, savedConfig])
 
   const updateCamera = useCallback((cameraId: string, camera: Camera) => {
     setConfig((current) => {
@@ -100,10 +164,23 @@ export function useConfig(): UseConfigResult {
       }
       return {
         ...current,
-        cameras: updateById(current.cameras, cameraId, camera),
+        cameras: updateById(
+          current.cameras,
+          cameraId,
+          current.cameras.find((item) => item.id === cameraId)?.source !== camera.source
+            ? { ...camera, analysis: null }
+            : camera,
+        ),
       }
     })
   }, [])
+
+  const analyzeMissingCameras = useCallback(async () => {
+    const missing = config?.cameras
+      .filter((camera) => camera.source.trim() && !camera.analysis)
+      .map((camera) => camera.id)
+    await analyzeCameras(missing ?? [])
+  }, [analyzeCameras, config])
 
   const addCamera = useCallback((sectorId: string, locationId: string) => {
     setConfig((current) => {
@@ -361,5 +438,8 @@ export function useConfig(): UseConfigResult {
     setLocationEnabled,
     setCameraEnabled,
     setToolFlag,
+    analysisStates,
+    analyzeCameras,
+    analyzeMissingCameras,
   }
 }

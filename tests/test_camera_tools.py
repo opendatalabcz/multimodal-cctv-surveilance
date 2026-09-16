@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from cctv.config.agent_yaml import load_agent_config, save_agent_config
-from cctv.config.models import AgentConfig, CameraConfig
+from cctv.config.models import AgentConfig, CameraAnalysis, CameraConfig
 from cctv.config.prompt import build_system_prompt
 import cctv.tools  # noqa: F401
 from cctv.tools.get_camera import HARD_IMAGE_CAP, PREFERRED_IMAGE_CAP, resolve_camera
@@ -51,6 +51,26 @@ def test_list_cameras_matches_yaml(tmp_path, monkeypatch) -> None:
     assert by_id["charles_bridge"]["name"] == "Charles Bridge"
     assert by_id["charles_bridge"]["source_type"] == "prague_camera"
     assert by_id["airport"]["source_type"] == "youtube"
+
+
+def test_list_cameras_includes_scene_metadata(tmp_path, monkeypatch) -> None:
+    path = _write_config(tmp_path, monkeypatch)
+    config = load_agent_config(path)
+    config.cameras[0] = config.cameras[0].model_copy(
+        update={
+            "analysis": CameraAnalysis(
+                description="A pedestrian bridge with no road traffic.",
+                scene_tags=["bridge", "pedestrian"],
+                source_fingerprint="abc",
+                analyzed_at="2026-09-16T12:00:00Z",
+            )
+        }
+    )
+    save_agent_config(config, path)
+    payload = json.loads(execute_tool("list_cameras", {})["tool_content"])
+    bridge = next(camera for camera in payload["cameras"] if camera["id"] == "charles_bridge")
+    assert bridge["scene_tags"] == ["bridge", "pedestrian"]
+    assert bridge["description"] == "A pedestrian bridge with no road traffic."
 
 
 def test_resolve_camera_id_and_name(tmp_path, monkeypatch) -> None:

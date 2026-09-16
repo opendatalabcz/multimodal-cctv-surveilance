@@ -7,8 +7,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from cctv.analysis.camera_metadata import analyze_camera_metadata
 from cctv.api.chat import run_chat_turn
 from cctv.api.schemas import (
+    CameraConfig,
     ConfigResponse,
     ConversationResponse,
     PostMessageRequest,
@@ -47,6 +49,15 @@ def create_app() -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return ConfigResponse.model_validate(load_agent_config().model_dump())
+
+    @app.post("/api/cameras/{camera_id}/analyze", response_model=CameraConfig)
+    def analyze_camera(camera_id: str) -> CameraConfig:
+        try:
+            return analyze_camera_metadata(camera_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     @app.post("/api/conversations", response_model=ConversationResponse)
     def create_conversation() -> ConversationResponse:

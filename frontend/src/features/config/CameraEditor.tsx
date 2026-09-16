@@ -1,4 +1,6 @@
 import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
+import CircularProgress from '@mui/material/CircularProgress'
 import FormControl from '@mui/material/FormControl'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
@@ -8,7 +10,9 @@ import Select from '@mui/material/Select'
 import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import type { Camera, Location } from '../../shared/models/config'
+import type { Camera, Location, SceneTag } from '../../shared/models/config'
+import { SCENE_TAGS } from '../../shared/models/config'
+import type { CameraAnalysisState } from './useConfig'
 
 interface CameraEditorProps {
   camera: Camera
@@ -18,6 +22,8 @@ interface CameraEditorProps {
   onMove: (locationId: string, sectorId: string) => void
   onToggleEnabled: (enabled: boolean) => void
   onRemove: () => void
+  analysisState?: CameraAnalysisState
+  onAnalyze: () => void
 }
 
 function parseOptionalNumber(value: string): number | null {
@@ -37,7 +43,23 @@ export function CameraEditor({
   onMove,
   onToggleEnabled,
   onRemove,
+  analysisState,
+  onAnalyze,
 }: CameraEditorProps) {
+  const updateAnalysis = (description: string, sceneTags: SceneTag[]) => {
+    onChange({
+      ...camera,
+      analysis: {
+        description,
+        scene_tags: sceneTags,
+        source_fingerprint: camera.analysis?.source_fingerprint ?? '',
+        analyzed_at: camera.analysis?.analyzed_at ?? new Date().toISOString(),
+      },
+    })
+  }
+  const isAnalyzing =
+    analysisState?.status === 'queued' || analysisState?.status === 'analyzing'
+
   return (
     <Box
       sx={{
@@ -119,6 +141,59 @@ export function CameraEditor({
         onChange={(event) => onChange({ ...camera, source: event.target.value })}
         helperText="Direct image URL, Prague camera ID, or YouTube live URL"
       />
+      <TextField
+        fullWidth
+        label="Camera view description"
+        size="small"
+        margin="dense"
+        value={camera.analysis?.description ?? ''}
+        onChange={(event) =>
+          updateAnalysis(event.target.value, camera.analysis?.scene_tags ?? [])
+        }
+        helperText={
+          analysisState?.status === 'failed'
+            ? analysisState.error
+            : 'Used to choose relevant cameras before fetching frames'
+        }
+        error={analysisState?.status === 'failed'}
+      />
+      <FormControl fullWidth size="small" margin="dense">
+        <InputLabel id={`scene-tags-${camera.id}`}>Scene tags</InputLabel>
+        <Select
+          multiple
+          labelId={`scene-tags-${camera.id}`}
+          label="Scene tags"
+          value={camera.analysis?.scene_tags ?? []}
+          onChange={(event) =>
+            updateAnalysis(
+              camera.analysis?.description ?? 'Manually classified camera view',
+              event.target.value as SceneTag[],
+            )
+          }
+        >
+          {SCENE_TAGS.map((tag) => (
+            <MenuItem key={tag} value={tag}>
+              {tag}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+      <Button
+        size="small"
+        variant="outlined"
+        onClick={onAnalyze}
+        disabled={isAnalyzing || !camera.source.trim()}
+        startIcon={isAnalyzing ? <CircularProgress size={14} /> : undefined}
+        sx={{ mt: 0.5 }}
+      >
+        {analysisState?.status === 'failed'
+          ? 'Retry analysis'
+          : camera.analysis
+            ? 'Refresh analysis'
+            : isAnalyzing
+              ? 'Analyzing…'
+              : 'Analyze camera'}
+      </Button>
       <FormControl fullWidth size="small" margin="dense">
         <InputLabel id={`location-select-${camera.id}`}>Location</InputLabel>
         <Select

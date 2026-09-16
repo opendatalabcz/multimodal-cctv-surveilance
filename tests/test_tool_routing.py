@@ -4,7 +4,7 @@ from unittest.mock import patch
 import cctv.tools  # noqa: F401
 from cctv.api.chat import run_chat_turn
 from cctv.api.store import Conversation
-from cctv.config.models import AgentConfig, ToolsConfig
+from cctv.config.models import AgentConfig, CameraAnalysis, CameraConfig, ToolsConfig
 from cctv.config.prompt import build_system_prompt
 from cctv.tools.registry import tool_names_for_config, tool_schemas_for_config
 from cctv.utils.azure import AzureOpenAIConfig
@@ -77,6 +77,29 @@ def test_prompt_disabled_capabilities() -> None:
     assert "Do not claim you searched the web" in prompt
     assert "Do not quote measured forecasts" in prompt
     assert "Do not claim map or geocoding" in prompt
+
+
+def test_prompt_routes_by_camera_scene_metadata() -> None:
+    config = AgentConfig(
+        cameras=[
+            CameraConfig(
+                id="road_cam",
+                name="Road camera",
+                source="101200",
+                analysis=CameraAnalysis(
+                    description="A multilane road carrying vehicles.",
+                    scene_tags=["road", "intersection"],
+                    source_fingerprint="abc",
+                    analyzed_at="2026-09-16T12:00:00Z",
+                ),
+            )
+        ]
+    )
+    prompt = build_system_prompt(config)
+    assert "choose cameras whose scene tags and descriptions match" in prompt
+    assert "scene_tags=road, intersection" in prompt
+    assert "A multilane road carrying vehicles." in prompt
+    assert "do not sample pedestrian, panorama, or airport views" in prompt
 
 
 def test_run_chat_turn_reloads_tools_between_messages() -> None:

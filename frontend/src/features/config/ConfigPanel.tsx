@@ -9,6 +9,7 @@ import { useState } from 'react'
 import type { AppConfig, Camera, Location, Sector } from '../../shared/models/config'
 import { UNASSIGNED_SECTOR_ID, locationsInSector } from '../../shared/models/config'
 import { SectorAccordion } from './SectorAccordion'
+import type { CameraAnalysisState } from './useConfig'
 
 interface ConfigPanelProps {
   config: AppConfig | null
@@ -30,6 +31,9 @@ interface ConfigPanelProps {
   onToggleSectorEnabled: (sectorId: string, enabled: boolean) => void
   onToggleLocationEnabled: (locationId: string, enabled: boolean) => void
   onToggleCameraEnabled: (cameraId: string, enabled: boolean) => void
+  analysisStates: Record<string, CameraAnalysisState>
+  onAnalyzeCamera: (cameraId: string) => void
+  onAnalyzeMissing: () => void
 }
 
 export function ConfigPanel({
@@ -52,6 +56,9 @@ export function ConfigPanel({
   onToggleSectorEnabled,
   onToggleLocationEnabled,
   onToggleCameraEnabled,
+  analysisStates,
+  onAnalyzeCamera,
+  onAnalyzeMissing,
 }: ConfigPanelProps) {
   const [expandedSectors, setExpandedSectors] = useState<Record<string, boolean>>({})
   const [expandedLocations, setExpandedLocations] = useState<Record<string, boolean>>({})
@@ -61,6 +68,9 @@ export function ConfigPanel({
     config.sectors.every((sector) => sector.name.trim()) &&
     config.locations.every((location) => location.name.trim()) &&
     config.cameras.every((camera) => camera.name.trim() && camera.source.trim())
+  const isAnalyzing = Object.values(analysisStates).some(
+    (state) => state.status === 'queued' || state.status === 'analyzing',
+  )
 
   const isSectorExpanded = (sectorId: string) => expandedSectors[sectorId] ?? true
 
@@ -129,10 +139,25 @@ export function ConfigPanel({
                   onMoveCamera={onMoveCamera}
                   onToggleCameraEnabled={onToggleCameraEnabled}
                   onRemoveCamera={onRemoveCamera}
+                  analysisStates={analysisStates}
+                  onAnalyzeCamera={onAnalyzeCamera}
                 />
               ))}
             <Button variant="outlined" fullWidth onClick={onAddSector} sx={{ mb: 3 }}>
               Add sector
+            </Button>
+            <Button
+              variant="outlined"
+              fullWidth
+              onClick={onAnalyzeMissing}
+              disabled={
+                isSaving ||
+                isAnalyzing ||
+                config.cameras.every((camera) => camera.analysis || !camera.source.trim())
+              }
+              sx={{ mb: 3 }}
+            >
+              Analyze missing camera metadata
             </Button>
 
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -176,7 +201,7 @@ export function ConfigPanel({
         <Button
           variant="contained"
           fullWidth
-          disabled={!canSave || isSaving || isLoading}
+          disabled={!canSave || isSaving || isLoading || isAnalyzing}
           onClick={onSave}
         >
           {isSaving ? 'Saving…' : 'Save configuration'}

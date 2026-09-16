@@ -43,6 +43,9 @@ export function ChatPage() {
     setSectorEnabled,
     setLocationEnabled,
     setCameraEnabled,
+    analysisStates,
+    analyzeCameras,
+    analyzeMissingCameras,
   } = useConfig()
 
   const {
@@ -202,6 +205,9 @@ export function ChatPage() {
               onToggleSectorEnabled={handleToggleSectorEnabled}
               onToggleLocationEnabled={handleToggleLocationEnabled}
               onToggleCameraEnabled={handleToggleCameraEnabled}
+              analysisStates={analysisStates}
+              onAnalyzeCamera={(cameraId) => void analyzeCameras([cameraId])}
+              onAnalyzeMissing={() => void analyzeMissingCameras()}
             />
           </Box>
         </Box>

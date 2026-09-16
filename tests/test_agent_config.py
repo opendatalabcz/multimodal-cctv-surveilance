@@ -5,7 +5,13 @@ from cctv.config.agent_yaml import (
     save_agent_config,
 )
 from cctv.config.effective import UNASSIGNED_SECTOR_ID
-from cctv.config.models import AgentConfig, CameraConfig, SectorConfig, ToolsConfig
+from cctv.config.models import (
+    AgentConfig,
+    CameraAnalysis,
+    CameraConfig,
+    SectorConfig,
+    ToolsConfig,
+)
 
 
 def _cam(camera_id: str, name: str, source: str = "101048") -> CameraConfig:
@@ -171,3 +177,23 @@ def test_save_matching_base_deletes_overlay(tmp_path, monkeypatch) -> None:
     save_agent_config(base)
     assert not overlay_path.is_file()
     assert overlay_from_diff(base, base).tools is None
+
+
+def test_generated_camera_metadata_is_stored_in_overlay(tmp_path, monkeypatch) -> None:
+    base_path = tmp_path / "agent.yaml"
+    overlay_path = tmp_path / "agent.local.yaml"
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: base_path)
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay_path)
+    base = AgentConfig(cameras=[_cam("bridge", "Bridge")])
+    save_agent_config(base, base_path)
+    current = load_agent_config()
+    current.cameras[0].analysis = CameraAnalysis(
+        description="A pedestrian bridge.",
+        scene_tags=["bridge", "pedestrian"],
+        source_fingerprint="abc",
+        analyzed_at="2026-09-16T12:00:00Z",
+    )
+    save_agent_config(current)
+
+    assert load_overlay().cameras[0].analysis is not None
+    assert load_agent_config().cameras[0].analysis.description == "A pedestrian bridge."

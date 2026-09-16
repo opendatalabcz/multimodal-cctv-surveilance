@@ -19,6 +19,7 @@ import {
   locationsInSector,
 } from '../../shared/models/config'
 import { LocationAccordion } from './LocationAccordion'
+import type { CameraAnalysisState } from './useConfig'
 
 interface SectorAccordionProps {
   sector: Sector
@@ -40,6 +41,8 @@ interface SectorAccordionProps {
   onMoveCamera: (cameraId: string, locationId: string, sectorId: string) => void
   onToggleCameraEnabled: (cameraId: string, enabled: boolean) => void
   onRemoveCamera: (cameraId: string) => void
+  analysisStates: Record<string, CameraAnalysisState>
+  onAnalyzeCamera: (cameraId: string) => void
 }
 
 export function SectorAccordion({
@@ -62,6 +65,8 @@ export function SectorAccordion({
   onMoveCamera,
   onToggleCameraEnabled,
   onRemoveCamera,
+  analysisStates,
+  onAnalyzeCamera,
 }: SectorAccordionProps) {
   const sectorLocations = locationsInSector(sector.id, locations)
   const activeCount = countEffectiveCameras(sector, locations, cameras)
@@ -170,6 +175,8 @@ export function SectorAccordion({
             onMoveCamera={onMoveCamera}
             onToggleCameraEnabled={onToggleCameraEnabled}
             onRemoveCamera={onRemoveCamera}
+            analysisStates={analysisStates}
+            onAnalyzeCamera={onAnalyzeCamera}
           />
         ))}
         <Button variant="outlined" fullWidth onClick={onAddLocation} sx={{ mt: 1 }}>

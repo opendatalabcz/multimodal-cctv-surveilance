@@ -1,6 +1,32 @@
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Literal
+
 from pydantic import BaseModel, Field, model_validator
+
+
+SceneTag = Literal[
+    "road",
+    "intersection",
+    "highway",
+    "parking",
+    "bridge",
+    "pedestrian",
+    "public-square",
+    "airport",
+    "rail",
+    "waterfront",
+    "panorama",
+    "indoor",
+]
+
+
+class CameraAnalysis(BaseModel):
+    description: str = Field(max_length=240)
+    scene_tags: list[SceneTag] = Field(default_factory=list, max_length=6)
+    source_fingerprint: str
+    analyzed_at: datetime
 
 
 class SectorConfig(BaseModel):
@@ -27,6 +53,7 @@ class CameraConfig(BaseModel):
     sector_id: str | None = None
     location_id: str | None = None
     enabled: bool = True
+    analysis: CameraAnalysis | None = None
 
 
 class ToolsConfig(BaseModel):

@@ -30,6 +30,14 @@ def _capability_lines(config: AgentConfig) -> list[str]:
 
 
 def _no_location_sampling_hint(config: AgentConfig) -> str:
+    if any(camera.analysis for camera in effective_cameras(config)):
+        return (
+            "choose cameras whose scene tags and descriptions match the subject of the question. "
+            "For cars or traffic, prefer road, intersection, highway, and parking views; do not "
+            "sample pedestrian, panorama, or airport views merely for geographic variety. "
+            "If no configured view is relevant, say so instead of fetching unrelated cameras. "
+            "Use geographic sampling only for genuinely broad comparison questions."
+        )
     if config.locations:
         return (
             "do not ask which camera. Sample one camera per configured location "
@@ -93,7 +101,13 @@ def build_system_prompt(config: AgentConfig) -> str:
             for camera in cameras:
                 lat, lon = camera_gps(config, camera)
                 gps = f" (lat={lat}, lon={lon})" if lat is not None and lon is not None else ""
-                lines.append(f"  - {camera.name} [id={camera.id}]{gps}")
+                metadata = ""
+                if camera.analysis:
+                    tags = ", ".join(camera.analysis.scene_tags) or "none"
+                    metadata = (
+                        f" [scene_tags={tags}; description={camera.analysis.description}]"
+                    )
+                lines.append(f"  - {camera.name} [id={camera.id}]{gps}{metadata}")
     else:
         lines.append("- (none effectively enabled)")
 

@@ -13,6 +13,30 @@ export interface Location {
   lon: number | null
 }
 
+export const SCENE_TAGS = [
+  'road',
+  'intersection',
+  'highway',
+  'parking',
+  'bridge',
+  'pedestrian',
+  'public-square',
+  'airport',
+  'rail',
+  'waterfront',
+  'panorama',
+  'indoor',
+] as const
+
+export type SceneTag = (typeof SCENE_TAGS)[number]
+
+export interface CameraAnalysis {
+  description: string
+  scene_tags: SceneTag[]
+  source_fingerprint: string
+  analyzed_at: string
+}
+
 export interface Camera {
   id: string
   name: string
@@ -22,6 +46,7 @@ export interface Camera {
   sector_id: string | null
   location_id: string | null
   enabled: boolean
+  analysis: CameraAnalysis | null
 }
 
 export interface ToolsConfig {
@@ -76,6 +101,7 @@ export function createEmptyCamera(sectorId: string, locationId: string): Camera 
     sector_id: sectorId,
     location_id: locationId,
     enabled: true,
+    analysis: null,
   }
 }
 

@@ -19,6 +19,7 @@ import {
   countEffectiveCamerasInLocation,
 } from '../../shared/models/config'
 import { CameraEditor } from './CameraEditor'
+import type { CameraAnalysisState } from './useConfig'
 
 interface LocationAccordionProps {
   location: Location
@@ -35,6 +36,8 @@ interface LocationAccordionProps {
   onMoveCamera: (cameraId: string, locationId: string, sectorId: string) => void
   onToggleCameraEnabled: (cameraId: string, enabled: boolean) => void
   onRemoveCamera: (cameraId: string) => void
+  analysisStates: Record<string, CameraAnalysisState>
+  onAnalyzeCamera: (cameraId: string) => void
 }
 
 function parseOptionalNumber(value: string): number | null {
@@ -61,6 +64,8 @@ export function LocationAccordion({
   onMoveCamera,
   onToggleCameraEnabled,
   onRemoveCamera,
+  analysisStates,
+  onAnalyzeCamera,
 }: LocationAccordionProps) {
   const locationCameras = camerasInLocation(location.id, cameras)
   const activeCount = countEffectiveCamerasInLocation(sector, location, cameras)
@@ -190,6 +195,8 @@ export function LocationAccordion({
             onMove={(locationId, sectorId) => onMoveCamera(camera.id, locationId, sectorId)}
             onToggleEnabled={(enabled) => onToggleCameraEnabled(camera.id, enabled)}
             onRemove={() => onRemoveCamera(camera.id)}
+            analysisState={analysisStates[camera.id]}
+            onAnalyze={() => onAnalyzeCamera(camera.id)}
           />
         ))}
         <Button variant="outlined" fullWidth onClick={onAddCamera} sx={{ mt: 1 }}>
