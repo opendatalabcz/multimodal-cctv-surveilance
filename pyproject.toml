@@ -8,6 +8,7 @@ dependencies = [
     "accelerate",
     "aiohttp",
     "bitsandbytes",
+    "fastapi",
     "huggingface-hub",
     "matplotlib",
     "open-clip-torch",
@@ -19,7 +20,13 @@ dependencies = [
     "torch",
     "torchvision",
     "transformers",
+    "uvicorn[standard]",
+    "yt-dlp",
+    "imageio-ffmpeg",
 ]
+
+[project.scripts]
+cctv-api = "cctv.api.cli:main"
 
 [dependency-groups]
 dev = [
@@ -42,3 +49,8 @@ packages = ["src/cctv"]
 
 [tool.uv]
 package = true
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests that call live external services",
+]

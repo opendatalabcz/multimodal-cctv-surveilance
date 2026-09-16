@@ -4,9 +4,12 @@ import base64
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import requests
 
+import cctv.tools  # noqa: F401  — register default tools
+from cctv.tools.registry import default_tool_schemas, execute_tool
 from cctv.utils.azure import AzureOpenAIConfig, load_azure_openai_config
 from cctv.utils.paths import data_root, experiments_dir
 
@@ -136,6 +139,213 @@ def save_experiment(result: dict, place_id: str, kind: str = "run") -> Path:
     }
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     return path
+
+
+def _chat_completion_payload(
+    messages: list[dict[str, Any]],
+    config: AzureOpenAIConfig,
+    *,
+    tools: list[dict[str, Any]] | None = None,
+    max_tokens: int = 1500,
+    temperature: float | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "model": config.model,
+        "messages": messages,
+        "max_completion_tokens": max_tokens,
+    }
+    if temperature is not None:
+        payload["temperature"] = temperature
+    if tools:
+        payload["tools"] = tools
+        payload["tool_choice"] = "auto"
+    return payload
+
+
+def _post_chat_completion(
+    payload: dict[str, Any],
+    config: AzureOpenAIConfig,
+    *,
+    timeout: int = 90,
+) -> dict[str, Any]:
+    headers = {
+        "Content-Type": "application/json",
+        "api-key": config.api_key,
+    }
+    response = requests.post(config.api_url, headers=headers, json=payload, timeout=timeout)
+    response.raise_for_status()
+    return response.json()
+
+
+def _vision_image_part(image_path: str | Path) -> dict[str, Any]:
+    encoded = encode_image_to_base64(image_path)
+    return {
+        "type": "image_url",
+        "image_url": {
+            "url": f"data:image/jpeg;base64,{encoded}",
+            "detail": "high",
+        },
+    }
+
+
+def _finalize_tool_chat_result(
+    message: dict[str, Any],
+    result: dict[str, Any],
+    *,
+    messages: list[dict[str, Any]],
+    fetched_images: list[str],
+    tool_rounds: int,
+    parse_json: bool,
+    config: AzureOpenAIConfig,
+) -> dict[str, Any]:
+    analysis_text = message.get("content") or ""
+    if parse_json:
+        try:
+            analysis = _parse_json_payload(analysis_text)
+        except json.JSONDecodeError:
+            analysis = {"raw_response": analysis_text}
+    else:
+        analysis = analysis_text
+    final_messages = messages + [message]
+    return {
+        "success": True,
+        "analysis": analysis,
+        "raw_response": analysis_text,
+        "usage": result.get("usage", {}),
+        "timestamp": datetime.now().isoformat(),
+        "image_paths": [_relative_to_data_root(path) for path in fetched_images],
+        "image_count": len(fetched_images),
+        "model": config.model,
+        "tool_rounds": tool_rounds,
+        "messages": final_messages,
+    }
+
+
+def chat_with_tools(
+    messages: list[dict[str, Any]],
+    config: AzureOpenAIConfig | None = None,
+    *,
+    system_prompt: str | None = None,
+    tools: list[dict[str, Any]] | None = None,
+    parse_json: bool = False,
+    max_tokens: int = 1500,
+    temperature: float | None = None,
+    max_tool_rounds: int = 3,
+    request_timeout: int = 90,
+) -> dict[str, Any]:
+    """Run a multi-turn Azure vision chat with function calling.
+
+    Default tools are ``list_cameras`` and ``get_camera_image``. ``messages``
+    uses the Azure chat format (roles such as user/assistant/tool). When a
+    tool returns ``image_path``, the JPEG is injected in a follow-up user
+    message so the VLM can see the frame. On success, ``messages`` in the
+    result is the full history including the final assistant reply.
+    """
+    config = config or load_azure_openai_config()
+    if not config.is_configured or not config.api_url:
+        return {"success": False, "error": "Azure OpenAI configuration missing"}
+
+    active_tools = tools if tools is not None else default_tool_schemas()
+    history = [message for message in messages if message.get("role") != "system"]
+    conversation: list[dict[str, Any]] = []
+    if system_prompt:
+        conversation.append({"role": "system", "content": system_prompt})
+    conversation.extend(history)
+    fetched_images: list[str] = []
+    tool_rounds = 0
+
+    try:
+        while tool_rounds <= max_tool_rounds:
+            payload = _chat_completion_payload(
+                conversation,
+                config,
+                tools=active_tools if tool_rounds < max_tool_rounds else None,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+            result = _post_chat_completion(payload, config, timeout=request_timeout)
+            message = result["choices"][0]["message"]
+            tool_calls = message.get("tool_calls") or []
+
+            if not tool_calls:
+                return _finalize_tool_chat_result(
+                    message,
+                    result,
+                    messages=conversation,
+                    fetched_images=fetched_images,
+                    tool_rounds=tool_rounds,
+                    parse_json=parse_json,
+                    config=config,
+                )
+
+            conversation.append(message)
+            for tool_call in tool_calls:
+                fn = tool_call.get("function") or {}
+                name = fn.get("name") or ""
+                try:
+                    args = json.loads(fn.get("arguments") or "{}")
+                    if not isinstance(args, dict):
+                        args = {}
+                except json.JSONDecodeError:
+                    args = {}
+                exec_result = execute_tool(name, args)
+                conversation.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call["id"],
+                        "content": exec_result["tool_content"],
+                    }
+                )
+
+                image_path = exec_result.get("image_path")
+                if image_path:
+                    fetched_images.append(image_path)
+                    conversation.append(
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "Here is the fetched image for analysis.",
+                                },
+                                _vision_image_part(image_path),
+                            ],
+                        }
+                    )
+
+            tool_rounds += 1
+
+        return {"success": False, "error": f"Exceeded max tool rounds ({max_tool_rounds})"}
+    except requests.exceptions.RequestException as exc:
+        return {"success": False, "error": f"Azure API request failed: {exc}"}
+    except Exception as exc:
+        return {"success": False, "error": f"Unexpected error: {exc}"}
+
+
+def analyze_with_tools(
+    prompt: str,
+    config: AzureOpenAIConfig | None = None,
+    *,
+    tools: list[dict[str, Any]] | None = None,
+    parse_json: bool = True,
+    max_tokens: int = 1500,
+    temperature: float | None = None,
+    max_tool_rounds: int = 3,
+    request_timeout: int = 90,
+) -> dict[str, Any]:
+    """Run a single-turn Azure vision chat with the default camera tools."""
+    result = chat_with_tools(
+        [{"role": "user", "content": prompt}],
+        config=config,
+        tools=tools,
+        parse_json=parse_json,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        max_tool_rounds=max_tool_rounds,
+        request_timeout=request_timeout,
+    )
+    result.pop("messages", None)
+    return result
 
 
 def analyze_camera_image(
