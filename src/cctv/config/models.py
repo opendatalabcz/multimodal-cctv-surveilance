@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class CameraConfig(BaseModel):
@@ -13,7 +13,19 @@ class CameraConfig(BaseModel):
 
 class ToolsConfig(BaseModel):
     internet: bool = False
-    google_maps: bool = False
+    weather: bool = False
+    maps: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_google_maps(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        if "google_maps" in data:
+            if "maps" not in data:
+                data["maps"] = data["google_maps"]
+            data.pop("google_maps", None)
+        return data
 
 
 class AgentConfig(BaseModel):

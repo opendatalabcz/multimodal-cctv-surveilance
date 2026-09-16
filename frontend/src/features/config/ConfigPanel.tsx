@@ -94,12 +94,22 @@ export function ConfigPanel({
             <FormControlLabel
               control={
                 <Switch
-                  checked={config.tools.google_maps}
-                  onChange={(_, checked) => onToggleTool('google_maps', checked)}
+                  checked={config.tools.weather}
+                  onChange={(_, checked) => onToggleTool('weather', checked)}
                   disabled={isSaving}
                 />
               }
-              label="Google Maps"
+              label="Weather"
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={config.tools.maps}
+                  onChange={(_, checked) => onToggleTool('maps', checked)}
+                  disabled={isSaving}
+                />
+              }
+              label="Map access"
             />
           </>
         )}

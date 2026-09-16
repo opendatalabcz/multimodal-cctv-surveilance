@@ -16,4 +16,5 @@ cameras:
     source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/202020/image
 tools:
   internet: false
-  google_maps: false
+  weather: false
+  maps: false

@@ -19,6 +19,18 @@ def encode_image_to_base64(image_path: str | Path) -> str:
         return base64.b64encode(image_file.read()).decode("utf-8")
 
 
+def _raise_for_azure_status(response: requests.Response) -> None:
+    if response.ok:
+        return
+    detail = (response.text or "").strip().replace("\n", " ")[:1500]
+    if detail:
+        raise requests.HTTPError(
+            f"{response.status_code} {response.reason} for url: {response.url}: {detail}",
+            response=response,
+        )
+    response.raise_for_status()
+
+
 def _parse_json_payload(analysis_text: str) -> dict:
     json_start = analysis_text.find("{")
     json_end = analysis_text.rfind("}") + 1
@@ -87,7 +99,7 @@ def analyze_images(
         names = [Path(path).name for path in image_paths]
         print(f"Analyzing {len(image_paths)} image(s): {', '.join(names)}")
         response = requests.post(config.api_url, headers=headers, json=payload, timeout=90)
-        response.raise_for_status()
+        _raise_for_azure_status(response)
         result = response.json()
         analysis_text = result["choices"][0]["message"]["content"]
         if parse_json:
@@ -173,7 +185,7 @@ def _post_chat_completion(
         "api-key": config.api_key,
     }
     response = requests.post(config.api_url, headers=headers, json=payload, timeout=timeout)
-    response.raise_for_status()
+    _raise_for_azure_status(response)
     return response.json()
 
 
@@ -186,6 +198,20 @@ def _vision_image_part(image_path: str | Path) -> dict[str, Any]:
             "detail": "high",
         },
     }
+
+
+def _fetched_images_message(image_paths: list[str]) -> dict[str, Any]:
+    content: list[dict[str, Any]] = [
+        {
+            "type": "text",
+            "text": (
+                "Here are the fetched frames for analysis, in tool-call order: "
+                + ", ".join(Path(path).name for path in image_paths)
+            ),
+        }
+    ]
+    content.extend(_vision_image_part(path) for path in image_paths)
+    return {"role": "user", "content": content}
 
 
 def _finalize_tool_chat_result(
@@ -279,6 +305,7 @@ def chat_with_tools(
                 )
 
             conversation.append(message)
+            round_images: list[str] = []
             for tool_call in tool_calls:
                 fn = tool_call.get("function") or {}
                 name = fn.get("name") or ""
@@ -300,18 +327,12 @@ def chat_with_tools(
                 image_path = exec_result.get("image_path")
                 if image_path:
                     fetched_images.append(image_path)
-                    conversation.append(
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": "Here is the fetched image for analysis.",
-                                },
-                                _vision_image_part(image_path),
-                            ],
-                        }
-                    )
+                    round_images.append(image_path)
+
+            # Azure rejects the request unless every tool_call_id is answered by an
+            # uninterrupted run of tool messages, so images follow the whole batch.
+            if round_images:
+                conversation.append(_fetched_images_message(round_images))
 
             tool_rounds += 1
 

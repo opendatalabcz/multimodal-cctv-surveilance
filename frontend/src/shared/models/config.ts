@@ -8,7 +8,8 @@ export interface Camera {
 
 export interface ToolsConfig {
   internet: boolean
-  google_maps: boolean
+  weather: boolean
+  maps: boolean
 }
 
 export interface AppConfig {

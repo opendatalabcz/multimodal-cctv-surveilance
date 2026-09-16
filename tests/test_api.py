@@ -46,7 +46,7 @@ def test_get_and_put_config(client, tmp_path, monkeypatch) -> None:
                 "source": "101200",
             }
         ],
-        "tools": {"internet": False, "google_maps": True},
+        "tools": {"internet": False, "weather": False, "maps": True},
     }
 
     put_response = client.put("/api/config", json=payload)
