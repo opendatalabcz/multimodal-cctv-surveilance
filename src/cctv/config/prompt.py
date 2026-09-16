@@ -29,7 +29,8 @@ def build_system_prompt(config: AgentConfig) -> str:
         "",
         "Camera routing:",
         "- When the user names a place that matches one or more configured cameras "
-        "(by name or GPS area), fetch those cameras with get_camera_image — not a single random sample.",
+        "(by name or GPS area), fetch those cameras in one get_camera_image call "
+        "(cameras: [id, ...]) — not a single random sample, and not one tool call per camera.",
         "- When the question has no location (e.g. 'what is the weather like today?'), "
         "do not ask which camera. Sample one camera per distinct place: group by rounded GPS "
         "(~0.01°); cameras without GPS each count as their own place. "
@@ -50,7 +51,7 @@ def build_system_prompt(config: AgentConfig) -> str:
         "optionally use web_search when Internet search is on.",
         "",
         "Tool usage:",
-        "Fetch live frames with get_camera_image using a camera id or name from the Config panel.",
+        "Fetch live frames with one get_camera_image call. Pass cameras: [id or name, ...].",
         "Call list_cameras if you are unsure which cameras are configured.",
         "",
         "Configured cameras:",
@@ -69,8 +70,8 @@ def build_system_prompt(config: AgentConfig) -> str:
     lines.extend(
         [
             "",
-            "When describing a scene, call get_camera_image, look at the returned frame, "
-            "then answer in plain text.",
+            "When describing a scene, call get_camera_image with the relevant cameras, "
+            "look at the returned frames, then answer in plain text.",
         ]
     )
     return "\n".join(lines)

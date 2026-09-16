@@ -200,6 +200,14 @@ def _vision_image_part(image_path: str | Path) -> dict[str, Any]:
     }
 
 
+def _image_paths_from_tool(exec_result: dict[str, Any]) -> list[str]:
+    paths = exec_result.get("image_paths")
+    if isinstance(paths, list):
+        return [str(path) for path in paths if path]
+    path = exec_result.get("image_path")
+    return [str(path)] if path else []
+
+
 def _fetched_images_message(image_paths: list[str]) -> dict[str, Any]:
     content: list[dict[str, Any]] = [
         {
@@ -263,9 +271,10 @@ def chat_with_tools(
 
     Default tools are ``list_cameras`` and ``get_camera_image``. ``messages``
     uses the Azure chat format (roles such as user/assistant/tool). When a
-    tool returns ``image_path``, the JPEG is injected in a follow-up user
-    message so the VLM can see the frame. On success, ``messages`` in the
-    result is the full history including the final assistant reply.
+    tool returns ``image_path`` / ``image_paths``, the JPEGs are injected in a
+    follow-up user message so the VLM can see the frames. On success,
+    ``messages`` in the result is the full history including the final
+    assistant reply.
     """
     config = config or load_azure_openai_config()
     if not config.is_configured or not config.api_url:
@@ -324,8 +333,7 @@ def chat_with_tools(
                     }
                 )
 
-                image_path = exec_result.get("image_path")
-                if image_path:
+                for image_path in _image_paths_from_tool(exec_result):
                     fetched_images.append(image_path)
                     round_images.append(image_path)
 

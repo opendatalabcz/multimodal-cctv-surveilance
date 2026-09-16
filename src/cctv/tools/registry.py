@@ -70,5 +70,6 @@ def execute_tool(name: str, arguments: dict[str, Any] | None = None) -> dict[str
         return {
             "tool_content": json.dumps({"success": False, "error": f"Unknown tool: {name}"}),
             "image_path": None,
+            "image_paths": [],
         }
     return registered.execute(args)

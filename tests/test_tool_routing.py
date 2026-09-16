@@ -62,6 +62,7 @@ def test_tool_schemas_reflect_toggle_combination() -> None:
 def test_prompt_camera_first_and_forecast_qualification() -> None:
     prompt = build_system_prompt(AgentConfig(tools=ToolsConfig(weather=True, internet=True)))
     assert "one camera per distinct place" in prompt
+    assert "one get_camera_image call" in prompt
     assert "soft cap of about 10 images" in prompt
     assert "Clearly label measured/forecast data" in prompt
     assert "Do not use web_search as a weather API" in prompt

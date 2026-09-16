@@ -57,7 +57,7 @@ If a place is missing, the agent should tell the user to add it in the Config pa
 
 The system prompt (`src/cctv/config/prompt.py`) instructs the model to:
 
-- Fetch **all configured cameras** that match a named place (by name or GPS area), not a single random sample.
+- Fetch **all configured cameras** that match a named place (by name or GPS area) in **one** `get_camera_image` call (`cameras: [...]`), not a single random sample and not one tool call per camera.
 - For questions with **no location**, sample **one camera per distinct place** (group by rounded GPS; missing GPS counts as its own place).
 - Prefer a **soft cap of ~10 images** per turn; allow more when a place-wide question needs it.
 - Describe **visible** conditions from camera frames first.
@@ -74,7 +74,7 @@ Tools exposed to Azure depend on the current toggles (`cctv.tools.tool_schemas_f
 | Name | When enabled | Effect |
 | --- | --- | --- |
 | `list_cameras` | always | JSON list of id, name, GPS, source, source_type from YAML |
-| `get_camera_image` | always | Resolves YAML `source`, calls fetch `get_image`, returns metadata + JPEG path |
+| `get_camera_image` | always | Resolves YAML `source` for one or more cameras, fetches stills (in parallel), returns metadata + JPEG paths |
 | `web_search` | `internet` | Up to 5 DuckDuckGo text results (title, URL, snippet) via `ddgs` |
 | `get_weather` | `weather` | Open-Meteo current conditions + 3-day forecast (coordinates or place name) |
 | `search_map` | `maps` | Nominatim place search (≤5 results) |
@@ -96,17 +96,17 @@ These are free public services without uptime guarantees:
 
 External failures return a tool result (not a chat crash) so the model can explain that the source was unavailable.
 
-After `get_camera_image` succeeds, `chat_with_tools` appends a user message containing the JPEG so the VLM can see the frame. FastAPI copies those paths to `imageUrls` like `/api/images/...` for the chat UI. Do not put large base64 blobs in the transcript JSON.
+After `get_camera_image` succeeds, `chat_with_tools` appends a user message containing the JPEG(s) so the VLM can see the frames. FastAPI copies those paths to `imageUrls` like `/api/images/...` for the chat UI. Do not put large base64 blobs in the transcript JSON. The tool accepts `cameras: [id or name, ...]` (and `camera` for a single name). There is a preferred cap of about 10 images and a hard cap of 16.
 
 ## How to add a tool
 
-1. Add `YOUR_TOOL` schema and `execute_your_tool(arguments) -> { "tool_content": str, "image_path": str | None }` in `src/cctv/tools/`.
+1. Add `YOUR_TOOL` schema and `execute_your_tool(arguments) -> { "tool_content": str, "image_path": str | None, "image_paths"?: list[str] }` in `src/cctv/tools/`.
 2. `register_tool(YOUR_TOOL, execute_your_tool)` in `src/cctv/tools/__init__.py`.
 3. Wire the name into `tool_names_for_config` in `registry.py` if it is toggle-gated, or `_BASE_NAMES` if always on.
 4. Mention it in `build_system_prompt` if the model needs extra policy.
 5. Add a unit test that calls `execute_tool("your_tool", ...)` with HTTP mocked.
 
-The chat loop already dispatches by name and injects any `image_path`.
+The chat loop already dispatches by name and injects any `image_path` / `image_paths`.
 
 ## HTTP API (chat)
 

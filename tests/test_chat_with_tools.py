@@ -148,3 +148,79 @@ def test_parallel_tool_calls_answer_every_id_before_images() -> None:
     image_parts = [part for part in sent[-1]["content"] if part["type"] == "image_url"]
     assert len(image_parts) == 2
     assert result["image_count"] == 2
+
+
+def test_batch_camera_tool_injects_all_image_paths() -> None:
+    responses = [
+        {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_batch",
+                                "type": "function",
+                                "function": {
+                                    "name": "get_camera_image",
+                                    "arguments": '{"cameras": ["cam_a", "cam_b"]}',
+                                },
+                            }
+                        ],
+                    }
+                }
+            ],
+            "usage": {},
+        },
+        {
+            "choices": [{"message": {"role": "assistant", "content": "Both look clear."}}],
+            "usage": {},
+        },
+    ]
+    posted_payloads: list[dict] = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        posted_payloads.append(json)
+        response = MagicMock()
+        response.json.return_value = responses[len(posted_payloads) - 1]
+        return response
+
+    def fake_execute(name, arguments):
+        cameras = arguments["cameras"]
+        return {
+            "tool_content": '{"success": true}',
+            "image_path": f"/tmp/{cameras[0]}.jpg",
+            "image_paths": [f"/tmp/{camera}.jpg" for camera in cameras],
+        }
+
+    def fake_image_part(path):
+        return {"type": "image_url", "image_url": {"url": str(path)}}
+
+    with (
+        patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post),
+        patch("cctv.analysis.azure_vision.execute_tool", side_effect=fake_execute),
+        patch("cctv.analysis.azure_vision._vision_image_part", side_effect=fake_image_part),
+    ):
+        result = chat_with_tools(
+            [{"role": "user", "content": "Compare both cameras."}],
+            config=_fake_config(),
+            system_prompt="You are a CCTV assistant.",
+            parse_json=False,
+        )
+
+    assert result["success"] is True
+    sent = posted_payloads[1]["messages"]
+    assert [message["role"] for message in sent] == [
+        "system",
+        "user",
+        "assistant",
+        "tool",
+        "user",
+    ]
+    image_parts = [part for part in sent[-1]["content"] if part["type"] == "image_url"]
+    assert [part["image_url"]["url"] for part in image_parts] == [
+        "/tmp/cam_a.jpg",
+        "/tmp/cam_b.jpg",
+    ]
+    assert result["image_count"] == 2
