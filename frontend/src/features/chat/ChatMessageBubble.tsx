@@ -2,6 +2,7 @@ import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
 import type { Message } from '../../shared/models/conversation'
+import { AssistantMarkdown } from './AssistantMarkdown'
 
 interface ChatMessageBubbleProps {
   message: Message
@@ -29,9 +30,13 @@ export function ChatMessageBubble({ message }: ChatMessageBubbleProps) {
           borderRadius: 2,
         }}
       >
-        <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
-          {message.content}
-        </Typography>
+        {isUser ? (
+          <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+            {message.content}
+          </Typography>
+        ) : (
+          <AssistantMarkdown content={message.content} />
+        )}
         {message.imageUrls && message.imageUrls.length > 0 && (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1.5 }}>
             {message.imageUrls.map((url) => (
