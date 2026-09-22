@@ -1,0 +1,32 @@
+---
+description: Python FastAPI, tools, fetch, and tests for the CCTV agent
+globs: src/**/*.py,tests/**/*.py
+alwaysApply: false
+---
+
+# Python API
+
+Layout under `src/cctv/`: `api` (HTTP), `tools` (schemas + executors), `fetch` (stills), `analysis` (`chat_with_tools`), `config` (YAML catalog + overlay).
+
+## Tools
+
+Default model tools are `list_cameras` and `get_camera_image`. Optional tools follow config flags (`internet` → `web_search`, `weather` → `get_weather`, `maps` → `search_map` / `reverse_geocode`).
+
+`get_image` is fetch implementation and stays registered for tests. Do not add it to `_BASE_NAMES`:
+
+```python
+# BAD — model would call low-level fetch
+_BASE_NAMES = ("list_cameras", "get_camera_image", "get_image")
+
+# GOOD
+_BASE_NAMES = ("list_cameras", "get_camera_image")
+```
+
+New tools: schema + executor in `src/cctv/tools/`, register in `__init__.py`, add tests under `tests/`.
+
+## Frames and config
+
+- Persist JPEGs on disk; serve via path-safe `GET /api/images/...`. Do not put large base64 blobs in JSON transcripts.
+- `GET/PUT /api/config` merges committed `configs/agent.yaml` with gitignored `configs/agent.local.yaml`. Never commit the overlay.
+
+Runtime details: [`docs/AGENT.md`](docs/AGENT.md).

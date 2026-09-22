@@ -1,0 +1,24 @@
+---
+description: React chat UI and config panel conventions
+globs: frontend/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Frontend
+
+Folders: `pages/`, `features/chat`, `features/config`, `shared/api`, `shared/models`. Do not put React under `src/cctv/`.
+
+## Server as source of truth
+
+Config and conversation state live in FastAPI. After `GET/PUT /api/config` or `POST /api/conversations/{id}/messages`, adopt the returned state. Do not keep a second client-side catalog.
+
+- Config writes only the overlay (`configs/agent.local.yaml` on the server).
+- Assistant turns may include `imageUrls` for cited frames. Load images from `/api/images/...`, not base64 in JSON.
+
+## Security and UX (v1)
+
+- No Azure keys or other secrets in the frontend; model calls go through FastAPI.
+- One page: chat column left, config panel right.
+- Roles: `user` | `assistant`. No streaming; a loading/thinking state is enough.
+
+When you change UI behavior or layout, verify the flow in the browser if tools are available.
