@@ -5,22 +5,13 @@ description = "Multimodal CCTV surveillance analysis from public camera feeds"
 requires-python = ">=3.11,<3.13"
 license = { text = "Apache-2.0" }
 dependencies = [
-    "accelerate",
     "aiohttp",
-    "bitsandbytes",
     "fastapi",
-    "huggingface-hub",
-    "matplotlib",
-    "open-clip-torch",
-    "pandas",
     "pillow",
     "ddgs",
     "python-dotenv",
     "pyyaml>=6.0.3",
     "requests",
-    "torch",
-    "torchvision",
-    "transformers",
     "uvicorn[standard]",
     "yt-dlp",
     "imageio-ffmpeg",
@@ -31,8 +22,7 @@ cctv-api = "cctv.api.cli:main"
 
 [dependency-groups]
 dev = [
-    "ipykernel",
-    "jupyter",
+    "httpx",
     "pytest",
 ]
 

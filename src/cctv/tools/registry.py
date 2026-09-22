@@ -1,8 +1,8 @@
 """OpenAI function-calling tool registry.
 
 Schemas are what Azure sees. ``execute_tool`` is what the chat loop runs.
-Low-level ``get_image`` stays registered for tests and notebooks; the default
-model-facing set is ``list_cameras`` + ``get_camera_image``.
+Low-level ``get_image`` stays registered for tests; the default model-facing
+set is ``list_cameras`` + ``get_camera_image``.
 """
 
 from __future__ import annotations

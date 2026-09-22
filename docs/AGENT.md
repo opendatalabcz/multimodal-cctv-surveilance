@@ -172,7 +172,7 @@ Tools exposed to Azure depend on the current toggles (`cctv.tools.tool_schemas_f
 
 All executors are registered in `src/cctv/tools/__init__.py`. Only enabled schemas are sent to Azure; absence from the schema list is the capability gate.
 
-Low-level `get_image(source)` remains as **implementation** (and is registered for notebooks/tests). It is not in the default model tool list.
+Low-level `get_image(source)` remains as **implementation** (and is registered for tests). It is not in the default model tool list.
 
 ### External service limits (demo / research grade)
 

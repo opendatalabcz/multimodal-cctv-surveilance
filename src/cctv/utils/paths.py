@@ -26,7 +26,7 @@ def project_root() -> Path:
             return directory
     raise FileNotFoundError(
         f"No {PROJECT_MARKER} above {module_path}. Install the package from a "
-        f"source checkout, or set CCTV_DATA_DIR to choose where data lives."
+        "source checkout, or set CCTV_DATA_DIR to choose where data lives."
     )
 
 
@@ -45,13 +45,3 @@ def images_dir() -> Path:
 
 def place_data_dir(place_id: str) -> Path:
     return images_dir() / place_id
-
-
-def logs_dir() -> Path:
-    return data_root() / "logs"
-
-
-def experiments_dir(place_id: str | None = None) -> Path:
-    """JSON analysis outputs: ``experiments/`` or ``experiments/<place>/``."""
-    root = data_root() / "experiments"
-    return root / place_id if place_id else root

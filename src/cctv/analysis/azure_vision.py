@@ -17,7 +17,7 @@ from cctv.analysis.citations import (
 )
 from cctv.tools.registry import default_tool_schemas, execute_tool
 from cctv.utils.azure import AzureOpenAIConfig, load_azure_openai_config
-from cctv.utils.paths import data_root, experiments_dir
+from cctv.utils.paths import data_root
 
 
 def encode_image_to_base64(image_path: str | Path) -> str:
@@ -129,34 +129,6 @@ def analyze_images(
         return {"success": False, "error": f"Azure API request failed: {exc}"}
     except Exception as exc:
         return {"success": False, "error": f"Unexpected error: {exc}"}
-
-
-def save_experiment(result: dict, place_id: str, kind: str = "run") -> Path:
-    """Write a normalized analysis result to ``experiments/<place>/<kind>_<timestamp>.json``."""
-    folder = experiments_dir(place_id)
-    folder.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
-    path = folder / f"{kind}_{stamp}.json"
-
-    image_paths = result.get("image_paths")
-    if image_paths:
-        image_paths = [_relative_to_data_root(p) for p in image_paths]
-
-    payload = {
-        "place_id": place_id,
-        "kind": kind,
-        "success": result.get("success", "error" not in result),
-        "timestamp": result.get("timestamp") or datetime.now().isoformat(),
-        "model": result.get("model"),
-        "usage": result.get("usage", {}),
-        "image_paths": image_paths or [],
-        "image_count": result.get("image_count", len(image_paths or [])),
-        "analysis": result.get("analysis"),
-        "raw_response": result.get("raw_response"),
-        "error": result.get("error"),
-    }
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
-    return path
 
 
 def _chat_completion_payload(
@@ -384,27 +356,4 @@ def analyze_with_tools(
         request_timeout=request_timeout,
     )
     result.pop("messages", None)
-    return result
-
-
-def analyze_camera_image(
-    image_path: str | Path,
-    prompt: str,
-    config: AzureOpenAIConfig | None = None,
-    *,
-    parse_json: bool = True,
-    max_tokens: int = 1000,
-    temperature: float | None = None,
-) -> dict:
-    """Analyze a single image. ``prompt`` is required (use ``load_place_prompt``)."""
-    result = analyze_images(
-        [image_path],
-        prompt,
-        config=config,
-        parse_json=parse_json,
-        max_tokens=max_tokens,
-        temperature=temperature,
-    )
-    if "image_paths" in result:
-        result["image_path"] = result["image_paths"][0]
     return result
