@@ -2,7 +2,7 @@
 
 Everything is anchored to the project root, i.e. the nearest directory above
 this file that holds ``pyproject.toml``. Set ``CCTV_DATA_DIR`` to keep captured
-frames and logs somewhere else, such as an external drive.
+frames somewhere else, such as an external drive.
 """
 
 from __future__ import annotations

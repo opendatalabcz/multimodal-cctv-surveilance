@@ -34,8 +34,6 @@ build-backend = "hatchling.build"
 packages = ["src/cctv"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"src/cctv/prompts/template.md" = "cctv/prompts/template.md"
-"src/cctv/prompts/fillers" = "cctv/prompts/fillers"
 "src/cctv/fetch/monitor_config.json" = "cctv/fetch/monitor_config.json"
 
 [tool.uv]

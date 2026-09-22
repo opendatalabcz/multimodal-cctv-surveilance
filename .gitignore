@@ -179,49 +179,10 @@ ehthumbs_vista.db
 Desktop.ini
 $RECYCLE.BIN/
 
-# Linux
-*~
-
 # Temporary files
 *.swp
 *.swo
-*~
 
-# Project specific
-# Add any project-specific files or directories you want to ignore
-# For example:
-# config/secrets.json
-# data/raw/
-# models/trained/
-
-# LaTeX auxiliary files
-*.aux
-*.bbl
-*.bcf
-*.blg
-*.fdb_latexmk
-*.fls
-*.log
-*.lof
-*.lol
-*.lot
-*.out
-*.run.xml
-*.synctex.gz
-*.toc
-*.xmpdata
-*.xmpi
-*.nav
-*.snm
-*.vrb
-*.gz
-*.fls
-*.figlist
-*.makefile
-*.xdv
-
-# Optional: Uncomment if you don't want PDFs in git
-# *.pdf
 camera_images/
 
 # Frontend (Vite)
