@@ -26,14 +26,21 @@ def test_camera_analysis_rejects_unknown_tag() -> None:
         )
 
 
-def test_analyze_camera_metadata_persists_validated_result() -> None:
+def test_analyze_camera_metadata_persists_validated_result(tmp_path, monkeypatch) -> None:
+    frame = tmp_path / "captured.jpg"
+    frame.write_bytes(b"jpeg-bytes")
+    monkeypatch.setattr("cctv.analysis.camera_metadata.data_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        "cctv.analysis.camera_metadata.images_dir",
+        lambda: tmp_path / "camera_images",
+    )
     config = AgentConfig(cameras=[_camera()])
     saved: list[AgentConfig] = []
     with (
         patch("cctv.analysis.camera_metadata.load_agent_config", return_value=config),
         patch(
             "cctv.analysis.camera_metadata.execute_get_image",
-            return_value={"image_path": "/tmp/frame.jpg", "tool_content": '{"success": true}'},
+            return_value={"image_path": str(frame), "tool_content": '{"success": true}'},
         ),
         patch(
             "cctv.analysis.camera_metadata.analyze_images",
@@ -52,6 +59,9 @@ def test_analyze_camera_metadata_persists_validated_result() -> None:
     assert updated.analysis is not None
     assert updated.analysis.scene_tags == ["road", "intersection"]
     assert updated.analysis.source_fingerprint == source_fingerprint("101200")
+    assert updated.analysis.preview_path == "camera_images/previews/road_cam.jpg"
+    copied = tmp_path / "camera_images" / "previews" / "road_cam.jpg"
+    assert copied.read_bytes() == b"jpeg-bytes"
     assert saved[0].cameras[0].analysis == updated.analysis
 
 

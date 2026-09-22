@@ -46,6 +46,7 @@ export function ChatPage() {
     analysisStates,
     analyzeCameras,
     analyzeMissingCameras,
+    analyzeAllCameras,
   } = useConfig()
 
   const {
@@ -184,7 +185,7 @@ export function ChatPage() {
               onSend={sendMessage}
             />
           </Box>
-          <Box sx={{ width: 380, flexShrink: 0 }}>
+          <Box sx={{ width: 420, flexShrink: 0 }}>
             <ConfigPanel
               config={config}
               isLoading={configLoading}
@@ -208,6 +209,7 @@ export function ChatPage() {
               analysisStates={analysisStates}
               onAnalyzeCamera={(cameraId) => void analyzeCameras([cameraId])}
               onAnalyzeMissing={() => void analyzeMissingCameras()}
+              onAnalyzeAll={() => void analyzeAllCameras()}
             />
           </Box>
         </Box>

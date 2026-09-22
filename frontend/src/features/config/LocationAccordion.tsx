@@ -38,6 +38,7 @@ interface LocationAccordionProps {
   onRemoveCamera: (cameraId: string) => void
   analysisStates: Record<string, CameraAnalysisState>
   onAnalyzeCamera: (cameraId: string) => void
+  onPreviewCamera: (camera: Camera) => void
 }
 
 function parseOptionalNumber(value: string): number | null {
@@ -66,6 +67,7 @@ export function LocationAccordion({
   onRemoveCamera,
   analysisStates,
   onAnalyzeCamera,
+  onPreviewCamera,
 }: LocationAccordionProps) {
   const locationCameras = camerasInLocation(location.id, cameras)
   const activeCount = countEffectiveCamerasInLocation(sector, location, cameras)
@@ -197,6 +199,7 @@ export function LocationAccordion({
             onRemove={() => onRemoveCamera(camera.id)}
             analysisState={analysisStates[camera.id]}
             onAnalyze={() => onAnalyzeCamera(camera.id)}
+            onPreview={() => onPreviewCamera(camera)}
           />
         ))}
         <Button variant="outlined" fullWidth onClick={onAddCamera} sx={{ mt: 1 }}>

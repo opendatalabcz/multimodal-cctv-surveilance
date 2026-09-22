@@ -1,13 +1,21 @@
+import Accordion from '@mui/material/Accordion'
+import AccordionDetails from '@mui/material/AccordionDetails'
+import AccordionSummary from '@mui/material/AccordionSummary'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
+import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
+import DialogContentText from '@mui/material/DialogContentText'
+import DialogTitle from '@mui/material/DialogTitle'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Switch from '@mui/material/Switch'
 import Typography from '@mui/material/Typography'
 import { useState } from 'react'
 import type { AppConfig, Camera, Location, Sector } from '../../shared/models/config'
-import { UNASSIGNED_SECTOR_ID, locationsInSector } from '../../shared/models/config'
+import { UNASSIGNED_SECTOR_ID, imageUrlForPath, locationsInSector } from '../../shared/models/config'
 import { SectorAccordion } from './SectorAccordion'
 import type { CameraAnalysisState } from './useConfig'
 
@@ -34,6 +42,7 @@ interface ConfigPanelProps {
   analysisStates: Record<string, CameraAnalysisState>
   onAnalyzeCamera: (cameraId: string) => void
   onAnalyzeMissing: () => void
+  onAnalyzeAll: () => void
 }
 
 export function ConfigPanel({
@@ -59,9 +68,12 @@ export function ConfigPanel({
   analysisStates,
   onAnalyzeCamera,
   onAnalyzeMissing,
+  onAnalyzeAll,
 }: ConfigPanelProps) {
   const [expandedSectors, setExpandedSectors] = useState<Record<string, boolean>>({})
   const [expandedLocations, setExpandedLocations] = useState<Record<string, boolean>>({})
+  const [previewCamera, setPreviewCamera] = useState<Camera | null>(null)
+  const [confirmAnalyzeAll, setConfirmAnalyzeAll] = useState(false)
 
   const canSave =
     config !== null &&
@@ -71,8 +83,19 @@ export function ConfigPanel({
   const isAnalyzing = Object.values(analysisStates).some(
     (state) => state.status === 'queued' || state.status === 'analyzing',
   )
+  const analyzableCount =
+    config?.cameras.filter((camera) => camera.source.trim()).length ?? 0
+  const canAnalyzeMissing =
+    config !== null &&
+    !isSaving &&
+    !isAnalyzing &&
+    config.cameras.some((camera) => !camera.analysis && camera.source.trim())
+  const canAnalyzeAll = config !== null && !isSaving && !isAnalyzing && analyzableCount > 0
 
   const isSectorExpanded = (sectorId: string) => expandedSectors[sectorId] ?? true
+  const previewUrl = previewCamera?.analysis?.preview_path
+    ? imageUrlForPath(previewCamera.analysis.preview_path)
+    : null
 
   return (
     <Box
@@ -141,58 +164,78 @@ export function ConfigPanel({
                   onRemoveCamera={onRemoveCamera}
                   analysisStates={analysisStates}
                   onAnalyzeCamera={onAnalyzeCamera}
+                  onPreviewCamera={setPreviewCamera}
                 />
               ))}
-            <Button variant="outlined" fullWidth onClick={onAddSector} sx={{ mb: 3 }}>
+            <Button variant="outlined" fullWidth onClick={onAddSector} sx={{ mb: 1 }}>
               Add sector
             </Button>
-            <Button
-              variant="outlined"
-              fullWidth
-              onClick={onAnalyzeMissing}
-              disabled={
-                isSaving ||
-                isAnalyzing ||
-                config.cameras.every((camera) => camera.analysis || !camera.source.trim())
-              }
-              sx={{ mb: 3 }}
-            >
-              Analyze missing camera metadata
-            </Button>
+            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+              <Button
+                size="small"
+                variant="outlined"
+                fullWidth
+                onClick={onAnalyzeMissing}
+                disabled={!canAnalyzeMissing}
+              >
+                Analyze missing
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                fullWidth
+                onClick={() => setConfirmAnalyzeAll(true)}
+                disabled={!canAnalyzeAll}
+              >
+                Re-analyze all
+              </Button>
+            </Box>
 
-            <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              Tools
-            </Typography>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={config.tools.internet}
-                  onChange={(_, checked) => onToggleTool('internet', checked)}
-                  disabled={isSaving}
+            <Accordion
+              defaultExpanded={false}
+              disableGutters
+              sx={{
+                border: 1,
+                borderColor: 'divider',
+                '&::before': { display: 'none' },
+              }}
+            >
+              <AccordionSummary expandIcon={<span aria-hidden>▾</span>}>
+                <Typography variant="subtitle2">Tools</Typography>
+              </AccordionSummary>
+              <AccordionDetails sx={{ pt: 0 }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={config.tools.internet}
+                      onChange={(_, checked) => onToggleTool('internet', checked)}
+                      disabled={isSaving}
+                    />
+                  }
+                  label="Internet search"
                 />
-              }
-              label="Internet search"
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={config.tools.weather}
-                  onChange={(_, checked) => onToggleTool('weather', checked)}
-                  disabled={isSaving}
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={config.tools.weather}
+                      onChange={(_, checked) => onToggleTool('weather', checked)}
+                      disabled={isSaving}
+                    />
+                  }
+                  label="Weather"
                 />
-              }
-              label="Weather"
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={config.tools.maps}
-                  onChange={(_, checked) => onToggleTool('maps', checked)}
-                  disabled={isSaving}
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={config.tools.maps}
+                      onChange={(_, checked) => onToggleTool('maps', checked)}
+                      disabled={isSaving}
+                    />
+                  }
+                  label="Map access"
                 />
-              }
-              label="Map access"
-            />
+              </AccordionDetails>
+            </Accordion>
           </>
         )}
       </Box>
@@ -207,6 +250,56 @@ export function ConfigPanel({
           {isSaving ? 'Saving…' : 'Save configuration'}
         </Button>
       </Box>
+
+      <Dialog
+        open={confirmAnalyzeAll}
+        onClose={() => setConfirmAnalyzeAll(false)}
+      >
+        <DialogTitle>Re-analyze all cameras?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This fetches a fresh frame and re-runs vision for {analyzableCount}{' '}
+            {analyzableCount === 1 ? 'camera' : 'cameras'} with a source, including ones
+            that already have metadata. It can take a while and uses Azure credits.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmAnalyzeAll(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              setConfirmAnalyzeAll(false)
+              onAnalyzeAll()
+            }}
+          >
+            Re-analyze all
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={previewCamera !== null && previewUrl !== null}
+        onClose={() => setPreviewCamera(null)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>{previewCamera?.name.trim() || 'Camera'}</DialogTitle>
+        <DialogContent>
+          {previewUrl && (
+            <Box
+              component="img"
+              src={previewUrl}
+              alt={previewCamera?.name.trim() || 'Camera preview'}
+              sx={{ width: '100%', borderRadius: 1, display: 'block' }}
+            />
+          )}
+          {previewCamera?.analysis?.description && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+              {previewCamera.analysis.description}
+            </Typography>
+          )}
+        </DialogContent>
+      </Dialog>
     </Box>
   )
 }

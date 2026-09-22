@@ -35,6 +35,12 @@ export interface CameraAnalysis {
   scene_tags: SceneTag[]
   source_fingerprint: string
   analyzed_at: string
+  preview_path?: string | null
+}
+
+export function imageUrlForPath(path: string): string {
+  const encoded = path.split('/').map(encodeURIComponent).join('/')
+  return `/api/images/${encoded}`
 }
 
 export interface Camera {

@@ -27,6 +27,7 @@ class CameraAnalysis(BaseModel):
     scene_tags: list[SceneTag] = Field(default_factory=list, max_length=6)
     source_fingerprint: str
     analyzed_at: datetime
+    preview_path: str | None = None
 
 
 class SectorConfig(BaseModel):

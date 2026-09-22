@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import shutil
 from datetime import datetime
+from pathlib import Path
 from threading import Lock
 from typing import Any
 
@@ -10,6 +12,7 @@ from cctv.config.agent_yaml import load_agent_config, save_agent_config
 from cctv.config.models import CameraAnalysis, CameraConfig, SceneTag
 from cctv.tools.get_image import execute_get_image
 from cctv.utils.azure import AzureOpenAIConfig
+from cctv.utils.paths import data_root, images_dir
 
 SCENE_TAG_VALUES = tuple(SceneTag.__args__)
 _config_write_lock = Lock()
@@ -56,8 +59,6 @@ def analyze_camera_metadata(
     if not result.get("success"):
         raise RuntimeError(str(result.get("error") or "Vision analysis failed"))
 
-    analysis = _validated_analysis(result.get("analysis"), expected_source)
-
     # Reload immediately before writing so unrelated edits made while the model
     # was running are retained. Refuse to attach stale metadata to a changed URL.
     with _config_write_lock:
@@ -71,13 +72,34 @@ def analyze_camera_metadata(
         current = latest.cameras[index]
         if current.source != expected_source:
             raise RuntimeError("Camera source changed during analysis; retry with the new source")
+        analysis = _validated_analysis(
+            result.get("analysis"),
+            expected_source,
+            preview_path=_persist_preview(current.id, image_path),
+        )
         updated = current.model_copy(update={"analysis": analysis})
         latest.cameras[index] = updated
         save_agent_config(latest)
     return updated
 
 
-def _validated_analysis(payload: Any, source: str) -> CameraAnalysis:
+def _preview_filename(camera_id: str) -> str:
+    safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in camera_id.strip())
+    return f"{safe or 'camera'}.jpg"
+
+
+def _persist_preview(camera_id: str, image_path: str) -> str:
+    source = Path(image_path)
+    if not source.is_file():
+        raise RuntimeError("Fetched camera frame is missing on disk")
+    dest_dir = images_dir() / "previews"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / _preview_filename(camera_id)
+    shutil.copy2(source, dest)
+    return dest.resolve().relative_to(data_root().resolve()).as_posix()
+
+
+def _validated_analysis(payload: Any, source: str, preview_path: str | None = None) -> CameraAnalysis:
     if not isinstance(payload, dict):
         raise RuntimeError("Vision model did not return camera metadata JSON")
     description = str(payload.get("description") or "").strip()
@@ -96,6 +118,7 @@ def _validated_analysis(payload: Any, source: str) -> CameraAnalysis:
         scene_tags=tags[:6],
         source_fingerprint=source_fingerprint(source),
         analyzed_at=datetime.now().astimezone(),
+        preview_path=preview_path,
     )
 
 

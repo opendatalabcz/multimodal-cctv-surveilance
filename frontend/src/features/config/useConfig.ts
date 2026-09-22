@@ -31,6 +31,7 @@ interface UseConfigResult {
   analysisStates: Record<string, CameraAnalysisState>
   analyzeCameras: (cameraIds: string[]) => Promise<void>
   analyzeMissingCameras: () => Promise<void>
+  analyzeAllCameras: () => Promise<void>
 }
 
 export interface CameraAnalysisState {
@@ -175,12 +176,22 @@ export function useConfig(): UseConfigResult {
     })
   }, [])
 
+  const analyzableCameraIds = useCallback(() => {
+    return (
+      config?.cameras.filter((camera) => camera.source.trim()).map((camera) => camera.id) ?? []
+    )
+  }, [config])
+
   const analyzeMissingCameras = useCallback(async () => {
     const missing = config?.cameras
       .filter((camera) => camera.source.trim() && !camera.analysis)
       .map((camera) => camera.id)
     await analyzeCameras(missing ?? [])
   }, [analyzeCameras, config])
+
+  const analyzeAllCameras = useCallback(async () => {
+    await analyzeCameras(analyzableCameraIds())
+  }, [analyzeCameras, analyzableCameraIds])
 
   const addCamera = useCallback((sectorId: string, locationId: string) => {
     setConfig((current) => {
@@ -441,5 +452,6 @@ export function useConfig(): UseConfigResult {
     analysisStates,
     analyzeCameras,
     analyzeMissingCameras,
+    analyzeAllCameras,
   }
 }

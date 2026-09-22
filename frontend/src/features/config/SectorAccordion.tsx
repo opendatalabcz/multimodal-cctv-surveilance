@@ -43,6 +43,7 @@ interface SectorAccordionProps {
   onRemoveCamera: (cameraId: string) => void
   analysisStates: Record<string, CameraAnalysisState>
   onAnalyzeCamera: (cameraId: string) => void
+  onPreviewCamera: (camera: Camera) => void
 }
 
 export function SectorAccordion({
@@ -67,6 +68,7 @@ export function SectorAccordion({
   onRemoveCamera,
   analysisStates,
   onAnalyzeCamera,
+  onPreviewCamera,
 }: SectorAccordionProps) {
   const sectorLocations = locationsInSector(sector.id, locations)
   const activeCount = countEffectiveCameras(sector, locations, cameras)
@@ -177,6 +179,7 @@ export function SectorAccordion({
             onRemoveCamera={onRemoveCamera}
             analysisStates={analysisStates}
             onAnalyzeCamera={onAnalyzeCamera}
+            onPreviewCamera={onPreviewCamera}
           />
         ))}
         <Button variant="outlined" fullWidth onClick={onAddLocation} sx={{ mt: 1 }}>
