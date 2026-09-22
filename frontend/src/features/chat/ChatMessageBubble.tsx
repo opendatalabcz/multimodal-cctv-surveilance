@@ -1,6 +1,11 @@
 import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
+import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
+import { useState } from 'react'
 import type { Message } from '../../shared/models/conversation'
 import { AssistantMarkdown } from './AssistantMarkdown'
 
@@ -10,6 +15,7 @@ interface ChatMessageBubbleProps {
 
 export function ChatMessageBubble({ message }: ChatMessageBubbleProps) {
   const isUser = message.role === 'user'
+  const [expandedUrl, setExpandedUrl] = useState<string | null>(null)
 
   return (
     <Box
@@ -42,19 +48,64 @@ export function ChatMessageBubble({ message }: ChatMessageBubbleProps) {
             {message.imageUrls.map((url) => (
               <Box
                 key={url}
-                component="img"
-                src={url}
-                alt="Camera capture"
+                component="button"
+                type="button"
+                onClick={() => setExpandedUrl(url)}
+                aria-label="Expand camera capture"
                 sx={{
-                  maxWidth: '100%',
-                  maxHeight: 240,
+                  p: 0,
+                  border: 0,
+                  bgcolor: 'transparent',
                   borderRadius: 1,
-                  objectFit: 'contain',
+                  overflow: 'hidden',
+                  lineHeight: 0,
+                  cursor: 'zoom-in',
+                  maxWidth: '100%',
                 }}
-              />
+              >
+                <Box
+                  component="img"
+                  src={url}
+                  alt="Camera capture"
+                  sx={{
+                    maxWidth: '100%',
+                    maxHeight: 240,
+                    borderRadius: 1,
+                    objectFit: 'contain',
+                    display: 'block',
+                  }}
+                />
+              </Box>
             ))}
           </Box>
         )}
+
+        <Dialog
+          open={expandedUrl !== null}
+          onClose={() => setExpandedUrl(null)}
+          maxWidth="lg"
+          fullWidth
+        >
+          <DialogContent sx={{ p: 1 }}>
+            {expandedUrl && (
+              <Box
+                component="img"
+                src={expandedUrl}
+                alt="Camera capture"
+                sx={{
+                  width: '100%',
+                  maxHeight: '80vh',
+                  objectFit: 'contain',
+                  borderRadius: 1,
+                  display: 'block',
+                }}
+              />
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setExpandedUrl(null)}>Close</Button>
+          </DialogActions>
+        </Dialog>
       </Paper>
     </Box>
   )
