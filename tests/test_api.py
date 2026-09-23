@@ -95,7 +95,7 @@ def test_analyze_camera_endpoint_reports_fetch_failure(client) -> None:
     assert "Could not fetch" in response.json()["detail"]
 
 
-def test_conversation_message_flow(client) -> None:
+def test_conversation_message_flow(client, tmp_path) -> None:
     create_response = client.post("/api/conversations")
     assert create_response.status_code == 200
     conversation = create_response.json()
@@ -132,6 +132,14 @@ def test_conversation_message_flow(client) -> None:
     get_response = client.get(f"/api/conversations/{conversation_id}")
     assert get_response.status_code == 200
     assert get_response.json() == body
+
+    log_path = tmp_path / "logs" / "chat_turns.jsonl"
+    assert log_path.is_file()
+    entry = json.loads(log_path.read_text(encoding="utf-8").splitlines()[-1])
+    assert entry["conversation_id"] == conversation_id
+    assert entry["success"] is True
+    assert entry["cameras"] == ["camera_images/test/frame.jpg"]
+    assert "duration_ms" in entry
 
 
 def test_serve_image_under_data_root(client, tmp_path) -> None:

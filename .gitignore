@@ -184,6 +184,7 @@ $RECYCLE.BIN/
 *.swo
 
 camera_images/
+logs/
 
 # Frontend (Vite)
 node_modules/

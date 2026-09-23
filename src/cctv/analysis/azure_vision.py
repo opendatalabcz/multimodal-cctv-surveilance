@@ -15,9 +15,12 @@ from cctv.analysis.citations import (
     parse_cited_cameras,
     select_cited_paths,
 )
+from cctv.tools.get_camera import HARD_IMAGE_CAP
 from cctv.tools.registry import default_tool_schemas, execute_tool
 from cctv.utils.azure import AzureOpenAIConfig, load_azure_openai_config
 from cctv.utils.paths import data_root
+
+CCTV_FRAMES_TYPE = "cctv_frames"
 
 
 def encode_image_to_base64(image_path: str | Path) -> str:
@@ -141,7 +144,7 @@ def _chat_completion_payload(
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": config.model,
-        "messages": messages,
+        "messages": materialize_for_azure(messages),
         "max_completion_tokens": max_tokens,
     }
     if temperature is not None:
@@ -178,10 +181,25 @@ def _vision_image_part(image_path: str | Path) -> dict[str, Any]:
     }
 
 
+def _frame_label(frame: FetchedFrame) -> str:
+    return frame.camera_id or Path(frame.path).stem
+
+
+def _frames_payload(frames: list[FetchedFrame]) -> list[dict[str, Any]]:
+    return [
+        {
+            "path": frame.path,
+            "camera_id": frame.camera_id,
+            "camera_name": frame.camera_name,
+        }
+        for frame in frames
+    ]
+
+
 def _fetched_images_message(frames: list[FetchedFrame]) -> dict[str, Any]:
     labels: list[str] = []
     for index, frame in enumerate(frames, start=1):
-        camera_id = frame.camera_id or Path(frame.path).stem
+        camera_id = _frame_label(frame)
         if frame.camera_name:
             labels.append(f"{index}. id={camera_id} name={frame.camera_name}")
         else:
@@ -195,10 +213,148 @@ def _fetched_images_message(frames: list[FetchedFrame]) -> dict[str, Any]:
                 "Do not use sep, ..sep, or any other fence language for citations.\n"
                 + "\n".join(labels)
             ),
-        }
+        },
+        {"type": CCTV_FRAMES_TYPE, "frames": _frames_payload(frames)},
     ]
-    content.extend(_vision_image_part(frame.path) for frame in frames)
     return {"role": "user", "content": content}
+
+
+def _frames_from_part(part: dict[str, Any]) -> list[FetchedFrame]:
+    if part.get("type") != CCTV_FRAMES_TYPE:
+        return []
+    raw = part.get("frames")
+    if not isinstance(raw, list):
+        return []
+    frames: list[FetchedFrame] = []
+    for item in raw:
+        if not isinstance(item, dict) or not item.get("path"):
+            continue
+        camera_id = item.get("camera_id")
+        camera_name = item.get("camera_name")
+        frames.append(
+            FetchedFrame(
+                path=str(item["path"]),
+                camera_id=str(camera_id) if camera_id else None,
+                camera_name=str(camera_name) if camera_name else None,
+            )
+        )
+    return frames
+
+
+def _frames_from_message(message: dict[str, Any]) -> list[FetchedFrame]:
+    content = message.get("content")
+    if not isinstance(content, list):
+        return []
+    frames: list[FetchedFrame] = []
+    for part in content:
+        if isinstance(part, dict):
+            frames.extend(_frames_from_part(part))
+    return frames
+
+
+def _has_visual_payload(message: dict[str, Any]) -> bool:
+    content = message.get("content")
+    if not isinstance(content, list):
+        return False
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") == CCTV_FRAMES_TYPE and _frames_from_part(part):
+            return True
+        if part.get("type") == "image_url":
+            return True
+    return False
+
+
+def _previously_viewed_text(frames: list[FetchedFrame]) -> str:
+    labels = [_frame_label(frame) for frame in frames if _frame_label(frame)]
+    if not labels:
+        return "Previously viewed camera frames (no longer attached)."
+    return "Previously viewed: " + ", ".join(labels)
+
+
+def _stub_user_message(frames: list[FetchedFrame]) -> dict[str, Any]:
+    return {"role": "user", "content": _previously_viewed_text(frames)}
+
+
+def _expand_visual_message(
+    message: dict[str, Any],
+    max_images: int = HARD_IMAGE_CAP,
+) -> dict[str, Any]:
+    content = message.get("content")
+    if not isinstance(content, list):
+        return message
+    text_parts = [
+        part for part in content if isinstance(part, dict) and part.get("type") == "text"
+    ]
+    image_parts = [
+        part for part in content if isinstance(part, dict) and part.get("type") == "image_url"
+    ]
+    frames = _frames_from_message(message)
+    if image_parts and not frames:
+        return {**message, "content": [*text_parts, *image_parts[:max_images]]}
+    expanded = list(text_parts)
+    for frame in frames[:max_images]:
+        try:
+            expanded.append(_vision_image_part(frame.path))
+        except OSError:
+            continue
+    return {**message, "content": expanded}
+
+
+def materialize_for_azure(
+    messages: list[dict[str, Any]],
+    max_images: int = HARD_IMAGE_CAP,
+) -> list[dict[str, Any]]:
+    """Expand only the latest frame-ref (or legacy vision) message for Azure."""
+    visual_indices = [index for index, message in enumerate(messages) if _has_visual_payload(message)]
+    latest = visual_indices[-1] if visual_indices else None
+    materialized: list[dict[str, Any]] = []
+    for index, message in enumerate(messages):
+        if not _has_visual_payload(message):
+            materialized.append(message)
+            continue
+        if index == latest:
+            materialized.append(_expand_visual_message(message, max_images=max_images))
+        else:
+            materialized.append(_stub_user_message(_frames_from_message(message)))
+    return materialized
+
+
+def _compact_frame_refs_for_storage(
+    messages: list[dict[str, Any]],
+    kept_frames: list[FetchedFrame],
+) -> list[dict[str, Any]]:
+    visual_indices = [index for index, message in enumerate(messages) if _has_visual_payload(message)]
+    latest = visual_indices[-1] if visual_indices else None
+    compacted: list[dict[str, Any]] = []
+    for index, message in enumerate(messages):
+        if not _has_visual_payload(message):
+            compacted.append(message)
+            continue
+        frames = _frames_from_message(message)
+        if index == latest and kept_frames:
+            compacted.append(_fetched_images_message(kept_frames))
+        else:
+            compacted.append(_stub_user_message(frames))
+    return compacted
+
+
+def _kept_frames_for_citations(
+    fetched_frames: list[FetchedFrame],
+    display_paths: list[str],
+) -> list[FetchedFrame]:
+    by_path = {str(frame.path): frame for frame in fetched_frames}
+    kept: list[FetchedFrame] = []
+    seen: set[str] = set()
+    for path in display_paths:
+        key = str(path)
+        frame = by_path.get(key)
+        if frame is None or key in seen:
+            continue
+        seen.add(key)
+        kept.append(frame)
+    return kept
 
 
 def _finalize_tool_chat_result(
@@ -222,7 +378,13 @@ def _finalize_tool_chat_result(
             analysis = {"raw_response": display_text}
     else:
         analysis = display_text
-    final_messages = messages + [message]
+    stored = list(messages)
+    if fetched_frames:
+        stored = _compact_frame_refs_for_storage(
+            stored,
+            _kept_frames_for_citations(fetched_frames, display_paths),
+        )
+    final_messages = stored + [message]
     return {
         "success": True,
         "analysis": analysis,
@@ -252,12 +414,15 @@ def chat_with_tools(
     """Run a multi-turn Azure vision chat with function calling.
 
     Default tools are ``list_cameras`` and ``get_camera_image``. ``messages``
-    uses the Azure chat format (roles such as user/assistant/tool). When a
-    tool returns ``image_path`` / ``image_paths``, the JPEGs are injected in a
-    follow-up user message so the VLM can see the frames. ``image_paths`` in
-    the result are the frames cited in the final reply (or all fetched frames
-    if the model omitted the cite block). On success, ``messages`` is the full
-    history including the final assistant reply with the cite fence stripped.
+    uses the Azure chat format (roles such as user/assistant/tool).     When a
+    tool returns ``image_path`` / ``image_paths``, a frame-ref user message is
+    stored (paths, not base64). Each Azure POST expands only the latest
+    frame-ref to vision parts. After the turn, older refs become text stubs
+    and the latest ref is narrowed to cited frames. ``image_paths`` in the
+    result are the frames cited in the final reply (or all fetched frames
+    if the model omitted the cite block). On success, ``messages`` is the
+    compact history including the final assistant reply with the cite fence
+    stripped.
     """
     config = config or load_azure_openai_config()
     if not config.is_configured or not config.api_url:

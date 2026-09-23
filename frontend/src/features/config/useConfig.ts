@@ -11,6 +11,7 @@ interface UseConfigResult {
   config: AppConfig | null
   isLoading: boolean
   isSaving: boolean
+  isDirty: boolean
   error: string | null
   loadConfig: () => Promise<void>
   saveConfig: (next: AppConfig) => Promise<void>
@@ -432,6 +433,10 @@ export function useConfig(): UseConfigResult {
     config,
     isLoading,
     isSaving,
+    isDirty:
+      config !== null &&
+      savedConfig !== null &&
+      JSON.stringify(config) !== JSON.stringify(savedConfig),
     error,
     loadConfig,
     saveConfig,

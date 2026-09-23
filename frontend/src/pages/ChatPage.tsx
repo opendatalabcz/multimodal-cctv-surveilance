@@ -27,6 +27,7 @@ export function ChatPage() {
     config,
     isLoading: configLoading,
     isSaving,
+    isDirty,
     error: configError,
     loadConfig,
     saveConfig,
@@ -54,6 +55,7 @@ export function ChatPage() {
     isSending,
     error: chatError,
     initConversation,
+    startNewConversation,
     sendMessage,
     conversationId,
   } = useChat()
@@ -84,6 +86,18 @@ export function ChatPage() {
       cancelled = true
     }
   }, [loadConfig, initConversation])
+
+  useEffect(() => {
+    if (!isDirty) {
+      return
+    }
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [isDirty])
 
   const handleSaveConfig = useCallback(async () => {
     if (!config) {
@@ -183,6 +197,7 @@ export function ChatPage() {
               error={chatError}
               ready={conversationId !== null && !bootError}
               onSend={sendMessage}
+              onNewChat={() => void startNewConversation()}
             />
           </Box>
           <Box sx={{ width: 420, flexShrink: 0 }}>
@@ -190,6 +205,7 @@ export function ChatPage() {
               config={config}
               isLoading={configLoading}
               isSaving={isSaving}
+              isDirty={isDirty}
               error={configError}
               onSave={handleSaveConfig}
               onToggleTool={handleToggleTool}

@@ -23,6 +23,7 @@ interface ConfigPanelProps {
   config: AppConfig | null
   isLoading: boolean
   isSaving: boolean
+  isDirty?: boolean
   error: string | null
   onSave: () => void
   onToggleTool: (key: keyof AppConfig['tools'], value: boolean) => void
@@ -49,6 +50,7 @@ export function ConfigPanel({
   config,
   isLoading,
   isSaving,
+  isDirty = false,
   error,
   onSave,
   onToggleTool,
@@ -241,13 +243,21 @@ export function ConfigPanel({
       </Box>
 
       <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+        {isDirty && (
+          <Typography variant="caption" color="warning.main" sx={{ display: 'block', mb: 1 }}>
+            {canSave
+              ? 'Name and source edits are not saved until you click Save.'
+              : 'Fill in every sector, location, and camera name and source before saving.'}
+          </Typography>
+        )}
         <Button
           variant="contained"
           fullWidth
-          disabled={!canSave || isSaving || isLoading || isAnalyzing}
+          color={isDirty ? 'warning' : 'primary'}
+          disabled={!canSave || !isDirty || isSaving || isLoading || isAnalyzing}
           onClick={onSave}
         >
-          {isSaving ? 'Saving…' : 'Save configuration'}
+          {isSaving ? 'Saving…' : isDirty ? 'Save unsaved changes' : 'Save configuration'}
         </Button>
       </Box>
 

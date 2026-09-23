@@ -1,5 +1,6 @@
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import { useEffect, useRef } from 'react'
 import { ChatComposer } from './ChatComposer'
@@ -13,6 +14,7 @@ interface ChatPanelProps {
   error: string | null
   ready: boolean
   onSend: (content: string) => void
+  onNewChat?: () => void
 }
 
 export function ChatPanel({
@@ -21,6 +23,7 @@ export function ChatPanel({
   error,
   ready,
   onSend,
+  onNewChat,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -40,8 +43,24 @@ export function ChatPanel({
         minWidth: 0,
       }}
     >
-      <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+      <Box
+        sx={{
+          px: 2,
+          py: 1.5,
+          borderBottom: 1,
+          borderColor: 'divider',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1,
+        }}
+      >
         <Typography variant="h6">CCTV Agent</Typography>
+        {onNewChat && (
+          <Button size="small" variant="outlined" onClick={onNewChat} disabled={isSending}>
+            New chat
+          </Button>
+        )}
       </Box>
 
       <Box ref={scrollRef} sx={{ flex: 1, overflow: 'auto', px: 2, py: 2 }}>

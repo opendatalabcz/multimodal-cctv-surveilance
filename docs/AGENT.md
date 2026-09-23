@@ -186,7 +186,9 @@ These are free public services without uptime guarantees:
 
 External failures return a tool result (not a chat crash) so the model can explain that the source was unavailable.
 
-After `get_camera_image` succeeds, `chat_with_tools` appends a user message containing the JPEG(s) so the VLM can see the frames. FastAPI copies those paths to `imageUrls` like `/api/images/...` for the chat UI. Do not put large base64 blobs in the transcript JSON. The tool accepts `cameras: [id or name, ...]` (and `camera` for a single name). There is a preferred cap of about 10 images and a hard cap of 16.
+After `get_camera_image` succeeds, `chat_with_tools` appends a **frame-ref** user message (JPEG paths and camera ids, not base64). Each Azure POST expands only the **latest** frame-ref to vision parts (`detail: high`); older refs become a `Previously viewed: …` stub. After the turn, the latest ref is narrowed to **cited** frames (or all fetched frames if the model omitted the cite block) so a follow-up with no new fetch can still see those stills. FastAPI copies cited paths to `imageUrls` like `/api/images/...` for the chat UI. Do not put large base64 blobs in stored transcripts. The tool accepts `cameras: [id or name, ...]` (and `camera` for a single name). There is a preferred cap of about 10 images and a hard cap of 16.
+
+Each chat turn appends one JSON line to `logs/chat_turns.jsonl` under the data directory (`conversation_id`, tool rounds/names, cited cameras, Azure `usage`, `duration_ms`).
 
 ## How to add a tool
 
@@ -206,7 +208,7 @@ The chat loop already dispatches by name and injects any `image_path` / `image_p
 - `POST /api/conversations/{id}/messages` with `{ "content": "..." }` — full transcript after the turn
 - `GET /api/images/{relative-path}` — JPEG under the data directory only
 
-Conversations are in memory and reset when the API process stops. There is no streaming.
+Conversations are in memory and reset when the API process stops. The UI stores the conversation id in `sessionStorage` and resumes via `GET /api/conversations/{id}` (New chat creates a fresh id). There is no streaming. Each successful or failed chat turn appends a line to `logs/chat_turns.jsonl` under the data directory.
 
 ## Run
 
@@ -243,7 +245,7 @@ The sidebar groups cameras into collapsible **sector accordions**, each containi
 - **Location switch** — middle-level enable toggle; same immediate persistence. When the sector is disabled, location switches show saved state but are non-interactive.
 - **Camera switch** — leaf enable toggle; same immediate persistence. When the sector or location is disabled, camera switches show saved state but are non-interactive; parents are visually muted.
 - **Active count** — number of cameras that are effectively enabled in that sector or location.
-- **Structural edits** (sector/location/camera names, assignments, add/remove) are local until **Save configuration**.
+- **Structural edits** (sector/location/camera names, assignments, add/remove) are local until **Save configuration**. The Save bar shows unsaved changes and the browser warns before leaving with a dirty catalog.
 - **Location removal** is blocked while cameras are assigned; **sector removal** is blocked while locations (or cameras) are assigned. The UI shows the reason and the API returns 400.
 - Accordion expand/collapse is UI-only and not persisted.
 

@@ -11,7 +11,7 @@ import Select from '@mui/material/Select'
 import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { useState } from 'react'
+import { useState, type MouseEvent } from 'react'
 import type { Camera, Location, SceneTag } from '../../shared/models/config'
 import { SCENE_TAGS, imageUrlForPath } from '../../shared/models/config'
 import type { CameraAnalysisState } from './useConfig'
@@ -85,7 +85,7 @@ export function CameraEditor({
         <Box
           component={previewUrl ? 'button' : 'div'}
           type={previewUrl ? 'button' : undefined}
-          onClick={(event) => {
+          onClick={(event: MouseEvent<HTMLElement>) => {
             event.stopPropagation()
             if (previewUrl) {
               onPreview()
@@ -172,7 +172,7 @@ export function CameraEditor({
           checked={camera.enabled}
           onChange={(_, checked) => onToggleEnabled(checked)}
           disabled={!locationEnabled}
-          inputProps={{ 'aria-label': 'Enable camera' }}
+          slotProps={{ input: { 'aria-label': 'Enable camera' } }}
         />
         <IconButton
           size="small"
@@ -258,9 +258,9 @@ export function CameraEditor({
                 value,
               )
             }
-            renderTags={(value, getTagProps) =>
+            renderValue={(value, getItemProps) =>
               value.map((option, index) => {
-                const { key, ...chipProps } = getTagProps({ index })
+                const { key, ...chipProps } = getItemProps({ index })
                 return <Chip key={key} size="small" label={option} {...chipProps} />
               })
             }
