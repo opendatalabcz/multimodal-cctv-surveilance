@@ -229,7 +229,75 @@ def test_batch_camera_tool_injects_all_image_paths() -> None:
     assert result["image_count"] == 2
 
 
-def test_cited_cameras_filter_displayed_image_paths() -> None:
+def test_on_progress_emits_fetching_then_analyzing() -> None:
+    responses = [
+        {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_batch",
+                                "type": "function",
+                                "function": {
+                                    "name": "get_camera_image",
+                                    "arguments": '{"cameras": ["cam_a", "cam_b"]}',
+                                },
+                            }
+                        ],
+                    }
+                }
+            ],
+            "usage": {},
+        },
+        {
+            "choices": [{"message": {"role": "assistant", "content": "Both look clear."}}],
+            "usage": {},
+        },
+    ]
+    posted_payloads: list[dict] = []
+    progress: list[dict] = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        posted_payloads.append(json)
+        response = MagicMock()
+        response.json.return_value = responses[len(posted_payloads) - 1]
+        return response
+
+    def fake_execute(name, arguments):
+        cameras = arguments["cameras"]
+        return {
+            "tool_content": '{"success": true}',
+            "image_paths": [f"/tmp/{camera}.jpg" for camera in cameras],
+            "image_labels": [
+                {"path": f"/tmp/{camera}.jpg", "camera_id": camera}
+                for camera in cameras
+            ],
+        }
+
+    def fake_image_part(path):
+        return {"type": "image_url", "image_url": {"url": str(path)}}
+
+    with (
+        patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post),
+        patch("cctv.analysis.azure_vision.execute_tool", side_effect=fake_execute),
+        patch("cctv.analysis.azure_vision._vision_image_part", side_effect=fake_image_part),
+    ):
+        result = chat_with_tools(
+            [{"role": "user", "content": "Compare both cameras."}],
+            config=_fake_config(),
+            parse_json=False,
+            on_progress=progress.append,
+        )
+
+    assert result["success"] is True
+    stages = [event["stage"] for event in progress]
+    assert stages == ["thinking", "fetching", "analyzing", "thinking"]
+    assert progress[1]["detail"] == "Fetching 2 cameras…"
+    assert progress[2]["detail"] == "Analyzing 2 camera frames…"
+    assert all(event["type"] == "status" for event in progress)
     responses = [
         {
             "choices": [

@@ -53,6 +53,7 @@ export function ChatPage() {
   const {
     messages,
     isSending,
+    progressDetail,
     error: chatError,
     initConversation,
     startNewConversation,
@@ -194,6 +195,7 @@ export function ChatPage() {
             <ChatPanel
               messages={messages}
               isSending={isSending}
+              progressDetail={progressDetail}
               error={chatError}
               ready={conversationId !== null && !bootError}
               onSend={sendMessage}

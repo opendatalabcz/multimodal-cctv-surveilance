@@ -11,6 +11,7 @@ import type { Message } from '../../shared/models/conversation'
 interface ChatPanelProps {
   messages: Message[]
   isSending: boolean
+  progressDetail?: string | null
   error: string | null
   ready: boolean
   onSend: (content: string) => void
@@ -20,6 +21,7 @@ interface ChatPanelProps {
 export function ChatPanel({
   messages,
   isSending,
+  progressDetail,
   error,
   ready,
   onSend,
@@ -32,7 +34,7 @@ export function ChatPanel({
       top: scrollRef.current.scrollHeight,
       behavior: 'smooth',
     })
-  }, [messages, isSending])
+  }, [messages, isSending, progressDetail])
 
   return (
     <Box
@@ -77,7 +79,7 @@ export function ChatPanel({
         {messages.map((message, index) => (
           <ChatMessageBubble key={`${message.role}-${index}`} message={message} />
         ))}
-        {isSending && <ThinkingBubble />}
+        {isSending && <ThinkingBubble detail={progressDetail} />}
         {error && (
           <Alert severity="error" sx={{ mt: 1 }}>
             {error}

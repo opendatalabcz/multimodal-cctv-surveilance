@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from cctv.analysis.azure_vision import chat_with_tools
+from cctv.analysis.azure_vision import ProgressCallback, chat_with_tools
 from cctv.api.schemas import ChatMessage
 from cctv.api.store import Conversation, image_urls_for_paths
 from cctv.api.turn_log import append_turn_log, tool_names_from_messages
@@ -30,6 +30,7 @@ def run_chat_turn(
     user_content: str,
     *,
     config: AzureOpenAIConfig | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> tuple[Conversation, dict[str, Any]]:
     agent_config = load_agent_config()
     system_prompt = build_system_prompt(agent_config)
@@ -47,6 +48,7 @@ def run_chat_turn(
         tools=active_tools,
         parse_json=False,
         max_tool_rounds=MAX_TOOL_ROUNDS,
+        on_progress=on_progress,
     )
     duration_ms = int((time.perf_counter() - started) * 1000)
     if not result.get("success"):

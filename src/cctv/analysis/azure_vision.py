@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -15,12 +16,43 @@ from cctv.analysis.citations import (
     parse_cited_cameras,
     select_cited_paths,
 )
-from cctv.tools.get_camera import HARD_IMAGE_CAP
+from cctv.tools.get_camera import HARD_IMAGE_CAP, _camera_queries
 from cctv.tools.registry import default_tool_schemas, execute_tool
 from cctv.utils.azure import AzureOpenAIConfig, load_azure_openai_config
 from cctv.utils.paths import data_root
 
 CCTV_FRAMES_TYPE = "cctv_frames"
+ProgressCallback = Callable[[dict[str, Any]], None]
+
+_TOOL_STATUS: dict[str, tuple[str, str]] = {
+    "web_search": ("tool", "Searching the web…"),
+    "get_weather": ("tool", "Looking up weather…"),
+    "search_map": ("tool", "Searching the map…"),
+    "reverse_geocode": ("tool", "Looking up that place…"),
+    "list_cameras": ("tool", "Listing cameras…"),
+}
+
+
+def _emit_progress(
+    on_progress: ProgressCallback | None,
+    stage: str,
+    detail: str,
+) -> None:
+    if on_progress is None:
+        return
+    on_progress({"type": "status", "stage": stage, "detail": detail})
+
+
+def _progress_for_tool(name: str, arguments: dict[str, Any]) -> tuple[str, str]:
+    if name == "get_camera_image":
+        queries = _camera_queries(arguments)
+        count = len(queries)
+        if count == 1:
+            return "fetching", f"Fetching {queries[0]}…"
+        if count > 1:
+            return "fetching", f"Fetching {count} cameras…"
+        return "fetching", "Fetching cameras…"
+    return _TOOL_STATUS.get(name, ("tool", f"Running {name or 'a tool'}…"))
 
 
 def encode_image_to_base64(image_path: str | Path) -> str:
@@ -410,6 +442,7 @@ def chat_with_tools(
     temperature: float | None = None,
     max_tool_rounds: int = 3,
     request_timeout: int = 90,
+    on_progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     """Run a multi-turn Azure vision chat with function calling.
 
@@ -422,7 +455,7 @@ def chat_with_tools(
     result are the frames cited in the final reply (or all fetched frames
     if the model omitted the cite block). On success, ``messages`` is the
     compact history including the final assistant reply with the cite fence
-    stripped.
+    stripped. ``on_progress`` receives status dicts (stage + detail) for the UI.
     """
     config = config or load_azure_openai_config()
     if not config.is_configured or not config.api_url:
@@ -439,6 +472,7 @@ def chat_with_tools(
 
     try:
         while tool_rounds <= max_tool_rounds:
+            _emit_progress(on_progress, "thinking", "Thinking…")
             payload = _chat_completion_payload(
                 conversation,
                 config,
@@ -472,6 +506,8 @@ def chat_with_tools(
                         args = {}
                 except json.JSONDecodeError:
                     args = {}
+                stage, detail = _progress_for_tool(name, args)
+                _emit_progress(on_progress, stage, detail)
                 exec_result = execute_tool(name, args)
                 conversation.append(
                     {
@@ -489,6 +525,13 @@ def chat_with_tools(
             # uninterrupted run of tool messages, so images follow the whole batch.
             if round_frames:
                 conversation.append(_fetched_images_message(round_frames))
+                count = len(round_frames)
+                analyzing = (
+                    "Analyzing the camera frame…"
+                    if count == 1
+                    else f"Analyzing {count} camera frames…"
+                )
+                _emit_progress(on_progress, "analyzing", analyzing)
 
             tool_rounds += 1
 

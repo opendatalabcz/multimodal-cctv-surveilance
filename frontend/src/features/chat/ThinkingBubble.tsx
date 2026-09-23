@@ -3,7 +3,11 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
 
-export function ThinkingBubble() {
+interface ThinkingBubbleProps {
+  detail?: string | null
+}
+
+export function ThinkingBubble({ detail }: ThinkingBubbleProps) {
   return (
     <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 1.5 }}>
       <Paper
@@ -20,7 +24,7 @@ export function ThinkingBubble() {
       >
         <CircularProgress size={18} />
         <Typography variant="body2" color="text.secondary">
-          Thinking…
+          {detail?.trim() || 'Thinking…'}
         </Typography>
       </Paper>
     </Box>

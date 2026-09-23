@@ -248,3 +248,83 @@ def test_post_message_chat_failure(client) -> None:
 
     transcript = client.get(f"/api/conversations/{conversation_id}").json()
     assert transcript["messages"] == []
+
+
+def _sse_events(body: str) -> list[dict]:
+    events: list[dict] = []
+    for block in body.split("\n\n"):
+        for line in block.splitlines():
+            if line.startswith("data:"):
+                events.append(json.loads(line[5:].strip()))
+    return events
+
+
+def test_message_stream_emits_status_then_done(client) -> None:
+    conversation_id = client.post("/api/conversations").json()["id"]
+
+    def fake_chat(*args, on_progress=None, **kwargs):
+        if on_progress:
+            on_progress({"type": "status", "stage": "fetching", "detail": "Fetching 2 cameras…"})
+            on_progress(
+                {"type": "status", "stage": "analyzing", "detail": "Analyzing 2 camera frames…"}
+            )
+        return {
+            "success": True,
+            "analysis": "The street looks calm.",
+            "messages": [
+                {"role": "user", "content": "How busy is it?"},
+                {"role": "assistant", "content": "The street looks calm."},
+            ],
+            "image_paths": ["camera_images/test/frame.jpg"],
+        }
+
+    with patch("cctv.api.chat.chat_with_tools", side_effect=fake_chat):
+        with client.stream(
+            "POST",
+            f"/api/conversations/{conversation_id}/messages/stream",
+            json={"content": "How busy is it?"},
+        ) as response:
+            assert response.status_code == 200
+            assert "text/event-stream" in response.headers["content-type"]
+            body = "".join(response.iter_text())
+
+    events = _sse_events(body)
+    assert [event["type"] for event in events] == ["status", "status", "done"]
+    assert events[0]["detail"] == "Fetching 2 cameras…"
+    assert events[1]["stage"] == "analyzing"
+    done = events[-1]
+    assert done["conversation"]["id"] == conversation_id
+    assert done["conversation"]["messages"][-1]["content"] == "The street looks calm."
+    assert done["conversation"]["messages"][-1]["imageUrls"] == [
+        "/api/images/camera_images/test/frame.jpg"
+    ]
+
+
+def test_message_stream_emits_error(client) -> None:
+    conversation_id = client.post("/api/conversations").json()["id"]
+
+    with patch(
+        "cctv.api.chat.chat_with_tools",
+        return_value={"success": False, "error": "Azure OpenAI configuration missing"},
+    ):
+        with client.stream(
+            "POST",
+            f"/api/conversations/{conversation_id}/messages/stream",
+            json={"content": "hello"},
+        ) as response:
+            assert response.status_code == 200
+            body = "".join(response.iter_text())
+
+    events = _sse_events(body)
+    assert events[-1]["type"] == "error"
+    assert "configuration missing" in events[-1]["detail"]
+    transcript = client.get(f"/api/conversations/{conversation_id}").json()
+    assert transcript["messages"] == []
+
+
+def test_message_stream_unknown_conversation(client) -> None:
+    response = client.post(
+        "/api/conversations/missing/messages/stream",
+        json={"content": "hello"},
+    )
+    assert response.status_code == 404

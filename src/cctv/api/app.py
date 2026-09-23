@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from cctv.analysis.camera_metadata import analyze_camera_metadata
 from cctv.api.chat import run_chat_turn
@@ -16,6 +16,7 @@ from cctv.api.schemas import (
     PostMessageRequest,
 )
 from cctv.api.store import ConversationStore
+from cctv.api.stream import chat_turn_stream_response
 from cctv.config.agent_yaml import load_agent_config, save_agent_config
 from cctv.utils.paths import data_root
 
@@ -82,6 +83,13 @@ def create_app() -> FastAPI:
             logger.error("Chat turn failed for %s: %s", conversation_id, error)
             raise HTTPException(status_code=502, detail=error)
         return conversation.to_response()
+
+    @app.post("/api/conversations/{conversation_id}/messages/stream")
+    def post_message_stream(conversation_id: str, body: PostMessageRequest) -> StreamingResponse:
+        conversation = store.get(conversation_id)
+        if conversation is None:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        return chat_turn_stream_response(conversation, body.content)
 
     @app.get("/api/images/{file_path:path}")
     def get_image(file_path: str) -> FileResponse:

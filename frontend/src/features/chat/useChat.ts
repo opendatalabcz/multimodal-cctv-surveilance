@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import {
   createConversation,
   getConversation,
-  sendMessage as sendMessageApi,
+  sendMessageStream,
 } from '../../shared/api/conversationApi'
 import type { Conversation, Message } from '../../shared/models/conversation'
 
@@ -48,6 +48,7 @@ interface UseChatResult {
   conversationId: string | null
   messages: Message[]
   isSending: boolean
+  progressDetail: string | null
   error: string | null
   initConversation: () => Promise<void>
   startNewConversation: () => Promise<void>
@@ -58,6 +59,7 @@ export function useChat(): UseChatResult {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [isSending, setIsSending] = useState(false)
+  const [progressDetail, setProgressDetail] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const adopt = useCallback((conversation: Conversation) => {
@@ -90,16 +92,20 @@ export function useChat(): UseChatResult {
       const optimisticUserMessage: Message = { role: 'user', content }
       setMessages((current) => [...current, optimisticUserMessage])
       setIsSending(true)
+      setProgressDetail('Thinking…')
       setError(null)
 
       try {
-        const conversation = await sendMessageApi(conversationId, content)
+        const conversation = await sendMessageStream(conversationId, content, (detail) => {
+          setProgressDetail(detail)
+        })
         setMessages(conversation.messages)
       } catch (err) {
         setMessages((current) => current.filter((message) => message !== optimisticUserMessage))
         setError(err instanceof Error ? err.message : 'Failed to send message')
       } finally {
         setIsSending(false)
+        setProgressDetail(null)
       }
     },
     [conversationId, isSending],
@@ -109,6 +115,7 @@ export function useChat(): UseChatResult {
     conversationId,
     messages,
     isSending,
+    progressDetail,
     error,
     initConversation,
     startNewConversation,
