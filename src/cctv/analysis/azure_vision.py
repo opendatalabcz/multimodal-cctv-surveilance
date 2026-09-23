@@ -191,7 +191,8 @@ def _fetched_images_message(frames: list[FetchedFrame]) -> dict[str, Any]:
             "type": "text",
             "text": (
                 "Here are the fetched frames for analysis, in this order. "
-                "Cite by camera id in a ```cite``` block when you answer.\n"
+                "Cite by camera id in a ```cite``` block when you answer. "
+                "Do not use sep, ..sep, or any other fence language for citations.\n"
                 + "\n".join(labels)
             ),
         }

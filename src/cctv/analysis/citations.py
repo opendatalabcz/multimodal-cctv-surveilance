@@ -8,7 +8,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-CITE_FENCE = re.compile(r"```cite\s*\n(.*?)```", re.IGNORECASE | re.DOTALL)
+CITE_LANGUAGES = frozenset({"cite", "citations", "camera", "cameras", "sep"})
+EMPTY_CITE_LANGUAGES = frozenset({"cite", "citations", "camera", "cameras"})
+_FENCE_OPEN = re.compile(r"(?:^|\n)[ \t]{0,3}(`{3,}|~{3,})")
+_TRAILER_JUNK = re.compile(
+    r"(?:"
+    r"\s*\.{2,}sep"
+    r"|\s*\[SEP\]"
+    r"|\s*</?sep>"
+    r"|\s*={2,}SEP={2,}"
+    r"|\s*-{3,}"
+    r"|\s*_{3,}"
+    r")+\s*\Z",
+    re.IGNORECASE,
+)
+_ORPHAN_TICKS = re.compile(r"\s*[`~]{3,}\s*\Z")
 
 
 @dataclass(frozen=True)
@@ -23,19 +37,120 @@ class FetchedFrame:
 
 
 def parse_cited_cameras(text: str) -> tuple[str, list[str] | None]:
-    """Split visible answer text from a trailing ```cite``` block.
+    """Split visible answer text from a trailing citation fence.
 
     Returns ``(display_text, citations)``. ``citations`` is ``None`` when no
-    fence is present (caller should keep every fetched frame). An empty fence
-    means show no images.
+    citation trailer is present (caller should keep every fetched frame). An
+    empty ``cite`` / ``cameras`` fence means show no images.
     """
     raw = text or ""
-    matches = list(CITE_FENCE.finditer(raw))
-    if not matches:
-        return raw.strip(), None
-    match = matches[-1]
-    display = (raw[: match.start()] + raw[match.end() :]).strip()
-    return display, _parse_cite_body(match.group(1))
+    trailer = _trailing_citation_fence(raw)
+    citations: list[str] | None = None
+    display = raw
+    if trailer is not None:
+        display, language, body = trailer
+        parsed = _parse_cite_body(body)
+        if parsed:
+            citations = parsed
+        elif language in EMPTY_CITE_LANGUAGES:
+            citations = []
+    display = _strip_trailer_junk(display)
+    return display.strip(), citations
+
+
+def _strip_sep_remainder(remainder: str) -> bool:
+    return bool(_TRAILER_JUNK.sub("", remainder).strip())
+
+
+def _strip_trailer_junk(text: str) -> str:
+    cleaned = _TRAILER_JUNK.sub("", text)
+    return _ORPHAN_TICKS.sub("", cleaned)
+
+
+def _trailing_citation_fence(text: str) -> tuple[str, str, str] | None:
+    last: tuple[str, str, str] | None = None
+    for prefix, language, body, end in _iter_fences(text):
+        if _strip_sep_remainder(text[end:]):
+            continue
+        if language in CITE_LANGUAGES or (not language and _looks_like_id_list(body)):
+            last = (prefix, language, body)
+    return last
+
+
+def _iter_fences(text: str) -> list[tuple[str, str, str, int]]:
+    fences: list[tuple[str, str, str, int]] = []
+    search_from = 0
+    while True:
+        match = _FENCE_OPEN.search(text, search_from)
+        if match is None:
+            break
+        ticks = match.group(1)
+        tick_at = match.start(1)
+        line_start = match.end()
+        newline = text.find("\n", line_start)
+        if newline == -1:
+            info_raw = text[line_start:]
+            line_end = len(text)
+        else:
+            info_raw = text[line_start:newline]
+            line_end = newline
+        inline_close = info_raw.find(ticks)
+        if inline_close != -1:
+            info = info_raw[:inline_close]
+            language, inline_body = _split_info(info)
+            body = inline_body
+            end = line_start + inline_close + len(ticks)
+            while end < len(text) and text[end] in " \t":
+                end += 1
+            fences.append((text[:tick_at], language, body, end))
+            search_from = end
+            continue
+        language, _ = _split_info(info_raw)
+        close = _find_closing_fence(text, line_end, ticks)
+        if close is None:
+            body = text[line_end + 1 :] if line_end < len(text) else ""
+            end = len(text)
+        else:
+            close_at, end = close
+            body = text[line_end + 1 : close_at]
+        fences.append((text[:tick_at], language, body, end))
+        search_from = max(end, tick_at + 1)
+    return fences
+
+
+def _split_info(info: str) -> tuple[str, str]:
+    stripped = info.strip()
+    if not stripped:
+        return "", ""
+    language, _, rest = stripped.partition(" ")
+    return language.lower(), rest.strip()
+
+
+def _find_closing_fence(text: str, after_open_line: int, ticks: str) -> tuple[int, int] | None:
+    mark = ticks[0]
+    minimum = len(ticks)
+    close_re = re.compile(
+        rf"\n[ \t]{{0,3}}{re.escape(mark)}{{{minimum},}}[ \t]*(?=\n|$)"
+    )
+    match = close_re.search(text, after_open_line)
+    if match is None:
+        return None
+    return match.start(), match.end()
+
+
+def _looks_like_id_list(body: str) -> bool:
+    text = (body or "").strip()
+    if not text:
+        return False
+    if not _parse_cite_body(text):
+        return False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if any(char in stripped for char in "()=;"):
+            return False
+    return True
 
 
 def select_cited_paths(

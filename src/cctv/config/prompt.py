@@ -126,7 +126,8 @@ def build_system_prompt(config: AgentConfig) -> str:
             "```",
             "Use an empty ```cite``` block if you discuss no frames. "
             "The user only sees the images you cite, not every frame you fetched. "
-            "Do not mention the cite block in the visible answer.",
+            "Do not mention the cite block in the visible answer. "
+            "Do not use sep, ..sep, or any other fence language for citations.",
         ]
     )
     return "\n".join(lines)

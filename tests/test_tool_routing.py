@@ -68,6 +68,7 @@ def test_prompt_camera_first_and_forecast_qualification() -> None:
     assert "Do not use web_search as a weather API" in prompt
     assert "```cite" in prompt
     assert "The user only sees the images you cite" in prompt
+    assert "Do not use sep, ..sep" in prompt
     assert "weather (get_weather): enabled" in prompt
     assert "internet search (web_search): enabled" in prompt
 
