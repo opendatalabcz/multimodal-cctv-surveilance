@@ -48,18 +48,24 @@ class CameraImageFetcher:
 
     def _save_frame(self, image_bytes: bytes, camera_id: str, output_dir: str) -> dict[str, Any]:
         img = Image.open(BytesIO(image_bytes))
+        img.load()
         now = datetime.now()
         timestamp = f"{now:%Y%m%d_%H%M%S}_{now.microsecond:06d}"
         filename = f"camera_{camera_id}_{timestamp}.jpg"
+        os.makedirs(output_dir, exist_ok=True)
         filepath = os.path.join(output_dir, filename)
-        img.save(filepath)
+        if (img.format or "").upper() in {"JPEG", "JPG", "MPO"}:
+            with open(filepath, "wb") as handle:
+                handle.write(image_bytes)
+        else:
+            img.convert("RGB").save(filepath, format="JPEG", quality=95, subsampling=0)
         return {
             "success": True,
             "camera_id": camera_id,
             "filename": filename,
             "filepath": filepath,
             "dimensions": img.size,
-            "size_bytes": len(image_bytes),
+            "size_bytes": os.path.getsize(filepath),
         }
 
     def _parse_time_string(self, time_str: str) -> timedelta:

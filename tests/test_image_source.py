@@ -94,7 +94,35 @@ def test_get_image_http_raw_image(tmp_path, monkeypatch) -> None:
 
     assert result["success"] is True
     assert result["source_type"] == "http_image"
-    assert Path(result["filepath"]).is_file()
+    saved = Path(result["filepath"])
+    assert saved.is_file()
+    assert saved.read_bytes() == image_bytes
+
+
+def test_get_image_http_png_saved_as_high_quality_jpeg(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("CCTV_DATA_DIR", str(tmp_path))
+    png = Image.new("RGB", (8, 6), (11, 22, 33))
+    buf = BytesIO()
+    png.save(buf, format="PNG")
+    png_bytes = buf.getvalue()
+
+    class FakeResponse:
+        status_code = 200
+        headers = {"Content-Type": "image/png"}
+        content = png_bytes
+
+        @staticmethod
+        def json() -> dict:
+            raise ValueError("not json")
+
+    with patch("cctv.fetch.image_source.get_url", return_value=FakeResponse()):
+        result = get_image("https://example.com/frame.png", verbose=False)
+
+    assert result["success"] is True
+    saved = Path(result["filepath"])
+    with Image.open(saved) as img:
+        assert img.format == "JPEG"
+        assert img.size == (8, 6)
 
 
 def test_get_image_http_json_base64(tmp_path, monkeypatch) -> None:
