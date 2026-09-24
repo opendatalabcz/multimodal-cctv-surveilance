@@ -81,7 +81,7 @@ export function ConfigPanel({
     config !== null &&
     config.sectors.every((sector) => sector.name.trim()) &&
     config.locations.every((location) => location.name.trim()) &&
-    config.cameras.every((camera) => camera.name.trim() && camera.source.trim())
+    config.cameras.every((camera) => camera.source.trim())
   const isAnalyzing = Object.values(analysisStates).some(
     (state) => state.status === 'queued' || state.status === 'analyzing',
   )
@@ -245,7 +245,7 @@ export function ConfigPanel({
           <Typography variant="caption" color="warning.main" sx={{ display: 'block', mb: 1 }}>
             {canSave
               ? 'Name and source edits are not saved until you click Save.'
-              : 'Fill in every sector, location, and camera name and source before saving.'}
+              : 'Fill in every sector and location name, and every camera source, before saving.'}
           </Typography>
         )}
         <Button

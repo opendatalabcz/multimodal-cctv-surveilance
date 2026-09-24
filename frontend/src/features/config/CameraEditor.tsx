@@ -190,7 +190,6 @@ export function CameraEditor({
         <Box sx={{ pt: 1, px: 0.5 }}>
           <TextField
             fullWidth
-            required
             label="Name"
             size="small"
             margin="dense"
