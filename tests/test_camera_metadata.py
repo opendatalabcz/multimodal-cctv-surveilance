@@ -86,3 +86,37 @@ def test_analysis_does_not_overwrite_changed_source() -> None:
         with pytest.raises(RuntimeError, match="source changed"):
             analyze_camera_metadata("road_cam", azure_config=_azure())
     save.assert_not_called()
+
+
+def test_analysis_skips_unavailable_placeholder(tmp_path, monkeypatch) -> None:
+    frame = tmp_path / "placeholder.jpg"
+    frame.write_bytes(b"sleep-mode")
+    preview = tmp_path / "camera_images" / "previews" / "road_cam.jpg"
+    preview.parent.mkdir(parents=True)
+    preview.write_bytes(b"good-preview")
+    existing = CameraAnalysis(
+        description="A good road view.",
+        scene_tags=["road"],
+        source_fingerprint=source_fingerprint("101200"),
+        analyzed_at="2026-09-16T12:00:00Z",
+        preview_path="camera_images/previews/road_cam.jpg",
+    )
+    config = AgentConfig(cameras=[_camera().model_copy(update={"analysis": existing})])
+    with (
+        patch("cctv.analysis.camera_metadata.load_agent_config", return_value=config),
+        patch(
+            "cctv.analysis.camera_metadata.execute_get_image",
+            return_value={
+                "image_path": str(frame),
+                "tool_content": '{"success": true, "likely_unavailable": true}',
+                "fetch_result": {"success": True, "likely_unavailable": True},
+            },
+        ),
+        patch("cctv.analysis.camera_metadata.analyze_images") as vision,
+        patch("cctv.analysis.camera_metadata.save_agent_config") as save,
+    ):
+        with pytest.raises(RuntimeError, match="not currently accessible"):
+            analyze_camera_metadata("road_cam", azure_config=_azure())
+    vision.assert_not_called()
+    save.assert_not_called()
+    assert preview.read_bytes() == b"good-preview"
