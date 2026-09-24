@@ -9,4 +9,5 @@ export interface Message {
 export interface Conversation {
   id: string
   messages: Message[]
+  suggestions?: string[]
 }

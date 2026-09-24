@@ -49,6 +49,7 @@ def create_app() -> FastAPI:
             save_agent_config(body)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        store.refresh_idle_welcomes()
         return ConfigResponse.model_validate(load_agent_config().model_dump())
 
     @app.post("/api/cameras/{camera_id}/analyze", response_model=CameraConfig)

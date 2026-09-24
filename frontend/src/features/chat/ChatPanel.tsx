@@ -1,6 +1,7 @@
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Chip from '@mui/material/Chip'
 import Typography from '@mui/material/Typography'
 import { useEffect, useRef } from 'react'
 import { ChatComposer } from './ChatComposer'
@@ -10,6 +11,7 @@ import type { Message } from '../../shared/models/conversation'
 
 interface ChatPanelProps {
   messages: Message[]
+  suggestions: string[]
   isSending: boolean
   progressDetail?: string | null
   error: string | null
@@ -20,6 +22,7 @@ interface ChatPanelProps {
 
 export function ChatPanel({
   messages,
+  suggestions,
   isSending,
   progressDetail,
   error,
@@ -71,14 +74,34 @@ export function ChatPanel({
             Starting conversation…
           </Typography>
         )}
-        {ready && messages.length === 0 && (
-          <Typography variant="body2" color="text.secondary">
-            Ask a question about the configured cameras.
-          </Typography>
-        )}
         {messages.map((message, index) => (
           <ChatMessageBubble key={`${message.role}-${index}`} message={message} />
         ))}
+        {suggestions.length > 0 && !isSending && (
+          // These sit in the user's column because they are things the user would say.
+          <Box
+            sx={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'flex-end',
+              gap: 1,
+              mb: 1.5,
+              pl: '25%',
+            }}
+          >
+            {suggestions.map((suggestion) => (
+              <Chip
+                key={suggestion}
+                label={suggestion}
+                variant="outlined"
+                color="primary"
+                clickable
+                disabled={!ready}
+                onClick={() => onSend(suggestion)}
+              />
+            ))}
+          </Box>
+        )}
         {isSending && <ThinkingBubble detail={progressDetail} />}
         {error && (
           <Alert severity="error" sx={{ mt: 1 }}>

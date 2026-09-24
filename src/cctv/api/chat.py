@@ -69,6 +69,7 @@ def run_chat_turn(
             imageUrls=image_urls,
         )
     )
+    conversation.suggestions = list(result.get("followups") or [])
     _write_turn_log(conversation, result, duration_ms=duration_ms, tools=agent_config.tools)
     return conversation, result
 

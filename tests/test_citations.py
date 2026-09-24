@@ -2,8 +2,50 @@ from cctv.analysis.citations import (
     FetchedFrame,
     frames_from_tool_result,
     parse_cited_cameras,
+    parse_followups,
     select_cited_paths,
 )
+
+
+def test_parse_followups_reads_questions_and_strips_fence() -> None:
+    text = (
+        "The bridge is busy.\n\n"
+        "```cite\ncharles_bridge\n```\n\n"
+        "```followup\n- Has it cleared yet?\n- What about Ječná?\n```\n"
+    )
+    remainder, followups = parse_followups(text)
+    assert followups == ["Has it cleared yet?", "What about Ječná?"]
+    # Citations must still parse: the cite fence has to end up trailing again.
+    display, citations = parse_cited_cameras(remainder)
+    assert display == "The bridge is busy."
+    assert citations == ["charles_bridge"]
+
+
+def test_parse_followups_before_cite_fence() -> None:
+    text = "Quiet.\n\n```followup\nAnything at the airport?\n```\n\n```cite\ncam_a\n```\n"
+    remainder, followups = parse_followups(text)
+    assert followups == ["Anything at the airport?"]
+    display, citations = parse_cited_cameras(remainder)
+    assert display == "Quiet."
+    assert citations == ["cam_a"]
+
+
+def test_parse_followups_absent() -> None:
+    assert parse_followups("Just an answer.") == ("Just an answer.", [])
+
+
+def test_parse_followups_caps_at_three_and_drops_long_lines() -> None:
+    body = "\n".join(["1. One?", "2. Two?", "3. Three?", "4. Four?"])
+    _, followups = parse_followups(f"Answer.\n```followups\n{body}\n```")
+    assert followups == ["One?", "Two?", "Three?"]
+
+    _, long_only = parse_followups(f"Answer.\n```followup\n{'x' * 200}?\n```")
+    assert long_only == []
+
+
+def test_parse_followups_deduplicates() -> None:
+    _, followups = parse_followups("A.\n```suggestions\nSame?\nsame?\nOther?\n```")
+    assert followups == ["Same?", "Other?"]
 
 
 def test_parse_cited_cameras_strips_fence() -> None:

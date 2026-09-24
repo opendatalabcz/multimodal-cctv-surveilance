@@ -52,11 +52,13 @@ export function ChatPage() {
 
   const {
     messages,
+    suggestions,
     isSending,
     progressDetail,
     error: chatError,
     initConversation,
     startNewConversation,
+    refreshConversation,
     sendMessage,
     conversationId,
   } = useChat()
@@ -105,7 +107,8 @@ export function ChatPage() {
       return
     }
     await saveConfig(config)
-  }, [config, saveConfig])
+    await refreshConversation()
+  }, [config, saveConfig, refreshConversation])
 
   const handleToggleTool = useCallback(
     async (key: keyof AppConfig['tools'], value: boolean) => {
@@ -118,44 +121,48 @@ export function ChatPage() {
       }
       try {
         await saveConfig(next)
+        await refreshConversation()
       } catch {
         await loadConfig()
       }
     },
-    [config, saveConfig, loadConfig],
+    [config, saveConfig, loadConfig, refreshConversation],
   )
 
   const handleToggleSectorEnabled = useCallback(
     async (sectorId: string, enabled: boolean) => {
       try {
         await setSectorEnabled(sectorId, enabled)
+        await refreshConversation()
       } catch {
         await loadConfig()
       }
     },
-    [setSectorEnabled, loadConfig],
+    [setSectorEnabled, loadConfig, refreshConversation],
   )
 
   const handleToggleLocationEnabled = useCallback(
     async (locationId: string, enabled: boolean) => {
       try {
         await setLocationEnabled(locationId, enabled)
+        await refreshConversation()
       } catch {
         await loadConfig()
       }
     },
-    [setLocationEnabled, loadConfig],
+    [setLocationEnabled, loadConfig, refreshConversation],
   )
 
   const handleToggleCameraEnabled = useCallback(
     async (cameraId: string, enabled: boolean) => {
       try {
         await setCameraEnabled(cameraId, enabled)
+        await refreshConversation()
       } catch {
         await loadConfig()
       }
     },
-    [setCameraEnabled, loadConfig],
+    [setCameraEnabled, loadConfig, refreshConversation],
   )
 
   if (isBooting) {
@@ -194,6 +201,7 @@ export function ChatPage() {
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <ChatPanel
               messages={messages}
+              suggestions={suggestions}
               isSending={isSending}
               progressDetail={progressDetail}
               error={chatError}

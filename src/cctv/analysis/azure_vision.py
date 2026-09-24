@@ -14,6 +14,7 @@ from cctv.analysis.citations import (
     FetchedFrame,
     frames_from_tool_result,
     parse_cited_cameras,
+    parse_followups,
     select_cited_paths,
 )
 from cctv.tools.get_camera import HARD_IMAGE_CAP, _camera_queries
@@ -400,7 +401,8 @@ def _finalize_tool_chat_result(
     config: AzureOpenAIConfig,
 ) -> dict[str, Any]:
     analysis_text = message.get("content") or ""
-    display_text, citations = parse_cited_cameras(analysis_text)
+    without_followups, followups = parse_followups(analysis_text)
+    display_text, citations = parse_cited_cameras(without_followups)
     display_paths = select_cited_paths(fetched_frames, citations)
     message = {**message, "content": display_text}
     if parse_json:
@@ -428,6 +430,7 @@ def _finalize_tool_chat_result(
         "model": config.model,
         "tool_rounds": tool_rounds,
         "messages": final_messages,
+        "followups": followups,
     }
 
 

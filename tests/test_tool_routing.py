@@ -1,11 +1,23 @@
 import json
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 import cctv.tools  # noqa: F401
 from cctv.api.chat import run_chat_turn
 from cctv.api.store import Conversation
-from cctv.config.models import AgentConfig, CameraAnalysis, CameraConfig, ToolsConfig
-from cctv.config.prompt import build_system_prompt
+from cctv.config.models import (
+    AgentConfig,
+    CameraAnalysis,
+    CameraConfig,
+    LocationConfig,
+    SectorConfig,
+    ToolsConfig,
+)
+from cctv.config.prompt import (
+    build_system_prompt,
+    build_welcome_message,
+    build_welcome_suggestions,
+)
 from cctv.tools.registry import tool_names_for_config, tool_schemas_for_config
 from cctv.utils.azure import AzureOpenAIConfig
 
@@ -151,3 +163,98 @@ def test_run_chat_turn_passes_max_tool_rounds() -> None:
         run_chat_turn(conversation, "hello", config=_fake_config())
 
     assert captured["max_tool_rounds"] == 16
+
+
+def _analysis(description: str, tags: list[str]) -> CameraAnalysis:
+    return CameraAnalysis(
+        description=description,
+        scene_tags=tags,
+        source_fingerprint="fp",
+        analyzed_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+
+def _welcome_config(*sectors: tuple[str, str, list[str]]) -> AgentConfig:
+    """One sector, one location and one analyzed camera per (name, description, tags) triple."""
+    return AgentConfig(
+        sectors=[SectorConfig(id=name.lower(), name=name) for name, _, _ in sectors],
+        locations=[
+            LocationConfig(id=f"loc_{name.lower()}", name=f"{name} centre", sector_id=name.lower())
+            for name, _, _ in sectors
+        ],
+        cameras=[
+            CameraConfig(
+                id=f"cam_{name.lower()}",
+                name="",
+                source="101200",
+                sector_id=name.lower(),
+                location_id=f"loc_{name.lower()}",
+                analysis=_analysis(description, tags),
+            )
+            for name, description, tags in sectors
+        ],
+    )
+
+
+def test_welcome_suggestions_derive_from_scene_topics() -> None:
+    config = _welcome_config(
+        ("Prague", "Busy junction seen from above.", ["road", "intersection"]),
+        ("Japan", "Airport apron with parked aircraft.", ["airport"]),
+        ("Namibia", "Wildlife watering hole where elephants gather.", ["panorama"]),
+    )
+    assert build_welcome_suggestions(config) == [
+        "What is the traffic like in Prague?",
+        "How busy are the airports in Japan?",
+        "Any animals out in Namibia right now?",
+    ]
+
+
+def test_welcome_suggestions_cap_at_three_places() -> None:
+    config = _welcome_config(
+        ("Prague", "Busy junction.", ["road"]),
+        ("Japan", "Airport apron.", ["airport"]),
+        ("Namibia", "Watering hole with animals.", ["panorama"]),
+        ("Brno", "Pedestrian square.", ["pedestrian"]),
+    )
+    suggestions = build_welcome_suggestions(config)
+    assert len(suggestions) == 3
+    assert not any("Brno" in suggestion for suggestion in suggestions)
+
+
+def test_welcome_suggestions_fall_back_when_cameras_are_unanalyzed() -> None:
+    config = AgentConfig(
+        locations=[LocationConfig(id="bridge", name="Charles Bridge", sector_id="unassigned")],
+        cameras=[
+            CameraConfig(
+                id="cam_a",
+                name="",
+                source="101200",
+                location_id="bridge",
+                sector_id="unassigned",
+            )
+        ],
+        tools=ToolsConfig(maps=True),
+    )
+    # No sector, so the location carries the question; no analysis, so the topic is generic.
+    assert build_welcome_suggestions(config) == [
+        "What can you see in Charles Bridge right now?",
+        "Which cameras can you see?",
+    ]
+
+
+def test_welcome_message_summarizes_scope_without_repeating_suggestions() -> None:
+    config = _welcome_config(
+        ("Prague", "Busy junction seen from above.", ["road", "intersection"]),
+        ("Japan", "Airport apron with parked aircraft.", ["airport"]),
+    )
+    text = build_welcome_message(config)
+    assert "live CCTV cameras" in text
+    assert "2 cameras across Prague and Japan." in text
+    assert "traffic" not in text
+    # Tool toggles are deliberately not advertised here.
+    assert "weather" not in text.lower()
+
+
+def test_welcome_without_cameras_points_at_config_and_offers_nothing() -> None:
+    assert "No cameras are enabled yet" in build_welcome_message(AgentConfig())
+    assert build_welcome_suggestions(AgentConfig()) == []

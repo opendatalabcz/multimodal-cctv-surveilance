@@ -1,4 +1,4 @@
-"""Parse cite-to-display camera ids from the assistant's final reply."""
+"""Parse the trailing fences of the assistant's final reply: citations and follow-ups."""
 
 from __future__ import annotations
 
@@ -10,6 +10,10 @@ from typing import Any
 
 CITE_LANGUAGES = frozenset({"cite", "citations", "camera", "cameras", "sep"})
 EMPTY_CITE_LANGUAGES = frozenset({"cite", "citations", "camera", "cameras"})
+FOLLOWUP_LANGUAGES = frozenset({"followup", "followups", "follow-up", "follow_up", "suggestions"})
+MAX_FOLLOWUPS = 3
+_MAX_FOLLOWUP_CHARS = 120
+_LIST_MARKER = re.compile(r"^(?:[-*+•]|\d+[.)])\s*")
 _FENCE_OPEN = re.compile(r"(?:^|\n)[ \t]{0,3}(`{3,}|~{3,})")
 _TRAILER_JUNK = re.compile(
     r"(?:"
@@ -56,6 +60,35 @@ def parse_cited_cameras(text: str) -> tuple[str, list[str] | None]:
             citations = []
     display = _strip_trailer_junk(display)
     return display.strip(), citations
+
+
+def parse_followups(text: str) -> tuple[str, list[str]]:
+    """Split a follow-up suggestion fence out of the reply.
+
+    Returns ``(text_without_the_fence, questions)``. Callers must run this
+    before :func:`parse_cited_cameras`, which only recognises a citation fence
+    that is the last thing in the reply.
+    """
+    raw = text or ""
+    for prefix, language, body, end in reversed(_iter_fences(raw)):
+        if language in FOLLOWUP_LANGUAGES:
+            return prefix + raw[end:], _parse_followup_body(body)
+    return raw, []
+
+
+def _parse_followup_body(body: str) -> list[str]:
+    questions: list[str] = []
+    seen: set[str] = set()
+    for line in (body or "").splitlines():
+        stripped = _LIST_MARKER.sub("", line.strip()).strip().strip('"').strip()
+        key = stripped.lower()
+        if not stripped or len(stripped) > _MAX_FOLLOWUP_CHARS or key in seen:
+            continue
+        seen.add(key)
+        questions.append(stripped)
+        if len(questions) == MAX_FOLLOWUPS:
+            break
+    return questions
 
 
 def _strip_sep_remainder(remainder: str) -> bool:

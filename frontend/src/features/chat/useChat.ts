@@ -47,17 +47,20 @@ async function loadOrCreateConversation(): Promise<Conversation> {
 interface UseChatResult {
   conversationId: string | null
   messages: Message[]
+  suggestions: string[]
   isSending: boolean
   progressDetail: string | null
   error: string | null
   initConversation: () => Promise<void>
   startNewConversation: () => Promise<void>
+  refreshConversation: () => Promise<void>
   sendMessage: (content: string) => Promise<void>
 }
 
 export function useChat(): UseChatResult {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
+  const [suggestions, setSuggestions] = useState<string[]>([])
   const [isSending, setIsSending] = useState(false)
   const [progressDetail, setProgressDetail] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -65,6 +68,7 @@ export function useChat(): UseChatResult {
   const adopt = useCallback((conversation: Conversation) => {
     setConversationId(conversation.id)
     setMessages(conversation.messages)
+    setSuggestions(conversation.suggestions ?? [])
     writeStoredConversationId(conversation.id)
   }, [])
 
@@ -83,6 +87,17 @@ export function useChat(): UseChatResult {
     setError(null)
   }, [adopt])
 
+  const refreshConversation = useCallback(async () => {
+    if (!conversationId || isSending) {
+      return
+    }
+    try {
+      adopt(await getConversation(conversationId))
+    } catch {
+      // Keep the current transcript if the conversation is gone.
+    }
+  }, [adopt, conversationId, isSending])
+
   const sendMessage = useCallback(
     async (content: string) => {
       if (!conversationId || isSending) {
@@ -91,6 +106,7 @@ export function useChat(): UseChatResult {
 
       const optimisticUserMessage: Message = { role: 'user', content }
       setMessages((current) => [...current, optimisticUserMessage])
+      setSuggestions([])
       setIsSending(true)
       setProgressDetail('Thinking…')
       setError(null)
@@ -100,25 +116,29 @@ export function useChat(): UseChatResult {
           setProgressDetail(detail)
         })
         setMessages(conversation.messages)
+        setSuggestions(conversation.suggestions ?? [])
       } catch (err) {
         setMessages((current) => current.filter((message) => message !== optimisticUserMessage))
+        setSuggestions(suggestions)
         setError(err instanceof Error ? err.message : 'Failed to send message')
       } finally {
         setIsSending(false)
         setProgressDetail(null)
       }
     },
-    [conversationId, isSending],
+    [conversationId, isSending, suggestions],
   )
 
   return {
     conversationId,
     messages,
+    suggestions,
     isSending,
     progressDetail,
     error,
     initConversation,
     startNewConversation,
+    refreshConversation,
     sendMessage,
   }
 }

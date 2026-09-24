@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from cctv.api.app import create_app
+from cctv.api.app import create_app, store
 from cctv.config.agent_yaml import save_agent_config
 from cctv.config.effective import UNASSIGNED_SECTOR_ID
 from cctv.config.models import AgentConfig, CameraConfig, LocationConfig, SectorConfig, ToolsConfig
@@ -29,6 +29,7 @@ def client(tmp_path, monkeypatch):
         ],
         tools=ToolsConfig(),
     ))
+    store.clear()
     return TestClient(create_app())
 
 
@@ -99,7 +100,9 @@ def test_conversation_message_flow(client, tmp_path) -> None:
     create_response = client.post("/api/conversations")
     assert create_response.status_code == 200
     conversation = create_response.json()
-    assert conversation["messages"] == []
+    assert len(conversation["messages"]) == 1
+    assert conversation["messages"][0]["role"] == "assistant"
+    assert "live CCTV cameras" in conversation["messages"][0]["content"]
     conversation_id = conversation["id"]
 
     chat_result = {
@@ -123,11 +126,12 @@ def test_conversation_message_flow(client, tmp_path) -> None:
 
     assert message_response.status_code == 200
     body = message_response.json()
-    assert len(body["messages"]) == 2
-    assert body["messages"][0]["role"] == "user"
-    assert body["messages"][1]["role"] == "assistant"
-    assert body["messages"][1]["content"] == "The street looks calm."
-    assert body["messages"][1]["imageUrls"] == ["/api/images/camera_images/test/frame.jpg"]
+    assert len(body["messages"]) == 3
+    assert body["messages"][0]["role"] == "assistant"
+    assert body["messages"][1]["role"] == "user"
+    assert body["messages"][2]["role"] == "assistant"
+    assert body["messages"][2]["content"] == "The street looks calm."
+    assert body["messages"][2]["imageUrls"] == ["/api/images/camera_images/test/frame.jpg"]
 
     get_response = client.get(f"/api/conversations/{conversation_id}")
     assert get_response.status_code == 200
@@ -247,7 +251,8 @@ def test_post_message_chat_failure(client) -> None:
     assert "configuration missing" in response.json()["detail"]
 
     transcript = client.get(f"/api/conversations/{conversation_id}").json()
-    assert transcript["messages"] == []
+    assert len(transcript["messages"]) == 1
+    assert transcript["messages"][0]["role"] == "assistant"
 
 
 def _sse_events(body: str) -> list[dict]:
@@ -319,7 +324,8 @@ def test_message_stream_emits_error(client) -> None:
     assert events[-1]["type"] == "error"
     assert "configuration missing" in events[-1]["detail"]
     transcript = client.get(f"/api/conversations/{conversation_id}").json()
-    assert transcript["messages"] == []
+    assert len(transcript["messages"]) == 1
+    assert transcript["messages"][0]["role"] == "assistant"
 
 
 def test_message_stream_unknown_conversation(client) -> None:
@@ -328,3 +334,168 @@ def test_message_stream_unknown_conversation(client) -> None:
         json={"content": "hello"},
     )
     assert response.status_code == 404
+
+
+def test_create_conversation_welcome_suggests_questions(client) -> None:
+    save_agent_config(
+        AgentConfig(
+            sectors=[SectorConfig(id="prague", name="Prague")],
+            locations=[
+                LocationConfig(id="bridge", name="Charles Bridge", sector_id="prague"),
+            ],
+            cameras=[
+                CameraConfig(
+                    id="cam_a",
+                    name="East",
+                    source="101200",
+                    sector_id="prague",
+                    location_id="bridge",
+                ),
+                CameraConfig(
+                    id="cam_b",
+                    name="",
+                    source="101201",
+                    sector_id="prague",
+                    location_id="bridge",
+                ),
+            ],
+            tools=ToolsConfig(weather=True),
+        )
+    )
+    body = client.post("/api/conversations").json()
+    assert len(body["messages"]) == 1
+    text = body["messages"][0]["content"]
+    assert body["messages"][0]["role"] == "assistant"
+    assert "2 cameras across Prague." in text
+    assert "East" not in text
+    assert "weather" not in text.lower()
+    # The questions travel as data for the chips, not inside the greeting text.
+    assert body["suggestions"] == [
+        "What can you see in Prague right now?",
+        "Which cameras can you see?",
+    ]
+    assert "What can you see in Prague right now?" not in text
+
+
+def test_put_config_refreshes_idle_welcome(client) -> None:
+    conversation_id = client.post("/api/conversations").json()["id"]
+    payload = {
+        "sectors": [{"id": "prague", "name": "Prague", "enabled": True}],
+        "locations": [
+            {
+                "id": "bridge",
+                "name": "Charles Bridge",
+                "sector_id": "prague",
+                "enabled": True,
+                "lat": None,
+                "lon": None,
+            }
+        ],
+        "cameras": [
+            {
+                "id": "bridge",
+                "name": "Bridge cam",
+                "lat": None,
+                "lon": None,
+                "source": "101200",
+                "sector_id": "prague",
+                "location_id": "bridge",
+                "enabled": True,
+            }
+        ],
+        "tools": {"internet": False, "weather": True, "maps": False},
+    }
+    assert client.put("/api/config", json=payload).status_code == 200
+    body = client.get(f"/api/conversations/{conversation_id}").json()
+    assert "1 camera across Prague." in body["messages"][0]["content"]
+    assert body["suggestions"] == [
+        "What can you see in Prague right now?",
+        "Which cameras can you see?",
+    ]
+
+
+def test_reply_followups_replace_the_welcome_suggestions(client) -> None:
+    conversation_id = client.post("/api/conversations").json()["id"]
+    chat_result = {
+        "success": True,
+        "analysis": "The street looks calm.",
+        "messages": [
+            {"role": "user", "content": "How busy is it?"},
+            {"role": "assistant", "content": "The street looks calm."},
+        ],
+        "image_paths": [],
+        "followups": ["Has it cleared yet?", "What about Ječná?"],
+    }
+    with patch("cctv.api.chat.chat_with_tools", return_value=chat_result):
+        body = client.post(
+            f"/api/conversations/{conversation_id}/messages",
+            json={"content": "How busy is it?"},
+        ).json()
+    assert body["suggestions"] == ["Has it cleared yet?", "What about Ječná?"]
+    assert client.get(f"/api/conversations/{conversation_id}").json()["suggestions"] == [
+        "Has it cleared yet?",
+        "What about Ječná?",
+    ]
+
+
+def test_reply_without_followups_clears_suggestions(client) -> None:
+    conversation_id = client.post("/api/conversations").json()["id"]
+    chat_result = {
+        "success": True,
+        "analysis": "ok",
+        "messages": [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "ok"},
+        ],
+        "image_paths": [],
+    }
+    with patch("cctv.api.chat.chat_with_tools", return_value=chat_result):
+        body = client.post(
+            f"/api/conversations/{conversation_id}/messages",
+            json={"content": "hi"},
+        ).json()
+    assert body["suggestions"] == []
+
+
+def test_put_config_does_not_rewrite_after_user_turn(client) -> None:
+    created = client.post("/api/conversations").json()
+    conversation_id = created["id"]
+    original = created["messages"][0]["content"]
+    chat_result = {
+        "success": True,
+        "analysis": "ok",
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "ok"},
+        ],
+        "image_paths": [],
+    }
+    with patch("cctv.api.chat.chat_with_tools", return_value=chat_result):
+        assert (
+            client.post(
+                f"/api/conversations/{conversation_id}/messages",
+                json={"content": "hello"},
+            ).status_code
+            == 200
+        )
+    payload = {
+        "sectors": [],
+        "locations": [],
+        "cameras": [
+            {
+                "id": "bridge",
+                "name": "Bridge",
+                "lat": None,
+                "lon": None,
+                "source": "101200",
+                "location_id": None,
+                "enabled": True,
+            }
+        ],
+        "tools": {"internet": True, "weather": False, "maps": False},
+    }
+    assert client.put("/api/config", json=payload).status_code == 200
+    body = client.get(f"/api/conversations/{conversation_id}").json()
+    assert body["messages"][0]["content"] == original
+    assert any(message["role"] == "user" for message in body["messages"])
+    assert body["suggestions"] == []

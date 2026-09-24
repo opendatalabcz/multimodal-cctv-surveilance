@@ -20,6 +20,7 @@ class ChatMessage(BaseModel):
 class ConversationResponse(BaseModel):
     id: str
     messages: list[ChatMessage] = Field(default_factory=list)
+    suggestions: list[str] = Field(default_factory=list)
 
 
 class PostMessageRequest(BaseModel):
