@@ -43,6 +43,14 @@ export function imageUrlForPath(path: string): string {
   return `/api/images/${encoded}`
 }
 
+export function previewUrlForAnalysis(analysis: CameraAnalysis | null | undefined): string | null {
+  if (!analysis?.preview_path) {
+    return null
+  }
+  // Re-analysis overwrites the same preview file, so vary the URL to defeat the cached copy.
+  return `${imageUrlForPath(analysis.preview_path)}?v=${encodeURIComponent(analysis.analyzed_at)}`
+}
+
 export interface Camera {
   id: string
   name: string

@@ -13,7 +13,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useState, type MouseEvent } from 'react'
 import type { Camera, Location, SceneTag } from '../../shared/models/config'
-import { SCENE_TAGS, imageUrlForPath } from '../../shared/models/config'
+import { SCENE_TAGS, previewUrlForAnalysis } from '../../shared/models/config'
 import type { CameraAnalysisState } from './useConfig'
 
 interface CameraEditorProps {
@@ -51,8 +51,7 @@ export function CameraEditor({
   onPreview,
 }: CameraEditorProps) {
   const [expanded, setExpanded] = useState(false)
-  const previewPath = camera.analysis?.preview_path
-  const previewUrl = previewPath ? imageUrlForPath(previewPath) : null
+  const previewUrl = previewUrlForAnalysis(camera.analysis)
   const tags = camera.analysis?.scene_tags ?? []
   const isAnalyzing =
     analysisState?.status === 'queued' || analysisState?.status === 'analyzing'

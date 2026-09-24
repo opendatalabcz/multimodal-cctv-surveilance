@@ -15,7 +15,7 @@ import Switch from '@mui/material/Switch'
 import Typography from '@mui/material/Typography'
 import { useState } from 'react'
 import type { AppConfig, Camera, Location, Sector } from '../../shared/models/config'
-import { UNASSIGNED_SECTOR_ID, imageUrlForPath, locationsInSector } from '../../shared/models/config'
+import { UNASSIGNED_SECTOR_ID, locationsInSector, previewUrlForAnalysis } from '../../shared/models/config'
 import { SectorAccordion } from './SectorAccordion'
 import type { CameraAnalysisState } from './useConfig'
 
@@ -95,9 +95,7 @@ export function ConfigPanel({
   const canAnalyzeAll = config !== null && !isSaving && !isAnalyzing && analyzableCount > 0
 
   const isSectorExpanded = (sectorId: string) => expandedSectors[sectorId] ?? true
-  const previewUrl = previewCamera?.analysis?.preview_path
-    ? imageUrlForPath(previewCamera.analysis.preview_path)
-    : null
+  const previewUrl = previewUrlForAnalysis(previewCamera?.analysis)
 
   return (
     <Box
