@@ -15,6 +15,7 @@ class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str
     imageUrls: list[str] = Field(default_factory=list)
+    model: str | None = None
 
 
 class ConversationResponse(BaseModel):

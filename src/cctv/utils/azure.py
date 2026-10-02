@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from dotenv import load_dotenv
+
+from cctv.config.models import AgentConfig
 
 V1_SUFFIX = "/openai/v1"
 
@@ -41,3 +43,23 @@ def load_azure_openai_config() -> AzureOpenAIConfig:
         endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
         model=os.getenv("AZURE_OPENAI_MODEL"),
     )
+
+
+def resolve_azure_config(
+    agent_config: AgentConfig,
+    azure: AzureOpenAIConfig | None = None,
+) -> AzureOpenAIConfig:
+    """Copy env credentials and set ``model`` to the selected deployment.
+
+    Unknown providers are rejected here so Azure is not called for them.
+    """
+    base = azure if azure is not None else load_azure_openai_config()
+    selected = next(
+        (item for item in agent_config.models if item.id == agent_config.model),
+        None,
+    )
+    if selected is None:
+        raise ValueError(f"Unknown model: {agent_config.model}")
+    if selected.provider != "azure":
+        raise ValueError(f"Unsupported model provider: {selected.provider}")
+    return replace(base, model=selected.id)

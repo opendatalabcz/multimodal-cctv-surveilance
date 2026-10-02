@@ -17,7 +17,11 @@ from cctv.api.schemas import (
 )
 from cctv.api.store import ConversationStore
 from cctv.api.stream import chat_turn_stream_response
-from cctv.config.agent_yaml import load_agent_config, save_agent_config
+from cctv.config.agent_yaml import (
+    config_with_server_catalog,
+    load_agent_config,
+    save_agent_config,
+)
 from cctv.utils.paths import data_root
 
 logger = logging.getLogger("cctv.api")
@@ -46,7 +50,7 @@ def create_app() -> FastAPI:
     @app.put("/api/config", response_model=ConfigResponse)
     def put_config(body: ConfigResponse) -> ConfigResponse:
         try:
-            save_agent_config(body)
+            save_agent_config(config_with_server_catalog(body))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         store.refresh_idle_welcomes()

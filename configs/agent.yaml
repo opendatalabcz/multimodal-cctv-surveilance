@@ -167,3 +167,14 @@ tools:
   internet: false
   weather: false
   maps: false
+models:
+  - id: gpt-5.6-luna
+    label: GPT-5.6 Luna
+    provider: azure
+  - id: gpt-4o
+    label: GPT-4o
+    provider: azure
+  - id: gpt-6-astra
+    label: GPT-6 Astra
+    provider: azure
+model: gpt-5.6-luna

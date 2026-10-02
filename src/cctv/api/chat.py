@@ -10,7 +10,7 @@ from cctv.api.turn_log import append_turn_log, tool_names_from_messages
 from cctv.config.agent_yaml import load_agent_config
 from cctv.config.prompt import build_system_prompt
 from cctv.tools.registry import tool_schemas_for_config
-from cctv.utils.azure import AzureOpenAIConfig, load_azure_openai_config
+from cctv.utils.azure import AzureOpenAIConfig, resolve_azure_config
 
 MAX_TOOL_ROUNDS = 16
 
@@ -35,7 +35,13 @@ def run_chat_turn(
     agent_config = load_agent_config()
     system_prompt = build_system_prompt(agent_config)
     active_tools = tool_schemas_for_config(agent_config.tools)
-    azure_config = config or load_azure_openai_config()
+    if config is not None:
+        azure_config = config
+    else:
+        try:
+            azure_config = resolve_azure_config(agent_config)
+        except ValueError as exc:
+            return conversation, {"success": False, "error": str(exc)}
 
     conversation.messages.append(ChatMessage(role="user", content=user_content))
     conversation.azure_messages.append({"role": "user", "content": user_content})
@@ -67,6 +73,7 @@ def run_chat_turn(
             role="assistant",
             content=assistant_content,
             imageUrls=image_urls,
+            model=result.get("model") or azure_config.model,
         )
     )
     conversation.suggestions = list(result.get("followups") or [])

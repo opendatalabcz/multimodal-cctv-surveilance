@@ -4,6 +4,7 @@ export interface Message {
   role: MessageRole
   content: string
   imageUrls?: string[]
+  model?: string | null
 }
 
 export interface Conversation {

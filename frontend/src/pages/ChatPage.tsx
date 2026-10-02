@@ -44,6 +44,7 @@ export function ChatPage() {
     setSectorEnabled,
     setLocationEnabled,
     setCameraEnabled,
+    setModel,
     analysisStates,
     analyzeCameras,
     analyzeMissingCameras,
@@ -206,6 +207,9 @@ export function ChatPage() {
               progressDetail={progressDetail}
               error={chatError}
               ready={conversationId !== null && !bootError}
+              models={config?.models ?? []}
+              selectedModel={config?.model ?? ''}
+              onSelectModel={(modelId) => void setModel(modelId)}
               onSend={sendMessage}
               onNewChat={() => void startNewConversation()}
             />

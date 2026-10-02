@@ -167,6 +167,11 @@ def analyze_images(
         return {"success": False, "error": f"Unexpected error: {exc}"}
 
 
+# gpt-6-astra rejects function tools on chat completions unless reasoning is off.
+# Other deployments, including gpt-5.6-luna, keep Azure's default reasoning effort.
+_TOOLS_REQUIRE_REASONING_NONE = frozenset({"gpt-6-astra"})
+
+
 def _chat_completion_payload(
     messages: list[dict[str, Any]],
     config: AzureOpenAIConfig,
@@ -185,6 +190,8 @@ def _chat_completion_payload(
     if tools:
         payload["tools"] = tools
         payload["tool_choice"] = "auto"
+        if config.model in _TOOLS_REQUIRE_REASONING_NONE:
+            payload["reasoning_effort"] = "none"
     return payload
 
 

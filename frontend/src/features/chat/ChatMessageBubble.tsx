@@ -11,9 +11,10 @@ import { AssistantMarkdown } from './AssistantMarkdown'
 
 interface ChatMessageBubbleProps {
   message: Message
+  modelLabel?: string | null
 }
 
-export function ChatMessageBubble({ message }: ChatMessageBubbleProps) {
+export function ChatMessageBubble({ message, modelLabel }: ChatMessageBubbleProps) {
   const isUser = message.role === 'user'
   const [expandedUrl, setExpandedUrl] = useState<string | null>(null)
 
@@ -36,6 +37,11 @@ export function ChatMessageBubble({ message }: ChatMessageBubbleProps) {
           borderRadius: 2,
         }}
       >
+        {!isUser && modelLabel && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+            {modelLabel}
+          </Typography>
+        )}
         {isUser ? (
           <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
             {message.content}

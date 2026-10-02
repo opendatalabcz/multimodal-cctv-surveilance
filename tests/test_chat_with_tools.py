@@ -2,7 +2,7 @@ import json as json_mod
 from unittest.mock import MagicMock, patch
 
 import cctv.tools  # noqa: F401
-from cctv.analysis.azure_vision import chat_with_tools
+from cctv.analysis.azure_vision import _chat_completion_payload, chat_with_tools
 from cctv.utils.azure import AzureOpenAIConfig
 
 
@@ -718,3 +718,25 @@ def test_second_fetch_stubs_previous_frames() -> None:
     assert any("cam_a" in stub for stub in stubs)
     image_batches = _image_payloads(after_second_fetch)
     assert image_batches == [["/tmp/cam_c.jpg"]]
+
+
+def test_gpt_6_astra_disables_reasoning_when_tools_are_sent() -> None:
+    tools = [{"type": "function", "function": {"name": "list_cameras"}}]
+    astra = _chat_completion_payload(
+        [{"role": "user", "content": "hi"}],
+        AzureOpenAIConfig(api_key="k", endpoint="https://example.test", model="gpt-6-astra"),
+        tools=tools,
+    )
+    luna = _chat_completion_payload(
+        [{"role": "user", "content": "hi"}],
+        AzureOpenAIConfig(api_key="k", endpoint="https://example.test", model="gpt-5.6-luna"),
+        tools=tools,
+    )
+    without_tools = _chat_completion_payload(
+        [{"role": "user", "content": "hi"}],
+        AzureOpenAIConfig(api_key="k", endpoint="https://example.test", model="gpt-6-astra"),
+    )
+
+    assert astra["reasoning_effort"] == "none"
+    assert "reasoning_effort" not in luna
+    assert "reasoning_effort" not in without_tools

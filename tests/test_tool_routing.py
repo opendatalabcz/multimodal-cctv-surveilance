@@ -10,6 +10,7 @@ from cctv.config.models import (
     CameraAnalysis,
     CameraConfig,
     LocationConfig,
+    ModelOption,
     SectorConfig,
     ToolsConfig,
 )
@@ -19,7 +20,7 @@ from cctv.config.prompt import (
     build_welcome_suggestions,
 )
 from cctv.tools.registry import tool_names_for_config, tool_schemas_for_config
-from cctv.utils.azure import AzureOpenAIConfig
+from cctv.utils.azure import AzureOpenAIConfig, resolve_azure_config
 
 
 def _fake_config() -> AzureOpenAIConfig:
@@ -163,6 +164,80 @@ def test_run_chat_turn_passes_max_tool_rounds() -> None:
         run_chat_turn(conversation, "hello", config=_fake_config())
 
     assert captured["max_tool_rounds"] == 16
+
+
+def test_resolve_azure_config_keeps_credentials_and_switches_deployment() -> None:
+    azure = AzureOpenAIConfig(api_key="key", endpoint="https://example.test", model="gpt-5.6-luna")
+    resolved = resolve_azure_config(AgentConfig(model="gpt-4o"), azure=azure)
+    assert resolved.model == "gpt-4o"
+    assert resolved.api_key == "key"
+    assert resolved.endpoint == "https://example.test"
+
+
+def test_resolve_azure_config_rejects_unknown_provider() -> None:
+    azure = AzureOpenAIConfig(api_key="key", endpoint="https://example.test", model="gpt-5.6-luna")
+    agent = AgentConfig(
+        models=[ModelOption(id="qwen", label="Qwen", provider="qwen")],
+        model="qwen",
+    )
+    try:
+        resolve_azure_config(agent, azure=azure)
+    except ValueError as exc:
+        assert "provider" in str(exc)
+    else:
+        raise AssertionError("expected unsupported provider to fail")
+
+
+def test_run_chat_turn_uses_selected_model_and_labels_reply() -> None:
+    conversation = Conversation(id="conv-model")
+    seen: dict = {}
+
+    def fake_chat(messages, *, config=None, **kwargs):
+        seen["model"] = config.model
+        seen["api_key"] = config.api_key
+        seen["endpoint"] = config.endpoint
+        return {
+            "success": True,
+            "analysis": "ok",
+            "model": config.model,
+            "messages": list(messages) + [{"role": "assistant", "content": "ok"}],
+            "image_paths": [],
+        }
+
+    azure = AzureOpenAIConfig(api_key="key", endpoint="https://example.test", model="gpt-5.6-luna")
+    with (
+        patch("cctv.api.chat.load_agent_config", return_value=AgentConfig(model="gpt-6-astra")),
+        patch("cctv.utils.azure.load_azure_openai_config", return_value=azure),
+        patch("cctv.api.chat.chat_with_tools", side_effect=fake_chat),
+    ):
+        updated, result = run_chat_turn(conversation, "hello")
+
+    assert result["success"] is True
+    assert seen == {
+        "model": "gpt-6-astra",
+        "api_key": "key",
+        "endpoint": "https://example.test",
+    }
+    assert updated.messages[-1].role == "assistant"
+    assert updated.messages[-1].model == "gpt-6-astra"
+
+
+def test_run_chat_turn_does_not_call_azure_for_unsupported_provider() -> None:
+    conversation = Conversation(id="conv-qwen")
+    agent = AgentConfig(
+        models=[ModelOption(id="qwen", label="Qwen", provider="qwen")],
+        model="qwen",
+    )
+    with (
+        patch("cctv.api.chat.load_agent_config", return_value=agent),
+        patch("cctv.api.chat.chat_with_tools") as chat,
+    ):
+        updated, result = run_chat_turn(conversation, "hello")
+
+    chat.assert_not_called()
+    assert result["success"] is False
+    assert "provider" in result["error"]
+    assert updated.messages == []
 
 
 def _analysis(description: str, tags: list[str]) -> CameraAnalysis:

@@ -12,7 +12,7 @@ from cctv.analysis.azure_vision import analyze_images
 from cctv.config.agent_yaml import load_agent_config, save_agent_config
 from cctv.config.models import CameraAnalysis, CameraConfig, SceneTag
 from cctv.tools.get_image import execute_get_image
-from cctv.utils.azure import AzureOpenAIConfig
+from cctv.utils.azure import AzureOpenAIConfig, resolve_azure_config
 from cctv.utils.paths import data_root, images_dir
 
 SCENE_TAG_VALUES = tuple(SceneTag.__args__)
@@ -53,6 +53,12 @@ def analyze_camera_metadata(
         raise RuntimeError(
             "Camera is not currently accessible; kept the existing preview and description"
         )
+
+    if azure_config is None:
+        try:
+            azure_config = resolve_azure_config(config)
+        except ValueError as exc:
+            raise RuntimeError(str(exc)) from exc
 
     result = analyze_images(
         [image_path],

@@ -9,8 +9,10 @@ from cctv.config.models import (
     AgentConfig,
     CameraAnalysis,
     CameraConfig,
+    ModelOption,
     SectorConfig,
     ToolsConfig,
+    default_model_catalog,
 )
 
 
@@ -197,3 +199,43 @@ def test_generated_camera_metadata_is_stored_in_overlay(tmp_path, monkeypatch) -
 
     assert load_overlay().cameras[0].analysis is not None
     assert load_agent_config().cameras[0].analysis.description == "A pedestrian bridge."
+
+
+def test_overlay_stores_selected_model_only(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AZURE_OPENAI_MODEL", "gpt-5.6-luna")
+    base_path = tmp_path / "agent.yaml"
+    overlay_path = tmp_path / "agent.local.yaml"
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: base_path)
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay_path)
+    base = AgentConfig(cameras=[_cam("bridge", "Bridge")])
+    save_agent_config(base, base_path)
+
+    save_agent_config(base.model_copy(update={"model": "gpt-4o"}))
+
+    overlay = load_overlay()
+    assert overlay.model == "gpt-4o"
+    assert overlay.cameras == []
+    assert overlay.tools is None
+    text = overlay_path.read_text(encoding="utf-8")
+    assert "models:" not in text
+    assert [item.id for item in load_agent_config(base_path).models] == [
+        item.id for item in default_model_catalog()
+    ]
+    assert load_agent_config(base_path).model == "gpt-5.6-luna"
+    merged = load_agent_config()
+    assert merged.model == "gpt-4o"
+    assert [item.id for item in merged.models] == [item.id for item in default_model_catalog()]
+
+
+def test_env_deployment_is_appended_when_missing_from_catalog(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AZURE_OPENAI_MODEL", "custom-deploy")
+    config_path = tmp_path / "agent.yaml"
+    save_agent_config(AgentConfig(cameras=[_cam("bridge", "Bridge")]), config_path)
+
+    loaded = load_agent_config(config_path)
+
+    assert [item.id for item in loaded.models] == [
+        *[item.id for item in default_model_catalog()],
+        "custom-deploy",
+    ]
+    assert loaded.models[-1] == ModelOption(id="custom-deploy", label="custom-deploy", provider="azure")

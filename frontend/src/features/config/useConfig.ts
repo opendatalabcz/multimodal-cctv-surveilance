@@ -28,6 +28,7 @@ interface UseConfigResult {
   setSectorEnabled: (sectorId: string, enabled: boolean) => Promise<void>
   setLocationEnabled: (locationId: string, enabled: boolean) => Promise<void>
   setCameraEnabled: (cameraId: string, enabled: boolean) => Promise<void>
+  setModel: (modelId: string) => Promise<void>
   setToolFlag: (key: keyof AppConfig['tools'], value: boolean) => void
   analysisStates: Record<string, CameraAnalysisState>
   analyzeCameras: (cameraIds: string[]) => Promise<void>
@@ -62,6 +63,8 @@ function applyEnabledFlags(current: AppConfig, saved: AppConfig): AppConfig {
       cameraEnabled.has(camera.id) ? { ...camera, enabled: cameraEnabled.get(camera.id)! } : camera,
     ),
     tools: saved.tools,
+    models: saved.models,
+    model: saved.model,
   }
 }
 
@@ -417,6 +420,30 @@ export function useConfig(): UseConfigResult {
     [config, savedConfig],
   )
 
+  const setModel = useCallback(
+    async (modelId: string) => {
+      if (!config || !savedConfig) {
+        return
+      }
+      const previous = config
+      setConfig({ ...config, model: modelId })
+      setError(null)
+      try {
+        const saved = await putConfig({ ...savedConfig, model: modelId })
+        setSavedConfig(saved)
+        setConfig((current) =>
+          current ? { ...current, model: saved.model, models: saved.models } : saved,
+        )
+      } catch (err) {
+        setConfig(previous)
+        const message = err instanceof Error ? err.message : 'Failed to save config'
+        setError(message)
+        throw err instanceof Error ? err : new Error(message)
+      }
+    },
+    [config, savedConfig],
+  )
+
   const setToolFlag = useCallback((key: keyof AppConfig['tools'], value: boolean) => {
     setConfig((current) => {
       if (!current) {
@@ -453,6 +480,7 @@ export function useConfig(): UseConfigResult {
     setSectorEnabled,
     setLocationEnabled,
     setCameraEnabled,
+    setModel,
     setToolFlag,
     analysisStates,
     analyzeCameras,

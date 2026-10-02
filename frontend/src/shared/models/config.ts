@@ -69,11 +69,26 @@ export interface ToolsConfig {
   maps: boolean
 }
 
+export interface ModelOption {
+  id: string
+  label: string
+  provider: string
+}
+
 export interface AppConfig {
   sectors: Sector[]
   locations: Location[]
   cameras: Camera[]
   tools: ToolsConfig
+  models: ModelOption[]
+  model: string
+}
+
+export function modelLabel(modelId: string | null | undefined, models: ModelOption[]): string | null {
+  if (!modelId) {
+    return null
+  }
+  return models.find((item) => item.id === modelId)?.label ?? modelId
 }
 
 export const UNASSIGNED_SECTOR_ID = 'unassigned'

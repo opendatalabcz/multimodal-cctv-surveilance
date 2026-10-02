@@ -68,6 +68,72 @@ def test_get_and_put_config(client, tmp_path, monkeypatch) -> None:
     assert get_response.json() == body
 
 
+def test_put_config_keeps_server_model_catalog(client, tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AZURE_OPENAI_MODEL", "gpt-5.6-luna")
+    config_path = tmp_path / "agent.yaml"
+    save_agent_config(
+        AgentConfig(
+            cameras=[CameraConfig(id="bridge", name="Bridge", source="101200")],
+            tools=ToolsConfig(),
+        ),
+        config_path,
+    )
+    catalog = client.get("/api/config").json()["models"]
+
+    put_response = client.put(
+        "/api/config",
+        json={
+            "cameras": [
+                {
+                    "id": "bridge",
+                    "name": "Bridge",
+                    "lat": None,
+                    "lon": None,
+                    "source": "101200",
+                    "enabled": True,
+                }
+            ],
+            "tools": {"internet": False, "weather": False, "maps": False},
+            "models": [{"id": "evil", "label": "Evil", "provider": "azure"}],
+            "model": "gpt-4o",
+        },
+    )
+    assert put_response.status_code == 200
+    body = put_response.json()
+    assert body["model"] == "gpt-4o"
+    assert body["models"] == catalog
+    overlay = (tmp_path / "agent.local.yaml").read_text(encoding="utf-8")
+    assert "model: gpt-4o" in overlay
+    assert "models:" not in overlay
+    assert "evil" not in config_path.read_text(encoding="utf-8")
+
+    empty_models = client.put(
+        "/api/config",
+        json={
+            "cameras": body["cameras"],
+            "sectors": body["sectors"],
+            "locations": body["locations"],
+            "tools": body["tools"],
+            "models": [],
+            "model": "gpt-4o",
+        },
+    )
+    assert empty_models.status_code == 200
+    assert empty_models.json()["models"] == catalog
+
+    rejected = client.put(
+        "/api/config",
+        json={
+            "cameras": body["cameras"],
+            "tools": body["tools"],
+            "models": catalog,
+            "model": "not-a-deployment",
+        },
+    )
+    assert rejected.status_code == 400
+    assert "Unknown model" in rejected.json()["detail"]
+
+
 def test_analyze_camera_endpoint_returns_saved_metadata(client) -> None:
     analyzed = CameraConfig(
         id="test_cam",

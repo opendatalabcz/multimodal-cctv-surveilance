@@ -57,6 +57,30 @@ class CameraConfig(BaseModel):
     analysis: CameraAnalysis | None = None
 
 
+class ModelOption(BaseModel):
+    """One deployment the chat UI can select.
+
+    ``provider`` is ``azure`` for every shipped option. A later open-source
+    model would use another provider and its own client; the chat loop rejects
+    unknown providers instead of calling Azure.
+    """
+
+    id: str
+    label: str
+    provider: str = "azure"
+
+
+DEFAULT_MODEL_ID = "gpt-5.6-luna"
+
+
+def default_model_catalog() -> list[ModelOption]:
+    return [
+        ModelOption(id="gpt-5.6-luna", label="GPT-5.6 Luna", provider="azure"),
+        ModelOption(id="gpt-4o", label="GPT-4o", provider="azure"),
+        ModelOption(id="gpt-6-astra", label="GPT-6 Astra", provider="azure"),
+    ]
+
+
 class ToolsConfig(BaseModel):
     internet: bool = False
     weather: bool = False
@@ -79,6 +103,8 @@ class AgentConfig(BaseModel):
     locations: list[LocationConfig] = Field(default_factory=list)
     cameras: list[CameraConfig] = Field(default_factory=list)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
+    models: list[ModelOption] = Field(default_factory=default_model_catalog)
+    model: str = DEFAULT_MODEL_ID
 
 
 class AgentOverlay(BaseModel):
@@ -91,3 +117,4 @@ class AgentOverlay(BaseModel):
     cameras: list[CameraConfig] = Field(default_factory=list)
     remove_camera_ids: list[str] = Field(default_factory=list)
     tools: ToolsConfig | None = None
+    model: str | None = None

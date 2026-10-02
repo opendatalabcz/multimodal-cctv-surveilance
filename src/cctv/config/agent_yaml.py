@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
 import yaml
+from dotenv import load_dotenv
 
 from cctv.config.effective import (
     normalize_agent_config,
@@ -11,7 +13,15 @@ from cctv.config.effective import (
     validate_sector_references,
     validate_sector_removals,
 )
-from cctv.config.models import AgentConfig, AgentOverlay, CameraConfig, LocationConfig, SectorConfig
+from cctv.config.models import (
+    AgentConfig,
+    AgentOverlay,
+    CameraConfig,
+    LocationConfig,
+    ModelOption,
+    SectorConfig,
+    default_model_catalog,
+)
 from cctv.utils.paths import project_root
 
 
@@ -107,8 +117,16 @@ def merge_agent_config(base: AgentConfig, overlay: AgentOverlay) -> AgentConfig:
     )
 
     tools = overlay.tools if overlay.tools is not None else base.tools
+    selected = overlay.model if overlay.model is not None else base.model
     return normalize_agent_config(
-        AgentConfig(sectors=sectors, locations=locations, cameras=cameras, tools=tools)
+        AgentConfig(
+            sectors=sectors,
+            locations=locations,
+            cameras=cameras,
+            tools=tools,
+            models=list(base.models),
+            model=selected,
+        )
     )
 
 
@@ -148,6 +166,9 @@ def overlay_from_diff(base: AgentConfig, current: AgentConfig) -> AgentOverlay:
         if original is None or original.model_dump() != camera.model_dump():
             changed.append(camera)
     tools = None if current.tools == base.tools else current.tools
+    # The model catalog stays in the committed file. Only a non-default selection
+    # is a local override.
+    model = None if current.model == base.model else current.model
     return AgentOverlay(
         sectors=changed_sectors,
         remove_sector_ids=remove_sector_ids,
@@ -156,7 +177,41 @@ def overlay_from_diff(base: AgentConfig, current: AgentConfig) -> AgentOverlay:
         cameras=changed,
         remove_camera_ids=remove_camera_ids,
         tools=tools,
+        model=model,
     )
+
+
+def with_effective_models(config: AgentConfig) -> AgentConfig:
+    """Catalog from config, plus the env deployment when it is not listed.
+
+    The selected id is the config value when it is in that list, otherwise the
+    env deployment, otherwise the first catalog entry.
+    """
+    load_dotenv()
+    models = list(config.models) or default_model_catalog()
+    env_model = (os.getenv("AZURE_OPENAI_MODEL") or "").strip()
+    if env_model and all(item.id != env_model for item in models):
+        models.append(ModelOption(id=env_model, label=env_model, provider="azure"))
+    ids = {item.id for item in models}
+    selected = config.model
+    if selected not in ids:
+        if env_model and env_model in ids:
+            selected = env_model
+        else:
+            selected = models[0].id
+    return config.model_copy(update={"models": models, "model": selected})
+
+
+def config_with_server_catalog(incoming: AgentConfig) -> AgentConfig:
+    """Drop any client-supplied model list and keep the committed catalog.
+
+    ``incoming.model`` must be in the effective list (catalog plus env deployment).
+    """
+    base = load_base_config()
+    allowed = {item.id for item in with_effective_models(base).models}
+    if incoming.model not in allowed:
+        raise ValueError(f"Unknown model: {incoming.model}")
+    return incoming.model_copy(update={"models": list(base.models)})
 
 
 def load_agent_config(path: Path | None = None) -> AgentConfig:
@@ -164,9 +219,9 @@ def load_agent_config(path: Path | None = None) -> AgentConfig:
     if path is not None:
         data = _read_yaml(path)
         if not data:
-            return normalize_agent_config(AgentConfig())
-        return normalize_agent_config(AgentConfig.model_validate(data))
-    return merge_agent_config(load_base_config(), load_overlay())
+            return with_effective_models(normalize_agent_config(AgentConfig()))
+        return with_effective_models(normalize_agent_config(AgentConfig.model_validate(data)))
+    return with_effective_models(merge_agent_config(load_base_config(), load_overlay()))
 
 
 def save_agent_config(config: AgentConfig, path: Path | None = None) -> None:
