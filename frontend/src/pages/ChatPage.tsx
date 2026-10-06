@@ -45,6 +45,8 @@ export function ChatPage() {
     setLocationEnabled,
     setCameraEnabled,
     setModel,
+    setReasoning,
+    setVerbosity,
     analysisStates,
     analyzeCameras,
     analyzeMissingCameras,
@@ -209,7 +211,11 @@ export function ChatPage() {
               ready={conversationId !== null && !bootError}
               models={config?.models ?? []}
               selectedModel={config?.model ?? ''}
+              selectedReasoning={config?.reasoning?.[config.model] ?? 'default'}
+              selectedVerbosity={config?.verbosity?.[config.model] ?? 'medium'}
               onSelectModel={(modelId) => void setModel(modelId)}
+              onSelectReasoning={(effort) => void setReasoning(effort)}
+              onSelectVerbosity={(level) => void setVerbosity(level)}
               onSend={sendMessage}
               onNewChat={() => void startNewConversation()}
             />

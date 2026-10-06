@@ -239,3 +239,71 @@ def test_env_deployment_is_appended_when_missing_from_catalog(tmp_path, monkeypa
         "custom-deploy",
     ]
     assert loaded.models[-1] == ModelOption(id="custom-deploy", label="custom-deploy", provider="azure")
+
+
+def test_overlay_stores_non_default_settings_per_model(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AZURE_OPENAI_MODEL", "gpt-5.6-luna")
+    base_path = tmp_path / "agent.yaml"
+    overlay_path = tmp_path / "agent.local.yaml"
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: base_path)
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay_path)
+    save_agent_config(AgentConfig(cameras=[_cam("bridge", "Bridge")]), base_path)
+
+    save_agent_config(AgentConfig(cameras=[_cam("bridge", "Bridge")], reasoning="high"))
+    assert load_overlay().reasoning == {"gpt-5.6-luna": "high"}
+    assert load_overlay().verbosity == {}
+    assert load_overlay().model is None
+    loaded = load_agent_config()
+    assert loaded.reasoning["gpt-5.6-luna"] == "high"
+    assert loaded.reasoning["gpt-6-astra"] == "medium"
+    assert loaded.verbosity["gpt-5.6-luna"] == "medium"
+
+    save_agent_config(
+        AgentConfig(
+            cameras=[_cam("bridge", "Bridge")],
+            model="gpt-6-astra",
+            reasoning={"gpt-5.6-luna": "high", "gpt-6-astra": "max"},
+            verbosity={"gpt-5.6-luna": "low", "gpt-6-astra": "high"},
+        )
+    )
+    overlay = load_overlay()
+    assert overlay.model == "gpt-6-astra"
+    assert overlay.reasoning == {"gpt-5.6-luna": "high", "gpt-6-astra": "max"}
+    assert overlay.verbosity == {"gpt-5.6-luna": "low", "gpt-6-astra": "high"}
+    merged = load_agent_config()
+    assert merged.model == "gpt-6-astra"
+    assert merged.reasoning["gpt-5.6-luna"] == "high"
+    assert merged.reasoning["gpt-6-astra"] == "max"
+    assert merged.reasoning["gpt-4o"] == "default"
+    assert merged.verbosity["gpt-5.6-luna"] == "low"
+    assert merged.verbosity["gpt-6-astra"] == "high"
+    assert merged.verbosity["gpt-4o"] == "medium"
+
+    save_agent_config(
+        AgentConfig(
+            cameras=[_cam("bridge", "Bridge")],
+            model="gpt-5.6-luna",
+            reasoning=merged.reasoning,
+            verbosity=merged.verbosity,
+        )
+    )
+    kept = load_agent_config()
+    assert kept.model == "gpt-5.6-luna"
+    assert kept.reasoning["gpt-6-astra"] == "max"
+    assert kept.verbosity["gpt-5.6-luna"] == "low"
+
+
+def test_legacy_reasoning_string_loads_for_the_selected_model(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AZURE_OPENAI_MODEL", "gpt-5.6-luna")
+    base_path = tmp_path / "agent.yaml"
+    overlay_path = tmp_path / "agent.local.yaml"
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: base_path)
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay_path)
+    save_agent_config(AgentConfig(cameras=[_cam("bridge", "Bridge")]), base_path)
+    overlay_path.write_text("model: gpt-6-astra\nreasoning: low\n", encoding="utf-8")
+
+    assert load_overlay().reasoning == {"gpt-6-astra": "low"}
+    merged = load_agent_config()
+    assert merged.model == "gpt-6-astra"
+    assert merged.reasoning["gpt-6-astra"] == "low"
+    assert merged.reasoning["gpt-5.6-luna"] == "default"

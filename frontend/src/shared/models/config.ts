@@ -69,10 +69,19 @@ export interface ToolsConfig {
   maps: boolean
 }
 
+export interface ModelReasoning {
+  choices: string[]
+  default: string
+  locked: boolean
+}
+
 export interface ModelOption {
   id: string
   label: string
   provider: string
+  transport: string
+  reasoning: ModelReasoning
+  verbosity: ModelReasoning
 }
 
 export interface AppConfig {
@@ -82,6 +91,29 @@ export interface AppConfig {
   tools: ToolsConfig
   models: ModelOption[]
   model: string
+  reasoning: Record<string, string>
+  verbosity: Record<string, string>
+}
+
+const REASONING_LABELS: Record<string, string> = {
+  default: 'Default',
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  xhigh: 'Extra high',
+  max: 'Max',
+}
+
+export function reasoningLabel(effort: string): string {
+  return REASONING_LABELS[effort] ?? effort
+}
+
+export function controlForModel(
+  modelId: string,
+  models: ModelOption[],
+  key: 'reasoning' | 'verbosity',
+): ModelReasoning | null {
+  return models.find((item) => item.id === modelId)?.[key] ?? null
 }
 
 export function modelLabel(modelId: string | null | undefined, models: ModelOption[]): string | null {

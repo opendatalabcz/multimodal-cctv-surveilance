@@ -171,10 +171,37 @@ models:
   - id: gpt-5.6-luna
     label: GPT-5.6 Luna
     provider: azure
+    transport: chat_completions
+    reasoning:
+      choices: [default, low, medium, high]
+      default: default
+      locked: false
+    verbosity:
+      choices: [low, medium, high]
+      default: medium
+      locked: false
   - id: gpt-4o
     label: GPT-4o
     provider: azure
+    transport: chat_completions
+    reasoning:
+      choices: []
+      default: default
+      locked: true
+    verbosity:
+      choices: []
+      default: medium
+      locked: true
   - id: gpt-6-astra
     label: GPT-6 Astra
     provider: azure
+    transport: responses
+    reasoning:
+      choices: [low, medium, high, xhigh, max]
+      default: medium
+      locked: false
+    verbosity:
+      choices: [low, medium, high]
+      default: medium
+      locked: false
 model: gpt-5.6-luna

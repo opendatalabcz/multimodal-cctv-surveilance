@@ -32,6 +32,15 @@ class AzureOpenAIConfig:
         return f"{base}/chat/completions"
 
     @property
+    def responses_url(self) -> str | None:
+        if not self.endpoint:
+            return None
+        base = self.endpoint.rstrip("/")
+        if not base.endswith(V1_SUFFIX):
+            base += V1_SUFFIX
+        return f"{base}/responses"
+
+    @property
     def is_configured(self) -> bool:
         return bool(self.api_key and self.endpoint and self.model)
 

@@ -2,7 +2,11 @@ import json as json_mod
 from unittest.mock import MagicMock, patch
 
 import cctv.tools  # noqa: F401
-from cctv.analysis.azure_vision import _chat_completion_payload, chat_with_tools
+from cctv.analysis.azure_vision import (
+    _chat_completion_payload,
+    _responses_payload,
+    chat_with_tools,
+)
 from cctv.utils.azure import AzureOpenAIConfig
 
 
@@ -720,23 +724,135 @@ def test_second_fetch_stubs_previous_frames() -> None:
     assert image_batches == [["/tmp/cam_c.jpg"]]
 
 
-def test_gpt_6_astra_disables_reasoning_when_tools_are_sent() -> None:
-    tools = [{"type": "function", "function": {"name": "list_cameras"}}]
-    astra = _chat_completion_payload(
+def test_luna_default_omits_reasoning_effort() -> None:
+    config = AzureOpenAIConfig(api_key="k", endpoint="https://example.test", model="gpt-5.6-luna")
+    default_payload = _chat_completion_payload(
         [{"role": "user", "content": "hi"}],
-        AzureOpenAIConfig(api_key="k", endpoint="https://example.test", model="gpt-6-astra"),
-        tools=tools,
+        config,
+        reasoning="default",
     )
-    luna = _chat_completion_payload(
+    high_payload = _chat_completion_payload(
         [{"role": "user", "content": "hi"}],
-        AzureOpenAIConfig(api_key="k", endpoint="https://example.test", model="gpt-5.6-luna"),
-        tools=tools,
+        config,
+        reasoning="high",
     )
-    without_tools = _chat_completion_payload(
+    medium_verbosity = _chat_completion_payload(
         [{"role": "user", "content": "hi"}],
-        AzureOpenAIConfig(api_key="k", endpoint="https://example.test", model="gpt-6-astra"),
+        config,
+        reasoning="default",
+        verbosity="medium",
     )
+    low_verbosity = _chat_completion_payload(
+        [{"role": "user", "content": "hi"}],
+        config,
+        reasoning="default",
+        verbosity="low",
+    )
+    assert "reasoning_effort" not in default_payload
+    assert "verbosity" not in default_payload
+    assert "verbosity" not in medium_verbosity
+    assert high_payload["reasoning_effort"] == "high"
+    assert low_verbosity["verbosity"] == "low"
 
-    assert astra["reasoning_effort"] == "none"
-    assert "reasoning_effort" not in luna
-    assert "reasoning_effort" not in without_tools
+
+def test_astra_responses_payload_uses_medium_reasoning() -> None:
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "list_cameras",
+                "description": "List cameras",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        }
+    ]
+    config = AzureOpenAIConfig(
+        api_key="k",
+        endpoint="https://example.test/openai/v1",
+        model="gpt-6-astra",
+    )
+    payload = _responses_payload(
+        [{"role": "system", "content": "Be brief."}, {"role": "user", "content": "hi"}],
+        config,
+        tools=tools,
+        reasoning="medium",
+    )
+    assert payload["reasoning"] == {"effort": "medium"}
+    assert "text" not in payload
+    assert "reasoning_effort" not in payload
+    detailed = _responses_payload(
+        [{"role": "user", "content": "hi"}],
+        config,
+        reasoning="max",
+        verbosity="high",
+    )
+    assert detailed["reasoning"] == {"effort": "max"}
+    assert detailed["text"] == {"verbosity": "high"}
+    assert payload["instructions"] == "Be brief."
+    assert payload["tools"][0]["name"] == "list_cameras"
+    assert payload["tools"][0]["strict"] is False
+    assert config.responses_url == "https://example.test/openai/v1/responses"
+
+
+def test_astra_responses_tool_round_returns_assistant_text() -> None:
+    posted: list[dict] = []
+    bodies = [
+        {
+            "output": [
+                {
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "list_cameras",
+                    "arguments": "{}",
+                }
+            ],
+            "usage": {},
+        },
+        {
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Two cameras."}],
+                }
+            ],
+            "usage": {},
+        },
+    ]
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        posted.append({"url": url, "json": json})
+        response = MagicMock()
+        response.ok = True
+        response.json.return_value = bodies.pop(0)
+        return response
+
+    config = AzureOpenAIConfig(
+        api_key="k",
+        endpoint="https://example.test",
+        model="gpt-6-astra",
+    )
+    with (
+        patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post),
+        patch(
+            "cctv.analysis.azure_vision.execute_tool",
+            return_value={"tool_content": '{"cameras":[]}', "image_path": None, "image_paths": []},
+        ) as execute,
+    ):
+        result = chat_with_tools(
+            [{"role": "user", "content": "What cameras are there?"}],
+            config=config,
+            system_prompt="Be brief.",
+            tools=[{"type": "function", "function": {"name": "list_cameras", "parameters": {}}}],
+            transport="responses",
+            reasoning="medium",
+            parse_json=False,
+        )
+
+    execute.assert_called_once_with("list_cameras", {})
+    assert posted[0]["url"].endswith("/responses")
+    assert posted[0]["json"]["reasoning"] == {"effort": "medium"}
+    assert "reasoning_effort" not in posted[0]["json"]
+    assert posted[1]["json"]["input"][-1]["type"] == "function_call_output"
+    assert result["success"] is True
+    assert result["analysis"] == "Two cameras."

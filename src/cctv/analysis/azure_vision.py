@@ -167,11 +167,6 @@ def analyze_images(
         return {"success": False, "error": f"Unexpected error: {exc}"}
 
 
-# gpt-6-astra rejects function tools on chat completions unless reasoning is off.
-# Other deployments, including gpt-5.6-luna, keep Azure's default reasoning effort.
-_TOOLS_REQUIRE_REASONING_NONE = frozenset({"gpt-6-astra"})
-
-
 def _chat_completion_payload(
     messages: list[dict[str, Any]],
     config: AzureOpenAIConfig,
@@ -179,6 +174,8 @@ def _chat_completion_payload(
     tools: list[dict[str, Any]] | None = None,
     max_tokens: int = 1500,
     temperature: float | None = None,
+    reasoning: str | None = None,
+    verbosity: str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": config.model,
@@ -187,15 +184,18 @@ def _chat_completion_payload(
     }
     if temperature is not None:
         payload["temperature"] = temperature
+    if reasoning and reasoning != "default":
+        payload["reasoning_effort"] = reasoning
+    if verbosity and verbosity != "medium":
+        payload["verbosity"] = verbosity
     if tools:
         payload["tools"] = tools
         payload["tool_choice"] = "auto"
-        if config.model in _TOOLS_REQUIRE_REASONING_NONE:
-            payload["reasoning_effort"] = "none"
     return payload
 
 
-def _post_chat_completion(
+def _post_json(
+    url: str,
     payload: dict[str, Any],
     config: AzureOpenAIConfig,
     *,
@@ -205,9 +205,161 @@ def _post_chat_completion(
         "Content-Type": "application/json",
         "api-key": config.api_key,
     }
-    response = requests.post(config.api_url, headers=headers, json=payload, timeout=timeout)
+    response = requests.post(url, headers=headers, json=payload, timeout=timeout)
     _raise_for_azure_status(response)
     return response.json()
+
+
+def _post_chat_completion(
+    payload: dict[str, Any],
+    config: AzureOpenAIConfig,
+    *,
+    timeout: int = 90,
+) -> dict[str, Any]:
+    if not config.api_url:
+        raise requests.RequestException("Azure OpenAI configuration missing")
+    return _post_json(config.api_url, payload, config, timeout=timeout)
+
+
+def _responses_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    converted: list[dict[str, Any]] = []
+    for tool in tools:
+        function = tool.get("function") or {}
+        converted.append(
+            {
+                "type": "function",
+                "name": function.get("name") or "",
+                "description": function.get("description") or "",
+                "parameters": function.get("parameters") or {"type": "object", "properties": {}},
+                "strict": False,
+            }
+        )
+    return converted
+
+
+def _responses_content(content: Any, *, role: str) -> list[dict[str, Any]] | str:
+    text_type = "output_text" if role == "assistant" else "input_text"
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return "" if content is None else str(content)
+    parts: list[dict[str, Any]] = []
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+        part_type = part.get("type")
+        if part_type == "text":
+            parts.append({"type": text_type, "text": part.get("text") or ""})
+        elif part_type == "image_url":
+            image = part.get("image_url")
+            url = image.get("url") if isinstance(image, dict) else image
+            if url:
+                parts.append({"type": "input_image", "image_url": url})
+    return parts
+
+
+def _responses_input(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+    """Turn stored chat messages into Responses instructions plus input items."""
+    instructions: list[str] = []
+    items: list[dict[str, Any]] = []
+    for message in materialize_for_azure(messages):
+        role = message.get("role")
+        if role == "system":
+            content = message.get("content")
+            if isinstance(content, str) and content:
+                instructions.append(content)
+            continue
+        if role == "tool":
+            items.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": message.get("tool_call_id") or "",
+                    "output": message.get("content") if isinstance(message.get("content"), str) else "",
+                }
+            )
+            continue
+        tool_calls = message.get("tool_calls") or []
+        content = _responses_content(message.get("content"), role=role or "user")
+        has_text = (isinstance(content, str) and content) or (
+            isinstance(content, list) and len(content) > 0
+        )
+        if has_text:
+            items.append({"type": "message", "role": role or "user", "content": content})
+        for call in tool_calls:
+            function = call.get("function") or {}
+            items.append(
+                {
+                    "type": "function_call",
+                    "call_id": call.get("id") or "",
+                    "name": function.get("name") or "",
+                    "arguments": function.get("arguments") or "{}",
+                }
+            )
+    return "\n\n".join(instructions), items
+
+
+def _responses_payload(
+    messages: list[dict[str, Any]],
+    config: AzureOpenAIConfig,
+    *,
+    tools: list[dict[str, Any]] | None = None,
+    max_tokens: int = 1500,
+    reasoning: str | None = None,
+    verbosity: str | None = None,
+) -> dict[str, Any]:
+    instructions, items = _responses_input(messages)
+    payload: dict[str, Any] = {
+        "model": config.model,
+        "input": items,
+        "max_output_tokens": max_tokens,
+        "reasoning": {"effort": reasoning or "medium"},
+    }
+    if verbosity and verbosity != "medium":
+        payload["text"] = {"verbosity": verbosity}
+    if instructions:
+        payload["instructions"] = instructions
+    if tools:
+        payload["tools"] = _responses_tools(tools)
+    return payload
+
+
+def _responses_output_text(result: dict[str, Any]) -> str:
+    chunks: list[str] = []
+    for item in result.get("output") or []:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") == "message":
+            content = item.get("content")
+            if isinstance(content, str):
+                chunks.append(content)
+            elif isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") in {"output_text", "text"}:
+                        chunks.append(part.get("text") or "")
+        elif item.get("type") in {"output_text", "text"}:
+            chunks.append(item.get("text") or "")
+    return "\n".join(chunk for chunk in chunks if chunk)
+
+
+def _assistant_message_from_responses(result: dict[str, Any]) -> dict[str, Any]:
+    tool_calls = []
+    for item in result.get("output") or []:
+        if not isinstance(item, dict) or item.get("type") != "function_call":
+            continue
+        tool_calls.append(
+            {
+                "id": item.get("call_id") or item.get("id") or "",
+                "type": "function",
+                "function": {
+                    "name": item.get("name") or "",
+                    "arguments": item.get("arguments") or "{}",
+                },
+            }
+        )
+    message: dict[str, Any] = {"role": "assistant", "content": _responses_output_text(result)}
+    if tool_calls:
+        message["tool_calls"] = tool_calls
+    return message
 
 
 def _vision_image_part(image_path: str | Path) -> dict[str, Any]:
@@ -453,6 +605,9 @@ def chat_with_tools(
     max_tool_rounds: int = 3,
     request_timeout: int = 90,
     on_progress: ProgressCallback | None = None,
+    reasoning: str | None = None,
+    verbosity: str | None = None,
+    transport: str = "chat_completions",
 ) -> dict[str, Any]:
     """Run a multi-turn Azure vision chat with function calling.
 
@@ -470,6 +625,8 @@ def chat_with_tools(
     config = config or load_azure_openai_config()
     if not config.is_configured or not config.api_url:
         return {"success": False, "error": "Azure OpenAI configuration missing"}
+    if transport == "responses" and not config.responses_url:
+        return {"success": False, "error": "Azure OpenAI configuration missing"}
 
     active_tools = tools if tools is not None else default_tool_schemas()
     history = [message for message in messages if message.get("role") != "system"]
@@ -483,15 +640,35 @@ def chat_with_tools(
     try:
         while tool_rounds <= max_tool_rounds:
             _emit_progress(on_progress, "thinking", "Thinking…")
-            payload = _chat_completion_payload(
-                conversation,
-                config,
-                tools=active_tools if tool_rounds < max_tool_rounds else None,
-                max_tokens=max_tokens,
-                temperature=temperature,
-            )
-            result = _post_chat_completion(payload, config, timeout=request_timeout)
-            message = result["choices"][0]["message"]
+            round_tools = active_tools if tool_rounds < max_tool_rounds else None
+            if transport == "responses":
+                payload = _responses_payload(
+                    conversation,
+                    config,
+                    tools=round_tools,
+                    max_tokens=max_tokens,
+                    reasoning=reasoning,
+                    verbosity=verbosity,
+                )
+                result = _post_json(
+                    config.responses_url or "",
+                    payload,
+                    config,
+                    timeout=request_timeout,
+                )
+                message = _assistant_message_from_responses(result)
+            else:
+                payload = _chat_completion_payload(
+                    conversation,
+                    config,
+                    tools=round_tools,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    reasoning=reasoning,
+                    verbosity=verbosity,
+                )
+                result = _post_chat_completion(payload, config, timeout=request_timeout)
+                message = result["choices"][0]["message"]
             tool_calls = message.get("tool_calls") or []
 
             if not tool_calls:

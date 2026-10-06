@@ -29,6 +29,8 @@ interface UseConfigResult {
   setLocationEnabled: (locationId: string, enabled: boolean) => Promise<void>
   setCameraEnabled: (cameraId: string, enabled: boolean) => Promise<void>
   setModel: (modelId: string) => Promise<void>
+  setReasoning: (effort: string) => Promise<void>
+  setVerbosity: (level: string) => Promise<void>
   setToolFlag: (key: keyof AppConfig['tools'], value: boolean) => void
   analysisStates: Record<string, CameraAnalysisState>
   analyzeCameras: (cameraIds: string[]) => Promise<void>
@@ -65,6 +67,8 @@ function applyEnabledFlags(current: AppConfig, saved: AppConfig): AppConfig {
     tools: saved.tools,
     models: saved.models,
     model: saved.model,
+    reasoning: saved.reasoning,
+    verbosity: saved.verbosity,
   }
 }
 
@@ -432,8 +436,78 @@ export function useConfig(): UseConfigResult {
         const saved = await putConfig({ ...savedConfig, model: modelId })
         setSavedConfig(saved)
         setConfig((current) =>
-          current ? { ...current, model: saved.model, models: saved.models } : saved,
+          current
+            ? {
+                ...current,
+                model: saved.model,
+                models: saved.models,
+                reasoning: saved.reasoning,
+                verbosity: saved.verbosity,
+              }
+            : saved,
         )
+      } catch (err) {
+        setConfig(previous)
+        const message = err instanceof Error ? err.message : 'Failed to save config'
+        setError(message)
+        throw err instanceof Error ? err : new Error(message)
+      }
+    },
+    [config, savedConfig],
+  )
+
+  const setReasoning = useCallback(
+    async (effort: string) => {
+      if (!config || !savedConfig) {
+        return
+      }
+      const option = config.models.find((item) => item.id === config.model)
+      if (!option || option.reasoning.locked || !option.reasoning.choices.includes(effort)) {
+        return
+      }
+      const previous = config
+      const reasoning = { ...config.reasoning, [config.model]: effort }
+      setConfig({ ...config, reasoning })
+      setError(null)
+      try {
+        const saved = await putConfig({
+          ...savedConfig,
+          model: config.model,
+          reasoning: { ...savedConfig.reasoning, [config.model]: effort },
+        })
+        setSavedConfig(saved)
+        setConfig((current) => (current ? { ...current, reasoning: saved.reasoning } : saved))
+      } catch (err) {
+        setConfig(previous)
+        const message = err instanceof Error ? err.message : 'Failed to save config'
+        setError(message)
+        throw err instanceof Error ? err : new Error(message)
+      }
+    },
+    [config, savedConfig],
+  )
+
+  const setVerbosity = useCallback(
+    async (level: string) => {
+      if (!config || !savedConfig) {
+        return
+      }
+      const option = config.models.find((item) => item.id === config.model)
+      if (!option || option.verbosity.locked || !option.verbosity.choices.includes(level)) {
+        return
+      }
+      const previous = config
+      const verbosity = { ...config.verbosity, [config.model]: level }
+      setConfig({ ...config, verbosity })
+      setError(null)
+      try {
+        const saved = await putConfig({
+          ...savedConfig,
+          model: config.model,
+          verbosity: { ...savedConfig.verbosity, [config.model]: level },
+        })
+        setSavedConfig(saved)
+        setConfig((current) => (current ? { ...current, verbosity: saved.verbosity } : saved))
       } catch (err) {
         setConfig(previous)
         const message = err instanceof Error ? err.message : 'Failed to save config'
@@ -481,6 +555,8 @@ export function useConfig(): UseConfigResult {
     setLocationEnabled,
     setCameraEnabled,
     setModel,
+    setReasoning,
+    setVerbosity,
     setToolFlag,
     analysisStates,
     analyzeCameras,

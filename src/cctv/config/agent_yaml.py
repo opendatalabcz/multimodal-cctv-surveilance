@@ -20,7 +20,9 @@ from cctv.config.models import (
     LocationConfig,
     ModelOption,
     SectorConfig,
+    clamp_control,
     default_model_catalog,
+    model_by_id,
 )
 from cctv.utils.paths import project_root
 
@@ -91,6 +93,63 @@ def _merge_items_by_id(
     return merged
 
 
+def _control(option: ModelOption, kind: str):
+    return option.reasoning if kind == "reasoning" else option.verbosity
+
+
+def _option_for(
+    base_models: list[ModelOption],
+    current_models: list[ModelOption],
+    model_id: str,
+) -> ModelOption | None:
+    return model_by_id(base_models, model_id) or model_by_id(current_models, model_id)
+
+
+def _setting_overrides(
+    base_models: list[ModelOption],
+    current_models: list[ModelOption],
+    values: dict[str, str],
+    kind: str,
+) -> dict[str, str]:
+    """Keep values that differ from each model's catalog default."""
+    kept: dict[str, str] = {}
+    for model_id, value in values.items():
+        option = _option_for(base_models, current_models, model_id)
+        if option is None or value == _control(option, kind).default:
+            continue
+        kept[model_id] = value
+    return kept
+
+
+def _filled_settings(
+    models: list[ModelOption],
+    values: dict[str, str],
+    kind: str,
+) -> dict[str, str]:
+    """Fill every catalog model with its default, then clamp overlay entries."""
+    filled: dict[str, str] = {}
+    for option in models:
+        control = _control(option, kind)
+        filled[option.id] = clamp_control(control, values.get(option.id), control.default)
+    return filled
+
+
+def _validate_setting_map(
+    models: list[ModelOption],
+    values: dict[str, str],
+    kind: str,
+    label: str,
+) -> None:
+    for model_id, value in values.items():
+        option = model_by_id(models, model_id)
+        if option is None:
+            raise ValueError(f"Unknown model: {model_id}")
+        control = _control(option, kind)
+        allowed = control.choices if control.choices else [control.default]
+        if value not in allowed:
+            raise ValueError(f"Unsupported {label}: {value}")
+
+
 def merge_agent_config(base: AgentConfig, overlay: AgentOverlay) -> AgentConfig:
     removed_sectors = {item.lower() for item in overlay.remove_sector_ids}
     sectors = _merge_items_by_id(
@@ -118,6 +177,8 @@ def merge_agent_config(base: AgentConfig, overlay: AgentOverlay) -> AgentConfig:
 
     tools = overlay.tools if overlay.tools is not None else base.tools
     selected = overlay.model if overlay.model is not None else base.model
+    reasoning = {**base.reasoning, **overlay.reasoning}
+    verbosity = {**base.verbosity, **overlay.verbosity}
     return normalize_agent_config(
         AgentConfig(
             sectors=sectors,
@@ -126,6 +187,8 @@ def merge_agent_config(base: AgentConfig, overlay: AgentOverlay) -> AgentConfig:
             tools=tools,
             models=list(base.models),
             model=selected,
+            reasoning=reasoning,
+            verbosity=verbosity,
         )
     )
 
@@ -167,7 +230,8 @@ def overlay_from_diff(base: AgentConfig, current: AgentConfig) -> AgentOverlay:
             changed.append(camera)
     tools = None if current.tools == base.tools else current.tools
     # The model catalog stays in the committed file. Only a non-default selection
-    # is a local override.
+    # is a local override. Reasoning and verbosity are stored per model, and only
+    # when the value differs from that model's own catalog default.
     model = None if current.model == base.model else current.model
     return AgentOverlay(
         sectors=changed_sectors,
@@ -178,6 +242,8 @@ def overlay_from_diff(base: AgentConfig, current: AgentConfig) -> AgentOverlay:
         remove_camera_ids=remove_camera_ids,
         tools=tools,
         model=model,
+        reasoning=_setting_overrides(base.models, current.models, current.reasoning, "reasoning"),
+        verbosity=_setting_overrides(base.models, current.models, current.verbosity, "verbosity"),
     )
 
 
@@ -199,7 +265,16 @@ def with_effective_models(config: AgentConfig) -> AgentConfig:
             selected = env_model
         else:
             selected = models[0].id
-    return config.model_copy(update={"models": models, "model": selected})
+    reasoning = _filled_settings(models, config.reasoning, "reasoning")
+    verbosity = _filled_settings(models, config.verbosity, "verbosity")
+    return config.model_copy(
+        update={
+            "models": models,
+            "model": selected,
+            "reasoning": reasoning,
+            "verbosity": verbosity,
+        }
+    )
 
 
 def config_with_server_catalog(incoming: AgentConfig) -> AgentConfig:
@@ -208,9 +283,12 @@ def config_with_server_catalog(incoming: AgentConfig) -> AgentConfig:
     ``incoming.model`` must be in the effective list (catalog plus env deployment).
     """
     base = load_base_config()
-    allowed = {item.id for item in with_effective_models(base).models}
+    effective = with_effective_models(base)
+    allowed = {item.id for item in effective.models}
     if incoming.model not in allowed:
         raise ValueError(f"Unknown model: {incoming.model}")
+    _validate_setting_map(effective.models, incoming.reasoning, "reasoning", "reasoning effort")
+    _validate_setting_map(effective.models, incoming.verbosity, "verbosity", "verbosity")
     return incoming.model_copy(update={"models": list(base.models)})
 
 
@@ -251,6 +329,10 @@ def save_agent_config(config: AgentConfig, path: Path | None = None) -> None:
         payload.pop("cameras", None)
     if not payload.get("remove_camera_ids"):
         payload.pop("remove_camera_ids", None)
+    if not payload.get("reasoning"):
+        payload.pop("reasoning", None)
+    if not payload.get("verbosity"):
+        payload.pop("verbosity", None)
     dest = agent_overlay_path()
     if not payload:
         if dest.is_file():

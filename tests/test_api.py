@@ -134,6 +134,54 @@ def test_put_config_keeps_server_model_catalog(client, tmp_path, monkeypatch) ->
     assert "Unknown model" in rejected.json()["detail"]
 
 
+def test_put_config_keeps_per_model_reasoning_and_verbosity(client, tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AZURE_OPENAI_MODEL", "gpt-5.6-luna")
+    save_agent_config(AgentConfig(cameras=[CameraConfig(id="bridge", name="Bridge", source="101200")]), tmp_path / "agent.yaml")
+    body = client.get("/api/config").json()
+
+    rejected = client.put(
+        "/api/config",
+        json={**body, "model": "gpt-6-astra", "reasoning": {**body["reasoning"], "gpt-6-astra": "none"}},
+    )
+    assert rejected.status_code == 400
+    assert "reasoning" in rejected.json()["detail"]
+
+    rejected_verbosity = client.put(
+        "/api/config",
+        json={**body, "verbosity": {**body["verbosity"], "gpt-6-astra": "max"}},
+    )
+    assert rejected_verbosity.status_code == 400
+    assert "verbosity" in rejected_verbosity.json()["detail"]
+
+    accepted = client.put(
+        "/api/config",
+        json={
+            **body,
+            "model": "gpt-6-astra",
+            "reasoning": {**body["reasoning"], "gpt-5.6-luna": "high", "gpt-6-astra": "max"},
+            "verbosity": {**body["verbosity"], "gpt-5.6-luna": "low", "gpt-6-astra": "high"},
+        },
+    )
+    assert accepted.status_code == 200
+    saved = accepted.json()
+    assert saved["reasoning"]["gpt-5.6-luna"] == "high"
+    assert saved["reasoning"]["gpt-6-astra"] == "max"
+    assert saved["verbosity"]["gpt-5.6-luna"] == "low"
+    assert saved["verbosity"]["gpt-6-astra"] == "high"
+
+    switched = client.put("/api/config", json={**saved, "model": "gpt-5.6-luna"})
+    assert switched.status_code == 200
+    kept = switched.json()
+    assert kept["model"] == "gpt-5.6-luna"
+    assert kept["reasoning"]["gpt-6-astra"] == "max"
+    assert kept["verbosity"]["gpt-5.6-luna"] == "low"
+    overlay = (tmp_path / "agent.local.yaml").read_text(encoding="utf-8")
+    assert "gpt-5.6-luna: high" in overlay
+    assert "gpt-6-astra: max" in overlay
+    assert "gpt-5.6-luna: low" in overlay
+    assert "gpt-6-astra: high" in overlay
+
+
 def test_analyze_camera_endpoint_returns_saved_metadata(client) -> None:
     analyzed = CameraConfig(
         id="test_cam",

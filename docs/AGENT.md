@@ -82,16 +82,45 @@ models:
   - id: gpt-5.6-luna
     label: GPT-5.6 Luna
     provider: azure
+    transport: chat_completions
+    reasoning:
+      choices: [default, low, medium, high]
+      default: default
+      locked: false
+    verbosity:
+      choices: [low, medium, high]
+      default: medium
+      locked: false
   - id: gpt-4o
     label: GPT-4o
     provider: azure
+    transport: chat_completions
+    reasoning:
+      choices: []
+      default: default
+      locked: true
+    verbosity:
+      choices: []
+      default: medium
+      locked: true
   - id: gpt-6-astra
     label: GPT-6 Astra
     provider: azure
+    transport: responses
+    reasoning:
+      choices: [low, medium, high, xhigh, max]
+      default: medium
+      locked: false
+    verbosity:
+      choices: [low, medium, high]
+      default: medium
+      locked: false
 model: gpt-5.6-luna
 ```
 
-The chat header selects `model`. The catalog stays in `configs/agent.yaml`; the overlay stores `model` only when the choice differs from that default. `PUT /api/config` ignores a client `models` list and rejects an id that is not in the catalog. If `AZURE_OPENAI_MODEL` names a deployment missing from the file, that deployment is appended so it stays selectable. Chat and camera metadata analysis both use the selected deployment with the env API key and endpoint. Each assistant reply stores that deployment id, and the UI shows its catalog label. The welcome message is unlabeled. `provider` is `azure` for every shipped option; an unknown provider is rejected and does not call Azure. A later open-source model needs its own client.
+The chat header selects `model` and, when the model allows it, `reasoning` and `verbosity`. Each model keeps its own values. The catalog stays in `configs/agent.yaml`. The overlay stores `model` only when the choice differs from the catalog default, and a reasoning or verbosity entry only when it differs from that model's own default. `PUT /api/config` ignores a client `models` list and rejects an unknown model id or a value that model does not allow. If `AZURE_OPENAI_MODEL` names a deployment missing from the file, that deployment is appended so it stays selectable.
+
+Luna and GPT-4o use Chat Completions. Luna `reasoning: default` omits `reasoning_effort`. GPT-4o has no reasoning or verbosity control, and those fields are omitted. Luna sends a non-medium verbosity as `verbosity`. GPT-6 Astra cannot take function tools on Chat Completions, so chat with Astra uses the Responses API (`/openai/v1/responses`) with `reasoning.effort` and, when it is not medium, `text.verbosity`. Astra efforts are `low`, `medium`, `high`, `xhigh`, and `max`. Camera metadata analysis sends no tools and neither setting, so it stays on Chat Completions for every model. Each assistant reply stores the deployment id, and the UI shows its catalog label. The welcome message is unlabeled. `provider` is `azure` for every shipped option; an unknown provider is rejected and does not call Azure. A later open-source model needs its own client.
 
 ### Catalog hierarchy
 

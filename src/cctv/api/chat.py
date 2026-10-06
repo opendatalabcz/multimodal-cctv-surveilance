@@ -8,6 +8,7 @@ from cctv.api.schemas import ChatMessage
 from cctv.api.store import Conversation, image_urls_for_paths
 from cctv.api.turn_log import append_turn_log, tool_names_from_messages
 from cctv.config.agent_yaml import load_agent_config
+from cctv.config.models import clamp_reasoning, clamp_verbosity, model_by_id
 from cctv.config.prompt import build_system_prompt
 from cctv.tools.registry import tool_schemas_for_config
 from cctv.utils.azure import AzureOpenAIConfig, resolve_azure_config
@@ -46,6 +47,12 @@ def run_chat_turn(
     conversation.messages.append(ChatMessage(role="user", content=user_content))
     conversation.azure_messages.append({"role": "user", "content": user_content})
 
+    selected_model = azure_config.model or ""
+    option = model_by_id(agent_config.models, selected_model)
+    transport = option.transport if option is not None else "chat_completions"
+    reasoning = clamp_reasoning(option, agent_config.reasoning.get(selected_model))
+    verbosity = clamp_verbosity(option, agent_config.verbosity.get(selected_model))
+
     started = time.perf_counter()
     result = chat_with_tools(
         conversation.azure_messages,
@@ -55,6 +62,9 @@ def run_chat_turn(
         parse_json=False,
         max_tool_rounds=MAX_TOOL_ROUNDS,
         on_progress=on_progress,
+        reasoning=reasoning,
+        verbosity=verbosity,
+        transport=transport,
     )
     duration_ms = int((time.perf_counter() - started) * 1000)
     if not result.get("success"):
