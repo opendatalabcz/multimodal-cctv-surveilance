@@ -11,7 +11,6 @@ from cctv.config.effective import is_camera_effective
 from cctv.config.models import CameraConfig
 from cctv.tools.get_image import execute_get_image
 
-PREFERRED_IMAGE_CAP = 10
 HARD_IMAGE_CAP = 16
 _FETCH_WORKERS = 4
 
@@ -23,7 +22,7 @@ GET_CAMERA_IMAGE_TOOL: dict[str, Any] = {
             "Fetch current frames from effectively enabled cameras listed in the Config panel / "
             "agent.yaml. Pass one or more camera ids or display names in `cameras` (preferred). "
             "`camera` is accepted for a single name. Do not issue one tool call per camera. "
-            "Prefer about 10 images; a place-wide question may go a little over. "
+            "Include every camera that matches the question. One call accepts at most 16. "
             "Unknown names: tell the user to add name, optional GPS, and source URL "
             "in the Config panel. Do not pass raw URLs here."
         ),
@@ -160,11 +159,6 @@ def execute_get_camera_image(arguments: dict[str, Any] | None = None) -> dict[st
         note = (
             f"Hard cap of {HARD_IMAGE_CAP} images applied; "
             f"skipped {len(skipped)} extra camera(s)."
-        )
-    elif len(queries) > PREFERRED_IMAGE_CAP:
-        note = (
-            f"Fetched {len(queries)} cameras (preferred cap is about "
-            f"{PREFERRED_IMAGE_CAP}); proceed because this looks place-wide."
         )
 
     rows = _fetch_many(queries)

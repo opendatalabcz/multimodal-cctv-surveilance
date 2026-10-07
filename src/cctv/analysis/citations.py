@@ -76,11 +76,12 @@ def parse_followups(text: str) -> tuple[str, list[str]]:
     return raw, []
 
 
-def _parse_followup_body(body: str) -> list[str]:
+def normalize_followups(values: list[Any]) -> list[str]:
+    """Keep at most three unique questions, dropping blanks and over-long lines."""
     questions: list[str] = []
     seen: set[str] = set()
-    for line in (body or "").splitlines():
-        stripped = _LIST_MARKER.sub("", line.strip()).strip().strip('"').strip()
+    for value in values:
+        stripped = _LIST_MARKER.sub("", str(value).strip()).strip().strip('"').strip()
         key = stripped.lower()
         if not stripped or len(stripped) > _MAX_FOLLOWUP_CHARS or key in seen:
             continue
@@ -89,6 +90,10 @@ def _parse_followup_body(body: str) -> list[str]:
         if len(questions) == MAX_FOLLOWUPS:
             break
     return questions
+
+
+def _parse_followup_body(body: str) -> list[str]:
+    return normalize_followups((body or "").splitlines())
 
 
 def _strip_sep_remainder(remainder: str) -> bool:

@@ -22,6 +22,25 @@ from cctv.utils.azure import AzureOpenAIConfig
 from langfuse.media import LangfuseMedia
 
 
+def _submit(answer: str) -> dict:
+    return {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call_submit",
+                "type": "function",
+                "function": {
+                    "name": "submit_answer",
+                    "arguments": json.dumps(
+                        {"answer": answer, "camera_ids": [], "followups": []}
+                    ),
+                },
+            }
+        ],
+    }
+
+
 def _azure() -> AzureOpenAIConfig:
     return AzureOpenAIConfig(
         api_key="test-key",
@@ -204,7 +223,7 @@ def test_disabled_tracing_does_not_construct_a_client(monkeypatch) -> None:
     def fake_post(url, headers=None, json=None, timeout=None):
         return _ok_response(
             {
-                "choices": [{"message": {"role": "assistant", "content": "Quiet."}}],
+                "choices": [{"message": _submit("Quiet.")}],
                 "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
             }
         )
@@ -274,7 +293,7 @@ def test_turn_nests_generation_and_tool_and_correlates_the_log(tmp_path, monkeyp
             "usage": {"prompt_tokens": 11, "completion_tokens": 5, "total_tokens": 16},
         },
         {
-            "choices": [{"message": {"role": "assistant", "content": "The bridge is quiet."}}],
+            "choices": [{"message": _submit("The bridge is quiet.")}],
             "usage": {"prompt_tokens": 20, "completion_tokens": 6, "total_tokens": 26},
         },
     ]
@@ -371,7 +390,7 @@ def test_capture_images_attaches_each_frame_once(tmp_path, monkeypatch) -> None:
             }
         else:
             body = {
-                "choices": [{"message": {"role": "assistant", "content": "Seen."}}],
+                "choices": [{"message": _submit("Seen.")}],
                 "usage": {"input_tokens": 2, "output_tokens": 1, "total_tokens": 3},
             }
         return _ok_response(body)
@@ -436,6 +455,8 @@ def test_responses_usage_and_encrypted_content_are_normalized(monkeypatch) -> No
     client = RecordingClient()
     _enable(monkeypatch, client)
 
+    arguments = json.dumps({"answer": "Clear.", "camera_ids": [], "followups": []})
+
     def fake_post(url, headers=None, json=None, timeout=None):
         return _ok_response(
             {
@@ -446,9 +467,10 @@ def test_responses_usage_and_encrypted_content_are_normalized(monkeypatch) -> No
                         "encrypted_content": "do-not-export",
                     },
                     {
-                        "type": "message",
-                        "role": "assistant",
-                        "content": [{"type": "output_text", "text": "Clear."}],
+                        "type": "function_call",
+                        "call_id": "call_submit",
+                        "name": "submit_answer",
+                        "arguments": arguments,
                     },
                 ],
                 "usage": {"input_tokens": 9, "output_tokens": 3, "total_tokens": 12},
@@ -508,7 +530,7 @@ def test_tracing_failures_do_not_fail_the_chat(monkeypatch) -> None:
 
     def fake_post(url, headers=None, json=None, timeout=None):
         return _ok_response(
-            {"choices": [{"message": {"role": "assistant", "content": "Still here."}}], "usage": {}}
+            {"choices": [{"message": _submit("Still here.")}], "usage": {}}
         )
 
     with patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post):
@@ -599,7 +621,7 @@ def test_tool_failure_is_an_error_span(monkeypatch) -> None:
             }
         else:
             body = {
-                "choices": [{"message": {"role": "assistant", "content": "Weather is down."}}],
+                "choices": [{"message": _submit("Weather is down.")}],
                 "usage": {},
             }
         return _ok_response(body)

@@ -10,6 +10,29 @@ from cctv.analysis.azure_vision import (
 from cctv.utils.azure import AzureOpenAIConfig
 
 
+def _submit_message(answer: str, camera_ids: list[str] | None = None) -> dict:
+    return {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call_submit",
+                "type": "function",
+                "function": {
+                    "name": "submit_answer",
+                    "arguments": json_mod.dumps(
+                        {
+                            "answer": answer,
+                            "camera_ids": camera_ids or [],
+                            "followups": [],
+                        }
+                    ),
+                },
+            }
+        ],
+    }
+
+
 def _fake_config() -> AzureOpenAIConfig:
     return AzureOpenAIConfig(
         api_key="test-key",
@@ -23,10 +46,7 @@ def test_chat_with_tools_multi_turn_history() -> None:
         {
             "choices": [
                 {
-                    "message": {
-                        "role": "assistant",
-                        "content": "I can check that camera for you.",
-                    }
+                    "message": _submit_message("I can check that camera for you."),
                 }
             ],
             "usage": {"total_tokens": 5},
@@ -34,10 +54,7 @@ def test_chat_with_tools_multi_turn_history() -> None:
         {
             "choices": [
                 {
-                    "message": {
-                        "role": "assistant",
-                        "content": "It looks quiet now.",
-                    }
+                    "message": _submit_message("It looks quiet now."),
                 }
             ],
             "usage": {"total_tokens": 8},
@@ -102,7 +119,9 @@ def test_parallel_tool_calls_answer_every_id_before_images() -> None:
             "usage": {},
         },
         {
-            "choices": [{"message": {"role": "assistant", "content": "Both look clear."}}],
+            "choices": [
+                {"message": _submit_message("Both look clear.", ["cam_a", "cam_b"])}
+            ],
             "usage": {},
         },
     ]
@@ -179,7 +198,9 @@ def test_batch_camera_tool_injects_all_image_paths() -> None:
             "usage": {},
         },
         {
-            "choices": [{"message": {"role": "assistant", "content": "Both look clear."}}],
+            "choices": [
+                {"message": _submit_message("Both look clear.", ["cam_a", "cam_b"])}
+            ],
             "usage": {},
         },
     ]
@@ -257,7 +278,9 @@ def test_on_progress_emits_fetching_then_analyzing() -> None:
             "usage": {},
         },
         {
-            "choices": [{"message": {"role": "assistant", "content": "Both look clear."}}],
+            "choices": [
+                {"message": _submit_message("Both look clear.", ["cam_a", "cam_b"])}
+            ],
             "usage": {},
         },
     ]
@@ -329,7 +352,7 @@ def test_on_progress_emits_fetching_then_analyzing() -> None:
                 {
                     "message": {
                         "role": "assistant",
-                        "content": "Only A is busy.\n```cite\ncam_a\n```",
+                        **_submit_message("Only A is busy.", ["cam_a"]),
                     }
                 }
             ],
@@ -409,7 +432,7 @@ def test_empty_cite_block_hides_all_fetched_images() -> None:
                 {
                     "message": {
                         "role": "assistant",
-                        "content": "I will not show a frame.\n```cite\n```",
+                        **_submit_message("I will not show a frame."),
                     }
                 }
             ],
@@ -501,7 +524,7 @@ def test_stored_history_keeps_frame_refs_not_base64() -> None:
                 {
                     "message": {
                         "role": "assistant",
-                        "content": "Busy.\n```cite\ncam_a\n```",
+                        **_submit_message("Busy.", ["cam_a"]),
                     }
                 }
             ],
@@ -572,7 +595,7 @@ def test_follow_up_without_fetch_reattaches_last_cited_frames() -> None:
                 {
                     "message": {
                         "role": "assistant",
-                        "content": "Only A is busy.\n```cite\ncam_a\n```",
+                        **_submit_message("Only A is busy.", ["cam_a"]),
                     }
                 }
             ],
@@ -588,7 +611,7 @@ def test_follow_up_without_fetch_reattaches_last_cited_frames() -> None:
             fetch_responses[len(posted_payloads) - 1]
             if len(posted_payloads) <= 2
             else {
-                "choices": [{"message": {"role": "assistant", "content": "The left side is a railing."}}],
+                "choices": [{"message": _submit_message("The left side is a railing.", ["cam_a"])}],
                 "usage": {},
             }
         )
@@ -675,7 +698,7 @@ def test_second_fetch_stubs_previous_frames() -> None:
                     {
                         "message": {
                             "role": "assistant",
-                            "content": f"Looking at {camera}.\n```cite\n{camera}\n```",
+                            **_submit_message(f"Looking at {camera}.", [camera]),
                         }
                     }
                 ],
@@ -846,10 +869,19 @@ def test_luna_responses_tool_round_returns_assistant_text() -> None:
                 {
                     "type": "message",
                     "role": "assistant",
-                    "content": [
-                        {"type": "output_text", "text": "Two cameras."},
-                        {"type": "text", "text": "also hidden"},
-                    ],
+                    "content": [{"type": "text", "text": "also hidden"}],
+                },
+                {
+                    "type": "function_call",
+                    "call_id": "call_submit",
+                    "name": "submit_answer",
+                    "arguments": json_mod.dumps(
+                        {
+                            "answer": "Two cameras.",
+                            "camera_ids": [],
+                            "followups": [],
+                        }
+                    ),
                 },
             ],
             "usage": {},
@@ -913,3 +945,261 @@ def test_luna_responses_tool_round_returns_assistant_text() -> None:
     assert "secret plan" not in result["analysis"]
     assert "leaked thought" not in result["analysis"]
     assert "thinking aloud" not in result["analysis"]
+
+
+def test_submit_answer_is_stored_as_an_assistant_message() -> None:
+    responses = [
+        {
+            "choices": [
+                {
+                    "message": _submit_message(
+                        "The bridge is quiet.",
+                        ["charles_bridge"],
+                    )
+                }
+            ],
+            "usage": {},
+        }
+    ]
+    posted: list[dict] = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        posted.append(json)
+        response = MagicMock()
+        response.json.return_value = responses[len(posted) - 1]
+        return response
+
+    message = responses[0]["choices"][0]["message"]
+    message["tool_calls"][0]["function"]["arguments"] = json_mod.dumps(
+        {
+            "answer": "The bridge is quiet.",
+            "camera_ids": ["charles_bridge"],
+            "followups": [
+                "Has it cleared yet?",
+                "Has it cleared yet?",
+                "What about Ječná?",
+                "x" * 200,
+            ],
+        }
+    )
+
+    with patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post):
+        result = chat_with_tools(
+            [{"role": "user", "content": "How is the bridge?"}],
+            config=_fake_config(),
+            parse_json=False,
+        )
+
+    assert result["success"] is True
+    assert result["analysis"] == "The bridge is quiet."
+    assert result["followups"] == ["Has it cleared yet?", "What about Ječná?"]
+    assert result["messages"][-1] == {
+        "role": "assistant",
+        "content": "The bridge is quiet.",
+    }
+    assert "tool_calls" not in result["messages"][-1]
+    assert posted[0]["tool_choice"] == "auto"
+
+
+def test_submit_answer_alongside_a_camera_fetch_waits() -> None:
+    responses = [
+        {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_camera",
+                                "type": "function",
+                                "function": {
+                                    "name": "get_camera_image",
+                                    "arguments": '{"camera": "cam_a"}',
+                                },
+                            },
+                            {
+                                "id": "call_submit",
+                                "type": "function",
+                                "function": {
+                                    "name": "submit_answer",
+                                    "arguments": json_mod.dumps(
+                                        {
+                                            "answer": "Too early.",
+                                            "camera_ids": ["cam_a"],
+                                            "followups": [],
+                                        }
+                                    ),
+                                },
+                            },
+                        ],
+                    }
+                }
+            ],
+            "usage": {},
+        },
+        {
+            "choices": [{"message": _submit_message("Cam A is clear.", ["cam_a"])}],
+            "usage": {},
+        },
+    ]
+    posted: list[dict] = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        posted.append(json)
+        response = MagicMock()
+        response.json.return_value = responses[len(posted) - 1]
+        return response
+
+    def fake_execute(name, arguments):
+        assert name == "get_camera_image"
+        return {
+            "tool_content": '{"success": true}',
+            "image_paths": ["/tmp/cam_a.jpg"],
+            "image_labels": [{"path": "/tmp/cam_a.jpg", "camera_id": "cam_a"}],
+        }
+
+    with (
+        patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post),
+        patch("cctv.analysis.azure_vision.execute_tool", side_effect=fake_execute),
+        patch(
+            "cctv.analysis.azure_vision._vision_image_part",
+            side_effect=lambda path: {"type": "image_url", "image_url": {"url": str(path)}},
+        ),
+    ):
+        result = chat_with_tools(
+            [{"role": "user", "content": "Look at cam_a."}],
+            config=_fake_config(),
+            parse_json=False,
+        )
+
+    assert result["success"] is True
+    assert result["analysis"] == "Cam A is clear."
+    assert result["image_count"] == 1
+    tool_messages = [
+        message for message in posted[1]["messages"] if message["role"] == "tool"
+    ]
+    assert tool_messages[1]["tool_call_id"] == "call_submit"
+    assert "only after the other tools" in tool_messages[1]["content"]
+    assert result["messages"][-1]["content"] == "Cam A is clear."
+
+
+def test_plain_text_is_replaced_by_a_forced_submit_answer() -> None:
+    responses = [
+        {
+            "choices": [
+                {"message": {"role": "assistant", "content": "Draft ending in 国产自拍"}}
+            ],
+            "usage": {},
+        },
+        {
+            "choices": [
+                {
+                    "message": _submit_message("The street is clear."),
+                }
+            ],
+            "usage": {},
+        },
+    ]
+    posted: list[dict] = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        posted.append(json)
+        response = MagicMock()
+        response.json.return_value = responses[len(posted) - 1]
+        return response
+
+    with patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post):
+        result = chat_with_tools(
+            [{"role": "user", "content": "What do you see?"}],
+            config=_fake_config(),
+            system_prompt="You are a CCTV assistant.",
+            parse_json=False,
+        )
+
+    assert result["success"] is True
+    assert result["analysis"] == "The street is clear."
+    assert "国产自拍" not in json_mod.dumps(result["messages"])
+    assert posted[1]["tool_choice"] == {
+        "type": "function",
+        "function": {"name": "submit_answer"},
+    }
+    assert result["messages"][-1] == {
+        "role": "assistant",
+        "content": "The street is clear.",
+    }
+
+
+def test_responses_plain_text_forces_submit_answer_by_name() -> None:
+    bodies = [
+        {
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Draft."}],
+                }
+            ],
+            "usage": {},
+        },
+        {
+            "output": [
+                {
+                    "type": "function_call",
+                    "call_id": "call_submit",
+                    "name": "submit_answer",
+                    "arguments": json_mod.dumps(
+                        {"answer": "Final.", "camera_ids": [], "followups": []}
+                    ),
+                }
+            ],
+            "usage": {},
+        },
+    ]
+    posted: list[dict] = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        posted.append(json)
+        response = MagicMock()
+        response.ok = True
+        response.json.return_value = bodies[len(posted) - 1]
+        return response
+
+    config = AzureOpenAIConfig(
+        api_key="k",
+        endpoint="https://example.test",
+        model="gpt-5.6-luna",
+    )
+    with patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post):
+        result = chat_with_tools(
+            [{"role": "user", "content": "Hello"}],
+            config=config,
+            transport="responses",
+            parse_json=False,
+        )
+
+    assert result["success"] is True
+    assert result["analysis"] == "Final."
+    assert "Draft." not in json_mod.dumps(result["messages"])
+    assert posted[1]["tool_choice"] == {"type": "function", "name": "submit_answer"}
+
+
+def test_a_failed_forced_submit_does_not_show_the_draft() -> None:
+    def fake_post(url, headers=None, json=None, timeout=None):
+        response = MagicMock()
+        response.json.return_value = {
+            "choices": [{"message": {"role": "assistant", "content": "Draft 国产自拍"}}],
+            "usage": {},
+        }
+        return response
+
+    with patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post):
+        result = chat_with_tools(
+            [{"role": "user", "content": "Hello"}],
+            config=_fake_config(),
+            parse_json=False,
+        )
+
+    assert result["success"] is False
+    assert result["error"] == "The model did not submit an answer"
+    assert "messages" not in result

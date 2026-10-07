@@ -10,16 +10,16 @@ Layout under `src/cctv/`: `api` (HTTP), `tools` (schemas + executors), `fetch` (
 
 ## Tools
 
-Default model tools are `list_cameras` and `get_camera_image`. Optional tools follow config flags (`internet` → `web_search`, `weather` → `get_weather`, `maps` → `search_map` / `reverse_geocode`).
+Default model tools are `list_cameras`, `get_camera_image`, and `submit_answer`. Optional tools follow config flags (`internet` → `web_search`, `weather` → `get_weather`, `maps` → `search_map` / `reverse_geocode`). `submit_answer` is the only successful end of a chat turn.
 
 `get_image` is fetch implementation and stays registered for tests. Do not add it to `_BASE_NAMES`:
 
 ```python
 # BAD — model would call low-level fetch
-_BASE_NAMES = ("list_cameras", "get_camera_image", "get_image")
+_BASE_NAMES = ("list_cameras", "get_camera_image", "submit_answer", "get_image")
 
 # GOOD
-_BASE_NAMES = ("list_cameras", "get_camera_image")
+_BASE_NAMES = ("list_cameras", "get_camera_image", "submit_answer")
 ```
 
 New tools: schema + executor in `src/cctv/tools/`, register in `__init__.py`, add tests under `tests/`.

@@ -55,7 +55,23 @@ def test_analyze_with_tools_one_round_trip(tmp_path, monkeypatch) -> None:
                 {
                     "message": {
                         "role": "assistant",
-                        "content": '{"summary":"quiet street"}',
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_submit",
+                                "type": "function",
+                                "function": {
+                                    "name": "submit_answer",
+                                    "arguments": json.dumps(
+                                        {
+                                            "answer": '{"summary":"quiet street"}',
+                                            "camera_ids": ["charles_bridge"],
+                                            "followups": [],
+                                        }
+                                    ),
+                                },
+                            }
+                        ],
                     }
                 }
             ],
@@ -102,7 +118,7 @@ def test_analyze_with_tools_one_round_trip(tmp_path, monkeypatch) -> None:
     assert result["image_count"] == 1
     assert len(posted_payloads) == 2
     tool_names = [item["function"]["name"] for item in posted_payloads[0]["tools"]]
-    assert tool_names == ["list_cameras", "get_camera_image"]
+    assert tool_names == ["list_cameras", "get_camera_image", "submit_answer"]
 
     second_messages = posted_payloads[1]["messages"]
     roles = [msg["role"] for msg in second_messages]

@@ -24,7 +24,7 @@ class RegisteredTool:
 
 
 _TOOLS: dict[str, RegisteredTool] = {}
-_BASE_NAMES: tuple[str, ...] = ("list_cameras", "get_camera_image")
+_BASE_NAMES: tuple[str, ...] = ("list_cameras", "get_camera_image", "submit_answer")
 _OPTIONAL_BY_FLAG: tuple[tuple[str, str], ...] = (
     ("internet", "web_search"),
     ("weather", "get_weather"),

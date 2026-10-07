@@ -6,7 +6,7 @@ from cctv.config.agent_yaml import load_agent_config, save_agent_config
 from cctv.config.models import AgentConfig, CameraAnalysis, CameraConfig
 from cctv.config.prompt import build_system_prompt
 import cctv.tools  # noqa: F401
-from cctv.tools.get_camera import HARD_IMAGE_CAP, PREFERRED_IMAGE_CAP, resolve_camera
+from cctv.tools.get_camera import HARD_IMAGE_CAP, resolve_camera
 from cctv.tools.registry import default_tool_schemas, execute_tool
 
 
@@ -37,7 +37,7 @@ def _write_config(tmp_path: Path, monkeypatch) -> Path:
 
 def test_default_tool_schemas() -> None:
     names = [item["function"]["name"] for item in default_tool_schemas()]
-    assert names == ["list_cameras", "get_camera_image"]
+    assert names == ["list_cameras", "get_camera_image", "submit_answer"]
 
 
 def test_list_cameras_matches_yaml(tmp_path, monkeypatch) -> None:
@@ -186,7 +186,7 @@ def test_get_camera_image_hard_cap(tmp_path, monkeypatch) -> None:
     meta = json.loads(result["tool_content"])
     assert meta["fetched"] == HARD_IMAGE_CAP
     assert len(meta["skipped"]) == 3
-    assert PREFERRED_IMAGE_CAP < HARD_IMAGE_CAP
+    assert "preferred cap" not in (meta.get("note") or "")
 
 
 def test_get_camera_image_missing_arguments() -> None:

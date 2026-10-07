@@ -33,12 +33,12 @@ def _fake_config() -> AzureOpenAIConfig:
 
 def test_tool_names_all_toggles_off() -> None:
     names = tool_names_for_config(ToolsConfig())
-    assert names == ("list_cameras", "get_camera_image")
+    assert names == ("list_cameras", "get_camera_image", "submit_answer")
 
 
 def test_tool_names_internet_only() -> None:
     names = tool_names_for_config(ToolsConfig(internet=True))
-    assert names == ("list_cameras", "get_camera_image", "web_search")
+    assert names == ("list_cameras", "get_camera_image", "submit_answer", "web_search")
 
 
 def test_tool_names_weather_only() -> None:
@@ -59,6 +59,7 @@ def test_tool_names_all_enabled() -> None:
     assert names == (
         "list_cameras",
         "get_camera_image",
+        "submit_answer",
         "web_search",
         "get_weather",
         "search_map",
@@ -69,19 +70,20 @@ def test_tool_names_all_enabled() -> None:
 def test_tool_schemas_reflect_toggle_combination() -> None:
     schemas = tool_schemas_for_config(ToolsConfig(internet=True, weather=False, maps=False))
     names = [item["function"]["name"] for item in schemas]
-    assert names == ["list_cameras", "get_camera_image", "web_search"]
+    assert names == ["list_cameras", "get_camera_image", "submit_answer", "web_search"]
 
 
 def test_prompt_camera_first_and_forecast_qualification() -> None:
     prompt = build_system_prompt(AgentConfig(tools=ToolsConfig(weather=True, internet=True)))
     assert "one camera per distinct place" in prompt
     assert "one get_camera_image call" in prompt
-    assert "soft cap of about 10 images" in prompt
+    assert "at most 16 cameras" in prompt
+    assert "soft cap" not in prompt
     assert "Clearly label measured/forecast data" in prompt
     assert "Do not use web_search as a weather API" in prompt
-    assert "```cite" in prompt
-    assert "The user only sees the images you cite" in prompt
-    assert "Do not use sep, ..sep" in prompt
+    assert "submit_answer" in prompt
+    assert "The user only sees the images you list" in prompt
+    assert "```cite" not in prompt
     assert "weather (get_weather): enabled" in prompt
     assert "internet search (web_search): enabled" in prompt
 
@@ -140,8 +142,14 @@ def test_run_chat_turn_reloads_tools_between_messages() -> None:
         run_chat_turn(conversation, "first question", config=_fake_config())
         run_chat_turn(conversation, "second question", config=_fake_config())
 
-    assert captured_tools[0] == ["list_cameras", "get_camera_image"]
-    assert captured_tools[1] == ["list_cameras", "get_camera_image", "web_search", "get_weather"]
+    assert captured_tools[0] == ["list_cameras", "get_camera_image", "submit_answer"]
+    assert captured_tools[1] == [
+        "list_cameras",
+        "get_camera_image",
+        "submit_answer",
+        "web_search",
+        "get_weather",
+    ]
 
 
 def test_run_chat_turn_passes_max_tool_rounds() -> None:

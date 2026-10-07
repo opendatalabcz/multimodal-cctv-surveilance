@@ -191,9 +191,8 @@ def build_system_prompt(config: AgentConfig) -> str:
         "(cameras: [id, ...]) — not a single random sample, and not one tool call per camera.",
         f"- When the question has no location (e.g. 'what is the weather like today?'), "
         f"{_no_location_sampling_hint(config)}",
-        "- Prefer staying near a soft cap of about 10 images per turn. "
-        "If a place-wide question legitimately needs more (e.g. 12 Prague cameras), "
-        "fetch them rather than refusing — but avoid flooding unrelated cameras.",
+        "- Fetch every camera that matches the question. Do not sample. "
+        "One get_camera_image call accepts at most 16 cameras.",
         "- If the user names a place with no matching configured camera, tell them to add it "
         "in the Config panel (name, optional GPS, source URL). "
         "If map or weather toggles are on, you may use those tools for context instead.",
@@ -246,28 +245,16 @@ def build_system_prompt(config: AgentConfig) -> str:
         [
             "",
             "When describing a scene, call get_camera_image with the relevant cameras, "
-            "look at the returned frames, then answer in markdown.",
-            "Cite every camera you discuss (and only those) in a final fenced block "
-            "using configured camera ids, for example:",
-            "```cite",
-            "charles_bridge",
-            "hybernska",
-            "```",
-            "Use an empty ```cite``` block if you discuss no frames. "
-            "The user only sees the images you cite, not every frame you fetched. "
-            "Do not mention the cite block in the visible answer. "
-            "Do not use sep, ..sep, or any other fence language for citations.",
-            "",
-            "After the cite block, end with a followup block of two or three short questions "
-            "the user could ask next, one per line, for example:",
-            "```followup",
-            "Has the traffic cleared on Barrandovský most?",
-            "What is the weather like at Charles Bridge?",
-            "```",
-            "Write them in the user's voice, keep each under 80 characters, and only suggest "
-            "questions your configured cameras can actually answer. "
-            "Do not repeat a question the user already asked. "
-            "Do not mention the followup block in the visible answer.",
+            "look at the returned frames, then finish by calling submit_answer.",
+            "Put only the visible markdown in answer. Do not mention submit_answer there.",
+            "List every camera you discuss, and only those, in camera_ids using configured ids. "
+            "Pass an empty camera_ids list when you discuss no frames. "
+            "The user only sees the images you list, not every frame you fetched.",
+            "Pass two or three short next questions in followups, in the user's voice. "
+            "Keep each under 80 characters, suggest only questions the configured cameras "
+            "can answer, and do not repeat a question the user already asked. "
+            "Pass an empty followups list when none fit.",
+            "Call submit_answer only after every other tool in the turn has finished.",
         ]
     )
     return "\n".join(lines)

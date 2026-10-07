@@ -11,6 +11,7 @@ from cctv.tools.maps import (
     execute_reverse_geocode,
     execute_search_map,
 )
+from cctv.tools.submit_answer import SUBMIT_ANSWER_TOOL, execute_submit_answer
 from cctv.tools.registry import (
     default_tool_schemas,
     execute_tool,
@@ -30,6 +31,7 @@ def _execute_get_image_args(arguments: dict[str, Any] | None = None) -> dict[str
 
 register_tool(LIST_CAMERAS_TOOL, execute_list_cameras)
 register_tool(GET_CAMERA_IMAGE_TOOL, execute_get_camera_image)
+register_tool(SUBMIT_ANSWER_TOOL, execute_submit_answer)
 register_tool(GET_IMAGE_TOOL, _execute_get_image_args)
 register_tool(WEB_SEARCH_TOOL, execute_web_search)
 register_tool(GET_WEATHER_TOOL, execute_get_weather)
@@ -43,6 +45,7 @@ __all__ = [
     "LIST_CAMERAS_TOOL",
     "REVERSE_GEOCODE_TOOL",
     "SEARCH_MAP_TOOL",
+    "SUBMIT_ANSWER_TOOL",
     "WEB_SEARCH_TOOL",
     "default_tool_schemas",
     "execute_get_camera_image",

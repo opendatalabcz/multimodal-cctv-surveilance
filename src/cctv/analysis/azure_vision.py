@@ -14,8 +14,7 @@ import cctv.tools  # noqa: F401  — register default tools
 from cctv.analysis.citations import (
     FetchedFrame,
     frames_from_tool_result,
-    parse_cited_cameras,
-    parse_followups,
+    normalize_followups,
     select_cited_paths,
 )
 from cctv.observability.tracing import (
@@ -28,6 +27,12 @@ from cctv.observability.tracing import (
 from cctv.observability.usage import normalize_usage
 from cctv.tools.get_camera import HARD_IMAGE_CAP, _camera_queries
 from cctv.tools.registry import default_tool_schemas, execute_tool
+from cctv.tools.submit_answer import (
+    SUBMIT_ANSWER,
+    SUBMIT_ANSWER_TOOL,
+    empty_answer_error,
+    wait_for_tools_error,
+)
 from cctv.utils.azure import AzureOpenAIConfig, load_azure_openai_config
 from cctv.utils.paths import data_root
 
@@ -196,6 +201,7 @@ def _chat_completion_payload(
     temperature: float | None = None,
     reasoning: str | None = None,
     verbosity: str | None = None,
+    tool_choice: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": config.model,
@@ -210,7 +216,7 @@ def _chat_completion_payload(
         payload["verbosity"] = verbosity
     if tools:
         payload["tools"] = tools
-        payload["tool_choice"] = "auto"
+        payload["tool_choice"] = tool_choice or "auto"
     return payload
 
 
@@ -430,6 +436,7 @@ def _responses_payload(
     max_tokens: int = 1500,
     reasoning: str | None = None,
     verbosity: str | None = None,
+    tool_choice: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     instructions, items = _responses_input(messages)
     effective_reasoning = "medium" if not reasoning or reasoning == "default" else reasoning
@@ -446,6 +453,8 @@ def _responses_payload(
         payload["instructions"] = instructions
     if tools:
         payload["tools"] = _responses_tools(tools)
+        if tool_choice:
+            payload["tool_choice"] = tool_choice
     return payload
 
 
@@ -552,8 +561,7 @@ def _fetched_images_message(frames: list[FetchedFrame]) -> dict[str, Any]:
             "type": "text",
             "text": (
                 "Here are the fetched frames for analysis, in this order. "
-                "Cite by camera id in a ```cite``` block when you answer. "
-                "Do not use sep, ..sep, or any other fence language for citations.\n"
+                "When you finish, pass the camera ids you discuss to submit_answer.\n"
                 + "\n".join(labels)
             ),
         },
@@ -700,46 +708,109 @@ def _kept_frames_for_citations(
     return kept
 
 
-def _finalize_tool_chat_result(
-    message: dict[str, Any],
+def _submit_tool_choice(transport: str) -> dict[str, Any]:
+    if transport == "responses":
+        return {"type": "function", "name": SUBMIT_ANSWER}
+    return {"type": "function", "function": {"name": SUBMIT_ANSWER}}
+
+
+def _tools_including_submit(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    for tool in tools:
+        function = tool.get("function") or {}
+        if function.get("name") == SUBMIT_ANSWER:
+            return tools
+    return [*tools, SUBMIT_ANSWER_TOOL]
+
+
+def _tool_call_name(tool_call: dict[str, Any]) -> str:
+    function = tool_call.get("function") or {}
+    return str(function.get("name") or "")
+
+
+def _tool_call_arguments(tool_call: dict[str, Any]) -> dict[str, Any]:
+    function = tool_call.get("function") or {}
+    try:
+        arguments = json.loads(function.get("arguments") or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return arguments if isinstance(arguments, dict) else {}
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+    items: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        text = str(item).strip()
+        key = text.lower()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        items.append(text)
+    return items
+
+
+def _submission(arguments: dict[str, Any]) -> tuple[str, list[str], list[str]] | None:
+    answer = arguments.get("answer")
+    if not isinstance(answer, str) or not answer.strip():
+        return None
+    return answer.strip(), _string_list(arguments.get("camera_ids")), normalize_followups(
+        _string_list(arguments.get("followups"))
+    )
+
+
+def _tool_error_message(tool_call: dict[str, Any], content: str) -> dict[str, Any]:
+    return {
+        "role": "tool",
+        "tool_call_id": tool_call.get("id") or "",
+        "content": content,
+    }
+
+
+_NO_SUBMISSION = "The model did not submit an answer"
+
+
+def _finalize_submission(
+    answer: str,
     result: dict[str, Any],
     *,
     messages: list[dict[str, Any]],
     fetched_frames: list[FetchedFrame],
+    camera_ids: list[str],
+    followups: list[str],
     tool_rounds: int,
     parse_json: bool,
     config: AzureOpenAIConfig,
 ) -> dict[str, Any]:
-    analysis_text = message.get("content") or ""
-    without_followups, followups = parse_followups(analysis_text)
-    display_text, citations = parse_cited_cameras(without_followups)
-    display_paths = select_cited_paths(fetched_frames, citations)
-    message = {**message, "content": display_text}
+    display_paths = select_cited_paths(fetched_frames, camera_ids)
+    message = {"role": "assistant", "content": answer}
     if parse_json:
         try:
-            analysis = _parse_json_payload(display_text)
+            analysis: Any = _parse_json_payload(answer)
         except json.JSONDecodeError:
-            analysis = {"raw_response": display_text}
+            analysis = {"raw_response": answer}
     else:
-        analysis = display_text
+        analysis = answer
     stored = list(messages)
     if fetched_frames:
         stored = _compact_frame_refs_for_storage(
             stored,
             _kept_frames_for_citations(fetched_frames, display_paths),
         )
-    final_messages = stored + [message]
     return {
         "success": True,
         "analysis": analysis,
-        "raw_response": analysis_text,
+        "raw_response": answer,
         "usage": result.get("usage", {}),
         "timestamp": datetime.now().isoformat(),
         "image_paths": [_relative_to_data_root(path) for path in display_paths],
         "image_count": len(display_paths),
         "model": config.model,
         "tool_rounds": tool_rounds,
-        "messages": final_messages,
+        "messages": stored + [message],
         "followups": followups,
     }
 
@@ -762,16 +833,16 @@ def chat_with_tools(
 ) -> dict[str, Any]:
     """Run a multi-turn Azure vision chat with function calling.
 
-    Default tools are ``list_cameras`` and ``get_camera_image``. ``messages``
-    uses the Azure chat format (roles such as user/assistant/tool).     When a
-    tool returns ``image_path`` / ``image_paths``, a frame-ref user message is
-    stored (paths, not base64). Each Azure POST expands only the latest
-    frame-ref to vision parts. After the turn, older refs become text stubs
-    and the latest ref is narrowed to cited frames. ``image_paths`` in the
-    result are the frames cited in the final reply (or all fetched frames
-    if the model omitted the cite block). On success, ``messages`` is the
-    compact history including the final assistant reply with the cite fence
-    stripped. ``on_progress`` receives status dicts (stage + detail) for the UI.
+    Default tools are ``list_cameras``, ``get_camera_image``, and
+    ``submit_answer``. ``messages`` uses the Azure chat format (roles such as
+    user/assistant/tool). When a tool returns ``image_path`` / ``image_paths``,
+    a frame-ref user message is stored (paths, not base64). Each Azure POST
+    expands only the latest frame-ref to vision parts. A turn succeeds only
+    when ``submit_answer`` returns a non-empty answer. Plain text is sent back
+    once with that tool required, then dropped. ``image_paths`` are the frames
+    named in ``camera_ids``. On success, ``messages`` is the compact history
+    plus a normal assistant message. ``on_progress`` receives status dicts
+    (stage + detail) for the UI.
     """
     config = config or load_azure_openai_config()
     if not config.is_configured or not config.api_url:
@@ -787,11 +858,18 @@ def chat_with_tools(
     conversation.extend(history)
     fetched_frames: list[FetchedFrame] = []
     tool_rounds = 0
+    force_submit = False
+    rejected_prose: dict[str, Any] | None = None
 
     try:
         while tool_rounds <= max_tool_rounds:
             _emit_progress(on_progress, "thinking", "Thinking…")
-            round_tools = active_tools if tool_rounds < max_tool_rounds else None
+            if force_submit:
+                round_tools = _tools_including_submit(active_tools)
+                tool_choice = _submit_tool_choice(transport)
+            else:
+                round_tools = active_tools if tool_rounds < max_tool_rounds else None
+                tool_choice = None
             parameters = _model_parameters(
                 transport=transport,
                 max_tokens=max_tokens,
@@ -811,6 +889,7 @@ def chat_with_tools(
                     max_tokens=max_tokens,
                     reasoning=reasoning,
                     verbosity=verbosity,
+                    tool_choice=tool_choice,
                 )
                 result = _traced_post(
                     config.responses_url or "",
@@ -831,6 +910,7 @@ def chat_with_tools(
                     temperature=temperature,
                     reasoning=reasoning,
                     verbosity=verbosity,
+                    tool_choice=tool_choice,
                 )
                 result = _traced_post(
                     config.api_url or "",
@@ -845,27 +925,54 @@ def chat_with_tools(
             tool_calls = message.get("tool_calls") or []
 
             if not tool_calls:
-                return _finalize_tool_chat_result(
-                    message,
+                if force_submit or tool_rounds >= max_tool_rounds:
+                    return {"success": False, "error": _NO_SUBMISSION}
+                conversation.append(message)
+                rejected_prose = message
+                force_submit = True
+                tool_rounds += 1
+                continue
+
+            submit_calls = [
+                tool_call for tool_call in tool_calls if _tool_call_name(tool_call) == SUBMIT_ANSWER
+            ]
+            if len(submit_calls) == len(tool_calls):
+                submission = _submission(_tool_call_arguments(submit_calls[0]))
+                if submission is None:
+                    if force_submit:
+                        return {"success": False, "error": _NO_SUBMISSION}
+                    conversation.append(message)
+                    conversation.extend(
+                        _tool_error_message(tool_call, empty_answer_error())
+                        for tool_call in submit_calls
+                    )
+                    tool_rounds += 1
+                    continue
+                answer, camera_ids, followups = submission
+                if rejected_prose is not None:
+                    conversation = [item for item in conversation if item is not rejected_prose]
+                return _finalize_submission(
+                    answer,
                     result,
                     messages=conversation,
                     fetched_frames=fetched_frames,
+                    camera_ids=camera_ids,
+                    followups=followups,
                     tool_rounds=tool_rounds,
                     parse_json=parse_json,
                     config=config,
                 )
+            if force_submit:
+                return {"success": False, "error": _NO_SUBMISSION}
 
             conversation.append(message)
             round_frames: list[FetchedFrame] = []
             for tool_call in tool_calls:
-                fn = tool_call.get("function") or {}
-                name = fn.get("name") or ""
-                try:
-                    args = json.loads(fn.get("arguments") or "{}")
-                    if not isinstance(args, dict):
-                        args = {}
-                except json.JSONDecodeError:
-                    args = {}
+                name = _tool_call_name(tool_call)
+                args = _tool_call_arguments(tool_call)
+                if name == SUBMIT_ANSWER:
+                    conversation.append(_tool_error_message(tool_call, wait_for_tools_error()))
+                    continue
                 stage, detail = _progress_for_tool(name, args)
                 _emit_progress(on_progress, stage, detail)
                 with start_tool(name=name or "tool", arguments=args) as tool_span:

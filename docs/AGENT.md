@@ -191,7 +191,7 @@ The system prompt (`src/cctv/config/prompt.py`) instructs the model to:
 
 - Fetch **all configured cameras** that match a named place (by name or GPS area) in **one** `get_camera_image` call (`cameras: [...]`), not a single random sample and not one tool call per camera.
 - For questions with **no location**, sample **one camera per configured location** when locations exist (otherwise fall back to GPS clustering).
-- Prefer a **soft cap of ~10 images** per turn; allow more when a place-wide question needs it (Prague-wide fetch is 14 frames; hard cap 16).
+- Fetch every matching camera. One `get_camera_image` call accepts at most 16 frames (a Prague-wide fetch is 14).
 - Describe **visible** conditions from camera frames first.
 - Use `get_weather` only when the Weather toggle is on, and clearly label measured/forecast data vs camera-observed conditions.
 - Use `web_search` for news/context when Internet search is on — **not** as a weather API.
@@ -207,6 +207,7 @@ Tools exposed to Azure depend on the current toggles (`cctv.tools.tool_schemas_f
 | --- | --- | --- |
 | `list_cameras` | always | JSON list of **effectively enabled** cameras (id, name, GPS, source, source_type, sector_id, location_id, location_name) |
 | `get_camera_image` | always | Resolves YAML `source` for one or more **effectively enabled** cameras, fetches stills (in parallel), returns metadata + JPEG paths; disabled or unknown ids return a clear error per camera |
+| `submit_answer` | always | Ends the turn. Arguments are the visible markdown, the camera ids to show, and up to three follow-up questions. A plain-text ending is not shown; the loop asks once more with this tool required |
 | `web_search` | `internet` | Up to 5 DuckDuckGo text results (title, URL, snippet) via `ddgs` |
 | `get_weather` | `weather` | Open-Meteo current conditions + 3-day forecast (coordinates or place name) |
 | `search_map` | `maps` | Nominatim place search (≤5 results) |
@@ -228,7 +229,7 @@ These are free public services without uptime guarantees:
 
 External failures return a tool result (not a chat crash) so the model can explain that the source was unavailable.
 
-After `get_camera_image` succeeds, `chat_with_tools` appends a **frame-ref** user message (JPEG paths and camera ids, not base64). Each Azure POST expands only the **latest** frame-ref to vision parts (`detail: high`); older refs become a `Previously viewed: …` stub. After the turn, the latest ref is narrowed to **cited** frames (or all fetched frames if the model omitted the cite block) so a follow-up with no new fetch can still see those stills. FastAPI copies cited paths to `imageUrls` like `/api/images/...` for the chat UI. Do not put large base64 blobs in stored transcripts. The tool accepts `cameras: [id or name, ...]` (and `camera` for a single name). There is a preferred cap of about 10 images and a hard cap of 16.
+After `get_camera_image` succeeds, `chat_with_tools` appends a **frame-ref** user message (JPEG paths and camera ids, not base64). Each Azure POST expands only the **latest** frame-ref to vision parts (`detail: high`); older refs become a `Previously viewed: …` stub. The turn ends when the model calls `submit_answer`. `camera_ids` selects which fetched frames stay on the latest ref, so a follow-up with no new fetch can still see those stills. An empty list shows no frames. FastAPI copies those paths to `imageUrls` like `/api/images/...` for the chat UI. The stored transcript is a normal assistant message, not the tool call. Do not put large base64 blobs in stored transcripts. `get_camera_image` accepts `cameras: [id or name, ...]` (and `camera` for a single name). There is a hard cap of 16 images per call.
 
 Each chat turn appends one JSON line to `logs/chat_turns.jsonl` under the data directory (`turn_id`, `conversation_id`, tool rounds/names, cited cameras, Azure `usage`, `duration_ms`). `turn_id` is also the Langfuse trace id when tracing is on.
 
