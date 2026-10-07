@@ -724,17 +724,12 @@ def test_second_fetch_stubs_previous_frames() -> None:
     assert image_batches == [["/tmp/cam_c.jpg"]]
 
 
-def test_luna_default_omits_reasoning_effort() -> None:
-    config = AzureOpenAIConfig(api_key="k", endpoint="https://example.test", model="gpt-5.6-luna")
+def test_chat_completions_omit_default_reasoning_and_verbosity() -> None:
+    config = AzureOpenAIConfig(api_key="k", endpoint="https://example.test", model="gpt-4o")
     default_payload = _chat_completion_payload(
         [{"role": "user", "content": "hi"}],
         config,
         reasoning="default",
-    )
-    high_payload = _chat_completion_payload(
-        [{"role": "user", "content": "hi"}],
-        config,
-        reasoning="high",
     )
     medium_verbosity = _chat_completion_payload(
         [{"role": "user", "content": "hi"}],
@@ -751,8 +746,32 @@ def test_luna_default_omits_reasoning_effort() -> None:
     assert "reasoning_effort" not in default_payload
     assert "verbosity" not in default_payload
     assert "verbosity" not in medium_verbosity
-    assert high_payload["reasoning_effort"] == "high"
     assert low_verbosity["verbosity"] == "low"
+
+
+def test_luna_responses_payload_normalizes_legacy_default_and_supports_none() -> None:
+    config = AzureOpenAIConfig(
+        api_key="k",
+        endpoint="https://example.test",
+        model="gpt-5.6-luna",
+    )
+
+    legacy_default = _responses_payload(
+        [{"role": "user", "content": "hi"}],
+        config,
+        reasoning="default",
+    )
+    without_reasoning = _responses_payload(
+        [{"role": "user", "content": "hi"}],
+        config,
+        reasoning="none",
+        verbosity="high",
+    )
+
+    assert legacy_default["reasoning"] == {"effort": "medium"}
+    assert without_reasoning["reasoning"] == {"effort": "none"}
+    assert without_reasoning["text"] == {"verbosity": "high"}
+    assert config.responses_url == "https://example.test/openai/v1/responses"
 
 
 def test_astra_responses_payload_uses_medium_reasoning() -> None:
@@ -794,27 +813,44 @@ def test_astra_responses_payload_uses_medium_reasoning() -> None:
     assert config.responses_url == "https://example.test/openai/v1/responses"
 
 
-def test_astra_responses_tool_round_returns_assistant_text() -> None:
+def test_luna_responses_tool_round_returns_assistant_text() -> None:
     posted: list[dict] = []
     bodies = [
         {
             "output": [
                 {
+                    "type": "reasoning",
+                    "id": "rs_1",
+                    "summary": [],
+                    "encrypted_content": "enc",
+                    "content": [{"type": "reasoning_text", "text": "secret plan"}],
+                },
+                {
                     "type": "function_call",
                     "call_id": "call_1",
                     "name": "list_cameras",
                     "arguments": "{}",
-                }
+                },
             ],
             "usage": {},
         },
         {
             "output": [
                 {
+                    "type": "reasoning",
+                    "id": "rs_2",
+                    "summary": [{"type": "summary_text", "text": "thinking aloud"}],
+                    "encrypted_content": "enc2",
+                },
+                {"type": "text", "text": "leaked thought"},
+                {
                     "type": "message",
                     "role": "assistant",
-                    "content": [{"type": "output_text", "text": "Two cameras."}],
-                }
+                    "content": [
+                        {"type": "output_text", "text": "Two cameras."},
+                        {"type": "text", "text": "also hidden"},
+                    ],
+                },
             ],
             "usage": {},
         },
@@ -830,7 +866,7 @@ def test_astra_responses_tool_round_returns_assistant_text() -> None:
     config = AzureOpenAIConfig(
         api_key="k",
         endpoint="https://example.test",
-        model="gpt-6-astra",
+        model="gpt-5.6-luna",
     )
     with (
         patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post),
@@ -845,14 +881,35 @@ def test_astra_responses_tool_round_returns_assistant_text() -> None:
             system_prompt="Be brief.",
             tools=[{"type": "function", "function": {"name": "list_cameras", "parameters": {}}}],
             transport="responses",
-            reasoning="medium",
+            reasoning="high",
+            verbosity="high",
             parse_json=False,
         )
 
     execute.assert_called_once_with("list_cameras", {})
-    assert posted[0]["url"].endswith("/responses")
-    assert posted[0]["json"]["reasoning"] == {"effort": "medium"}
+    assert all(item["url"].endswith("/responses") for item in posted)
+    assert posted[0]["json"]["reasoning"] == {"effort": "high"}
+    assert posted[0]["json"]["include"] == ["reasoning.encrypted_content"]
+    assert "summary" not in posted[0]["json"]["reasoning"]
+    assert posted[0]["json"]["text"] == {"verbosity": "high"}
     assert "reasoning_effort" not in posted[0]["json"]
-    assert posted[1]["json"]["input"][-1]["type"] == "function_call_output"
+    replayed = posted[1]["json"]["input"]
+    reasoning_index = next(
+        index for index, item in enumerate(replayed) if item.get("type") == "reasoning"
+    )
+    call_index = next(
+        index for index, item in enumerate(replayed) if item.get("type") == "function_call"
+    )
+    assert reasoning_index < call_index
+    assert replayed[reasoning_index] == {
+        "type": "reasoning",
+        "id": "rs_1",
+        "summary": [],
+        "encrypted_content": "enc",
+    }
+    assert replayed[-1]["type"] == "function_call_output"
     assert result["success"] is True
     assert result["analysis"] == "Two cameras."
+    assert "secret plan" not in result["analysis"]
+    assert "leaked thought" not in result["analysis"]
+    assert "thinking aloud" not in result["analysis"]

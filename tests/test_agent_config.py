@@ -293,6 +293,32 @@ def test_overlay_stores_non_default_settings_per_model(tmp_path, monkeypatch) ->
     assert kept.verbosity["gpt-5.6-luna"] == "low"
 
 
+def test_luna_catalog_uses_responses_with_explicit_reasoning_default() -> None:
+    luna = next(item for item in default_model_catalog() if item.id == "gpt-5.6-luna")
+
+    assert luna.transport == "responses"
+    assert luna.reasoning.default == "medium"
+    assert luna.reasoning.choices == ["none", "low", "medium", "high", "xhigh", "max"]
+    assert "default" not in luna.reasoning.choices
+
+
+def test_legacy_luna_default_reasoning_clamps_to_medium(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AZURE_OPENAI_MODEL", "gpt-5.6-luna")
+    base_path = tmp_path / "agent.yaml"
+    overlay_path = tmp_path / "agent.local.yaml"
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: base_path)
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay_path)
+    save_agent_config(AgentConfig(cameras=[_cam("bridge", "Bridge")]), base_path)
+    overlay_path.write_text(
+        "reasoning:\n  gpt-5.6-luna: default\n",
+        encoding="utf-8",
+    )
+
+    merged = load_agent_config()
+
+    assert merged.reasoning["gpt-5.6-luna"] == "medium"
+
+
 def test_legacy_reasoning_string_loads_for_the_selected_model(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("AZURE_OPENAI_MODEL", "gpt-5.6-luna")
     base_path = tmp_path / "agent.yaml"
@@ -306,4 +332,4 @@ def test_legacy_reasoning_string_loads_for_the_selected_model(tmp_path, monkeypa
     merged = load_agent_config()
     assert merged.model == "gpt-6-astra"
     assert merged.reasoning["gpt-6-astra"] == "low"
-    assert merged.reasoning["gpt-5.6-luna"] == "default"
+    assert merged.reasoning["gpt-5.6-luna"] == "medium"

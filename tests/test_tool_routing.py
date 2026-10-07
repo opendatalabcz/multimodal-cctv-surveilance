@@ -222,6 +222,54 @@ def test_run_chat_turn_uses_selected_model_and_labels_reply() -> None:
     assert updated.messages[-1].model == "gpt-6-astra"
 
 
+def test_run_chat_turn_routes_luna_reasoning_and_tools_to_responses() -> None:
+    conversation = Conversation(id="conv-luna-responses")
+    seen: dict = {}
+
+    def fake_chat(messages, *, config=None, **kwargs):
+        seen.update(
+            {
+                "model": config.model,
+                "transport": kwargs["transport"],
+                "reasoning": kwargs["reasoning"],
+                "verbosity": kwargs["verbosity"],
+                "has_tools": bool(kwargs["tools"]),
+            }
+        )
+        return {
+            "success": True,
+            "analysis": "ok",
+            "model": config.model,
+            "messages": list(messages) + [{"role": "assistant", "content": "ok"}],
+            "image_paths": [],
+        }
+
+    agent = AgentConfig(
+        model="gpt-5.6-luna",
+        reasoning={"gpt-5.6-luna": "high"},
+        verbosity={"gpt-5.6-luna": "high"},
+    )
+    azure = AzureOpenAIConfig(
+        api_key="key",
+        endpoint="https://example.test",
+        model="gpt-5.6-luna",
+    )
+    with (
+        patch("cctv.api.chat.load_agent_config", return_value=agent),
+        patch("cctv.api.chat.chat_with_tools", side_effect=fake_chat),
+    ):
+        _, result = run_chat_turn(conversation, "hello", config=azure)
+
+    assert result["success"] is True
+    assert seen == {
+        "model": "gpt-5.6-luna",
+        "transport": "responses",
+        "reasoning": "high",
+        "verbosity": "high",
+        "has_tools": True,
+    }
+
+
 def test_run_chat_turn_does_not_call_azure_for_unsupported_provider() -> None:
     conversation = Conversation(id="conv-qwen")
     agent = AgentConfig(

@@ -171,10 +171,10 @@ models:
   - id: gpt-5.6-luna
     label: GPT-5.6 Luna
     provider: azure
-    transport: chat_completions
+    transport: responses
     reasoning:
-      choices: [default, low, medium, high]
-      default: default
+      choices: [none, low, medium, high, xhigh, max]
+      default: medium
       locked: false
     verbosity:
       choices: [low, medium, high]

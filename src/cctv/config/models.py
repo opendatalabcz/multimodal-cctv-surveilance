@@ -103,10 +103,10 @@ def default_model_catalog() -> list[ModelOption]:
             id="gpt-5.6-luna",
             label="GPT-5.6 Luna",
             provider="azure",
-            transport="chat_completions",
+            transport="responses",
             reasoning=ModelReasoning(
-                choices=["default", "low", "medium", "high"],
-                default="default",
+                choices=["none", "low", "medium", "high", "xhigh", "max"],
+                default="medium",
                 locked=False,
             ),
             verbosity=ModelReasoning(

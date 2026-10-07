@@ -146,6 +146,26 @@ def test_put_config_keeps_per_model_reasoning_and_verbosity(client, tmp_path, mo
     assert rejected.status_code == 400
     assert "reasoning" in rejected.json()["detail"]
 
+    rejected_default = client.put(
+        "/api/config",
+        json={
+            **body,
+            "reasoning": {**body["reasoning"], "gpt-5.6-luna": "default"},
+        },
+    )
+    assert rejected_default.status_code == 400
+    assert "reasoning" in rejected_default.json()["detail"]
+
+    luna_none = client.put(
+        "/api/config",
+        json={
+            **body,
+            "reasoning": {**body["reasoning"], "gpt-5.6-luna": "none"},
+        },
+    )
+    assert luna_none.status_code == 200
+    assert luna_none.json()["reasoning"]["gpt-5.6-luna"] == "none"
+
     rejected_verbosity = client.put(
         "/api/config",
         json={**body, "verbosity": {**body["verbosity"], "gpt-6-astra": "max"}},

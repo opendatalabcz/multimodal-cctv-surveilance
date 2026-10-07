@@ -279,6 +279,8 @@ def _responses_input(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str
             )
             continue
         tool_calls = message.get("tool_calls") or []
+        if role == "assistant":
+            items.extend(_stored_reasoning_items(message))
         content = _responses_content(message.get("content"), role=role or "user")
         has_text = (isinstance(content, str) and content) or (
             isinstance(content, list) and len(content) > 0
@@ -308,11 +310,13 @@ def _responses_payload(
     verbosity: str | None = None,
 ) -> dict[str, Any]:
     instructions, items = _responses_input(messages)
+    effective_reasoning = "medium" if not reasoning or reasoning == "default" else reasoning
     payload: dict[str, Any] = {
         "model": config.model,
         "input": items,
         "max_output_tokens": max_tokens,
-        "reasoning": {"effort": reasoning or "medium"},
+        "reasoning": {"effort": effective_reasoning},
+        "include": ["reasoning.encrypted_content"],
     }
     if verbosity and verbosity != "medium":
         payload["text"] = {"verbosity": verbosity}
@@ -324,27 +328,50 @@ def _responses_payload(
 
 
 def _responses_output_text(result: dict[str, Any]) -> str:
+    """Visible assistant text only. Reasoning items and summaries stay hidden."""
     chunks: list[str] = []
     for item in result.get("output") or []:
-        if not isinstance(item, dict):
+        if not isinstance(item, dict) or item.get("type") != "message":
             continue
-        if item.get("type") == "message":
-            content = item.get("content")
-            if isinstance(content, str):
-                chunks.append(content)
-            elif isinstance(content, list):
-                for part in content:
-                    if isinstance(part, dict) and part.get("type") in {"output_text", "text"}:
-                        chunks.append(part.get("text") or "")
-        elif item.get("type") in {"output_text", "text"}:
-            chunks.append(item.get("text") or "")
+        content = item.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "output_text":
+                chunks.append(part.get("text") or "")
     return "\n".join(chunk for chunk in chunks if chunk)
+
+
+def _reasoning_replay_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Opaque fields Azure needs to continue a thought. Readable reasoning is dropped."""
+    record = {"type": "reasoning"}
+    for field in ("id", "summary", "encrypted_content"):
+        if field in item and item[field] is not None:
+            record[field] = item[field]
+    return record
+
+
+def _stored_reasoning_items(message: dict[str, Any]) -> list[dict[str, Any]]:
+    stored = message.get("reasoning_items") or []
+    if not isinstance(stored, list):
+        return []
+    return [
+        item
+        for item in stored
+        if isinstance(item, dict) and item.get("type") == "reasoning"
+    ]
 
 
 def _assistant_message_from_responses(result: dict[str, Any]) -> dict[str, Any]:
     tool_calls = []
+    reasoning_items = []
     for item in result.get("output") or []:
-        if not isinstance(item, dict) or item.get("type") != "function_call":
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") == "reasoning":
+            reasoning_items.append(_reasoning_replay_item(item))
+            continue
+        if item.get("type") != "function_call":
             continue
         tool_calls.append(
             {
@@ -357,6 +384,8 @@ def _assistant_message_from_responses(result: dict[str, Any]) -> dict[str, Any]:
             }
         )
     message: dict[str, Any] = {"role": "assistant", "content": _responses_output_text(result)}
+    if reasoning_items:
+        message["reasoning_items"] = reasoning_items
     if tool_calls:
         message["tool_calls"] = tool_calls
     return message
