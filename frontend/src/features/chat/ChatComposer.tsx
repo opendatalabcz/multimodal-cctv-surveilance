@@ -21,16 +21,11 @@ export function ChatComposer({ disabled, onSend }: ChatComposerProps) {
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'Enter') {
+    if (event.key !== 'Enter' || event.shiftKey) {
       return
     }
-    if (event.shiftKey) {
-      return
-    }
-    if (event.ctrlKey || event.metaKey || !event.shiftKey) {
-      event.preventDefault()
-      handleSend()
-    }
+    event.preventDefault()
+    handleSend()
   }
 
   return (

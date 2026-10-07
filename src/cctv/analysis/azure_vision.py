@@ -150,7 +150,8 @@ def analyze_images(
             payload,
             config,
             timeout=90,
-            name="analyze-images",
+            name="describe-camera",
+            tags=["camera-metadata"],
             model_parameters=_model_parameters(
                 transport="chat_completions",
                 max_tokens=max_tokens,
@@ -301,6 +302,7 @@ def _traced_post(
     metadata: dict[str, Any] | None = None,
     model_parameters: dict[str, Any] | None = None,
     include_images: bool = False,
+    tags: list[str] | None = None,
 ) -> dict[str, Any]:
     observed = dict(metadata or {})
     with start_generation(
@@ -310,6 +312,7 @@ def _traced_post(
         model_parameters=model_parameters,
         metadata=observed,
         include_images=include_images,
+        tags=tags,
     ) as generation:
         started = time.perf_counter()
         try:
@@ -814,7 +817,7 @@ def chat_with_tools(
                     payload,
                     config,
                     timeout=request_timeout,
-                    name="azure-responses",
+                    name="generate-reply",
                     metadata=metadata,
                     model_parameters=parameters,
                 )
@@ -834,7 +837,7 @@ def chat_with_tools(
                     payload,
                     config,
                     timeout=request_timeout,
-                    name="azure-chat",
+                    name="generate-reply",
                     metadata=metadata,
                     model_parameters=parameters,
                 )

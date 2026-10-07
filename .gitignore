@@ -192,3 +192,6 @@ frontend/dist/
 
 # Local agent overlay (toggles and experimental cameras)
 configs/agent.local.yaml
+
+# Local Cursor skills (machine-specific installs and symlinks)
+.cursor/skills/

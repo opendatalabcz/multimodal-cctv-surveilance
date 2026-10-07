@@ -306,11 +306,12 @@ def test_turn_nests_generation_and_tool_and_correlates_the_log(tmp_path, monkeyp
     assert updated.messages[-1].content == "The bridge is quiet."
     assert len(client.roots) == 1
     turn = client.roots[0]
-    assert turn.kwargs["name"] == "chat-turn"
+    assert turn.kwargs["as_type"] == "agent"
+    assert turn.kwargs["name"] == "answer-chat"
     assert turn.kwargs["trace_context"]["trace_id"]
     assert [child.kwargs["as_type"] for child in turn.children] == [
         "generation",
-        "span",
+        "tool",
         "generation",
     ]
     assert turn.children[1].kwargs["name"] == "get_camera_image"
@@ -322,7 +323,9 @@ def test_turn_nests_generation_and_tool_and_correlates_the_log(tmp_path, monkeyp
     assert turn.children[0].updates[-1]["usage_details"] == {"input": 11, "output": 5, "total": 16}
     assert turn.children[-1].updates[-1]["usage_details"]["total"] == 26
     assert turn.updates[-1]["output"] == "The bridge is quiet."
-    assert sessions == [{"session_id": "conv-trace", "trace_name": "chat-turn"}]
+    assert sessions == [
+        {"session_id": "conv-trace", "trace_name": "answer-chat", "tags": ["chat"]}
+    ]
     for generation in (turn.children[0], turn.children[2]):
         exported = json.dumps(generation.kwargs["input"])
         assert "base64" not in exported
@@ -424,7 +427,7 @@ def test_analyze_images_can_include_the_frame(tmp_path, monkeypatch) -> None:
 
     assert result["success"] is True
     generation = client.roots[0]
-    assert generation.kwargs["name"] == "analyze-images"
+    assert generation.kwargs["name"] == "describe-camera"
     assert list(_walk_media(generation.kwargs["input"]))
     assert generation.updates[-1]["usage_details"] == {"input": 4, "output": 2, "total": 6}
 
@@ -462,7 +465,7 @@ def test_responses_usage_and_encrypted_content_are_normalized(monkeypatch) -> No
 
     assert result["success"] is True
     generation = client.roots[0]
-    assert generation.kwargs["name"] == "azure-responses"
+    assert generation.kwargs["name"] == "generate-reply"
     assert generation.kwargs["model_parameters"]["transport"] == "responses"
     assert "reasoning.encrypted_content" not in json.dumps(generation.kwargs["input"])
     exported_output = json.dumps(generation.updates[-1]["output"])

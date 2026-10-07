@@ -23,6 +23,8 @@ from cctv.utils.paths import data_root
 
 logger = logging.getLogger("cctv.observability")
 
+_LOOKUP_TOOLS = frozenset({"list_cameras", "web_search", "search_map", "reverse_geocode"})
+
 _TRUE = frozenset({"1", "true", "yes", "on"})
 _CLIENT: Any = None
 _CLIENT_FAILED = False
@@ -106,12 +108,12 @@ def start_turn(
     user_input: str,
     metadata: dict[str, Any] | None = None,
 ) -> Iterator[Observation]:
-    """Root span for one user message. ``turn_id`` is the Langfuse trace id."""
+    """Root agent observation for one user message. ``turn_id`` is the Langfuse trace id."""
 
     def factory(client: Any) -> Any:
         return client.start_as_current_observation(
-            as_type="span",
-            name="chat-turn",
+            as_type="agent",
+            name="answer-chat",
             trace_context={"trace_id": turn_id},
             input=sanitize_for_export(user_input, include_images=False),
             metadata=sanitize_for_export(metadata or {}, include_images=False),
@@ -121,7 +123,7 @@ def start_turn(
         if not tracing_enabled():
             yield observation
             return
-        with _session(session_id):
+        with _attributes(session_id=session_id, trace_name="answer-chat", tags=["chat"]):
             yield observation
 
 
@@ -134,6 +136,7 @@ def start_generation(
     model_parameters: dict[str, Any] | None = None,
     metadata: dict[str, Any] | None = None,
     include_images: bool = False,
+    tags: list[str] | None = None,
 ) -> Iterator[Observation]:
     """One Azure request. Image bytes are included only when requested."""
     parameters = _scalar_parameters(model_parameters)
@@ -152,16 +155,21 @@ def start_generation(
         return client.start_as_current_observation(**kwargs)
 
     with _observation(factory) as observation:
-        yield observation
+        if tags and tracing_enabled():
+            with _attributes(tags=tags, trace_name=name):
+                yield observation
+        else:
+            yield observation
 
 
 @contextmanager
 def start_tool(*, name: str, arguments: Any) -> Iterator[Observation]:
-    """One tool execution nested under the active chat turn."""
+    """One tool or lookup nested under the active chat agent."""
+    observation_type = "retriever" if name in _LOOKUP_TOOLS else "tool"
 
     def factory(client: Any) -> Any:
         return client.start_as_current_observation(
-            as_type="span",
+            as_type=observation_type,
             name=name or "tool",
             input=sanitize_for_export(arguments, include_images=False),
             metadata={"tool": name or "tool"},
@@ -289,12 +297,21 @@ def _close(context: Any, exc: BaseException | None) -> None:
 
 
 @contextmanager
-def _session(session_id: str) -> Iterator[None]:
+def _attributes(
+    *,
+    session_id: str | None = None,
+    trace_name: str | None = None,
+    tags: list[str] | None = None,
+) -> Iterator[None]:
     context = None
     try:
         from langfuse import propagate_attributes
 
-        context = propagate_attributes(session_id=session_id, trace_name="chat-turn")
+        context = propagate_attributes(
+            session_id=session_id,
+            trace_name=trace_name,
+            tags=tags,
+        )
         context.__enter__()
     except Exception:
         logger.exception("Langfuse session propagation failed")
@@ -324,6 +341,7 @@ def _get_client() -> Any | None:
             public_key=os.environ["LANGFUSE_PUBLIC_KEY"],
             secret_key=os.environ["LANGFUSE_SECRET_KEY"],
             base_url=os.getenv("LANGFUSE_BASE_URL") or "https://cloud.langfuse.com",
+            environment=os.getenv("LANGFUSE_TRACING_ENVIRONMENT") or "development",
             tracing_enabled=True,
         )
     except Exception:
