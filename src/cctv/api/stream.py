@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 
 from cctv.api.chat import run_chat_turn
 from cctv.api.store import Conversation
+from cctv.observability.tracing import flush_traces
 
 logger = logging.getLogger("cctv.api")
 _SENTINEL = object()
@@ -45,6 +46,7 @@ def iter_chat_turn_sse(conversation: Conversation, content: str) -> Iterator[str
             events.put({"type": "error", "detail": str(exc)})
         finally:
             events.put(_SENTINEL)
+            flush_traces()
 
     threading.Thread(target=worker, daemon=True).start()
     while True:

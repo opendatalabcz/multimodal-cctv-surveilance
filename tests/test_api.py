@@ -275,6 +275,7 @@ def test_conversation_message_flow(client, tmp_path) -> None:
     assert log_path.is_file()
     entry = json.loads(log_path.read_text(encoding="utf-8").splitlines()[-1])
     assert entry["conversation_id"] == conversation_id
+    assert len(entry["turn_id"]) == 32
     assert entry["success"] is True
     assert entry["cameras"] == ["camera_images/test/frame.jpg"]
     assert "duration_ms" in entry

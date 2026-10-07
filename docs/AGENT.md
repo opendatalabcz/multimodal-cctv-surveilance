@@ -230,7 +230,19 @@ External failures return a tool result (not a chat crash) so the model can expla
 
 After `get_camera_image` succeeds, `chat_with_tools` appends a **frame-ref** user message (JPEG paths and camera ids, not base64). Each Azure POST expands only the **latest** frame-ref to vision parts (`detail: high`); older refs become a `Previously viewed: …` stub. After the turn, the latest ref is narrowed to **cited** frames (or all fetched frames if the model omitted the cite block) so a follow-up with no new fetch can still see those stills. FastAPI copies cited paths to `imageUrls` like `/api/images/...` for the chat UI. Do not put large base64 blobs in stored transcripts. The tool accepts `cameras: [id or name, ...]` (and `camera` for a single name). There is a preferred cap of about 10 images and a hard cap of 16.
 
-Each chat turn appends one JSON line to `logs/chat_turns.jsonl` under the data directory (`conversation_id`, tool rounds/names, cited cameras, Azure `usage`, `duration_ms`).
+Each chat turn appends one JSON line to `logs/chat_turns.jsonl` under the data directory (`turn_id`, `conversation_id`, tool rounds/names, cited cameras, Azure `usage`, `duration_ms`). `turn_id` is also the Langfuse trace id when tracing is on.
+
+## LLM tracing (Langfuse)
+
+Tracing is optional and off unless `LANGFUSE_ENABLED=true` and both `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are set. The API reads those from the environment, not from YAML or the browser. `LANGFUSE_BASE_URL` defaults to Langfuse Cloud EU (`https://cloud.langfuse.com`).
+
+The free Hobby plan includes 50,000 units per month and about 30 days of history. It is meant for development and live demos, not a permanent archive. A shared trace includes whatever was exported. Hobby allows two users.
+
+Each user message becomes one trace. The conversation id is the Langfuse session. Nested observations are the Azure requests (Chat Completions or Responses, including one-shot camera metadata analysis) and the tool calls. The trace records the prompt, answer, tool arguments, tool text, model, transport, reasoning, verbosity, latency, and normalized token counts. Azure deployment names such as `gpt-5.6-luna` are not in Langfuse's public price list, so a blank dollar cost is expected; token counts are the source of truth.
+
+Secrets and `encrypted_content` are removed before anything is sent to Langfuse. Frame bytes are not uploaded unless `LANGFUSE_CAPTURE_IMAGES=true`. With that switch on, each fetched JPEG is attached once, on the tool span that fetched it. Later model calls keep the camera id, path, and image metadata. Camera metadata analysis is the exception: its single generation carries the frame when capture is on, because there is no tool span. Public CCTV frames can still show identifiable people, so treat the Langfuse project as sensitive and do not leave capture on unless you want those images in the trace.
+
+Export failures are logged and do not fail the chat. The UI path flushes after the answer is queued. Process shutdown flushes anything still batched. The local JSONL summary is written either way.
 
 ## How to add a tool
 

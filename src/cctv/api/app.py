@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -22,6 +24,7 @@ from cctv.config.agent_yaml import (
     load_agent_config,
     save_agent_config,
 )
+from cctv.observability.tracing import flush_traces
 from cctv.utils.paths import data_root
 
 logger = logging.getLogger("cctv.api")
@@ -29,8 +32,14 @@ logger = logging.getLogger("cctv.api")
 store = ConversationStore()
 
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    yield
+    flush_traces()
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="CCTV Agent API", version="0.1.0")
+    app = FastAPI(title="CCTV Agent API", version="0.1.0", lifespan=_lifespan)
 
     app.add_middleware(
         CORSMiddleware,

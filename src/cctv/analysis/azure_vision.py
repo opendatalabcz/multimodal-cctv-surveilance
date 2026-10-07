@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -17,6 +18,14 @@ from cctv.analysis.citations import (
     parse_followups,
     select_cited_paths,
 )
+from cctv.observability.tracing import (
+    capture_images_enabled,
+    exported_image,
+    start_generation,
+    start_tool,
+    tracing_enabled,
+)
+from cctv.observability.usage import normalize_usage
 from cctv.tools.get_camera import HARD_IMAGE_CAP, _camera_queries
 from cctv.tools.registry import default_tool_schemas, execute_tool
 from cctv.utils.azure import AzureOpenAIConfig, load_azure_openai_config
@@ -132,17 +141,27 @@ def analyze_images(
     }
     if temperature is not None:
         payload["temperature"] = temperature
-    headers = {
-        "Content-Type": "application/json",
-        "api-key": config.api_key,
-    }
 
     try:
         names = [Path(path).name for path in image_paths]
         print(f"Analyzing {len(image_paths)} image(s): {', '.join(names)}")
-        response = requests.post(config.api_url, headers=headers, json=payload, timeout=90)
-        _raise_for_azure_status(response)
-        result = response.json()
+        result = _traced_post(
+            config.api_url or "",
+            payload,
+            config,
+            timeout=90,
+            name="analyze-images",
+            model_parameters=_model_parameters(
+                transport="chat_completions",
+                max_tokens=max_tokens,
+                temperature=temperature,
+            ),
+            metadata={
+                "image_paths": [str(path) for path in image_paths],
+                "image_count": len(image_paths),
+            },
+            include_images=capture_images_enabled(),
+        )
         analysis_text = result["choices"][0]["message"]["content"]
         if parse_json:
             try:
@@ -219,6 +238,106 @@ def _post_chat_completion(
     if not config.api_url:
         raise requests.RequestException("Azure OpenAI configuration missing")
     return _post_json(config.api_url, payload, config, timeout=timeout)
+
+
+def _elapsed_ms(started: float) -> int:
+    return int((time.perf_counter() - started) * 1000)
+
+
+def _model_parameters(
+    *,
+    transport: str,
+    max_tokens: int,
+    temperature: float | None = None,
+    reasoning: str | None = None,
+    verbosity: str | None = None,
+) -> dict[str, Any]:
+    parameters: dict[str, Any] = {"transport": transport, "max_tokens": max_tokens}
+    if temperature is not None:
+        parameters["temperature"] = temperature
+    if reasoning:
+        parameters["reasoning"] = reasoning
+    if verbosity:
+        parameters["verbosity"] = verbosity
+    return parameters
+
+
+def _latest_image_refs(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    for message in reversed(messages):
+        frames = _frames_from_message(message)
+        if frames:
+            return [
+                {
+                    "path": frame.path,
+                    "camera_id": frame.camera_id,
+                    "camera_name": frame.camera_name,
+                }
+                for frame in frames
+            ]
+    return []
+
+
+def _parsed_tool_content(exec_result: dict[str, Any]) -> Any:
+    content = exec_result.get("tool_content")
+    if not isinstance(content, str):
+        return content
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        return content
+
+
+def _tool_succeeded(parsed: Any) -> bool:
+    return not (isinstance(parsed, dict) and parsed.get("success") is False)
+
+
+def _traced_post(
+    url: str,
+    payload: dict[str, Any],
+    config: AzureOpenAIConfig,
+    *,
+    timeout: int,
+    name: str,
+    metadata: dict[str, Any] | None = None,
+    model_parameters: dict[str, Any] | None = None,
+    include_images: bool = False,
+) -> dict[str, Any]:
+    observed = dict(metadata or {})
+    with start_generation(
+        name=name,
+        model=config.model,
+        input=payload,
+        model_parameters=model_parameters,
+        metadata=observed,
+        include_images=include_images,
+    ) as generation:
+        started = time.perf_counter()
+        try:
+            if config.api_url and url == config.api_url:
+                result = _post_chat_completion(payload, config, timeout=timeout)
+            else:
+                result = _post_json(url, payload, config, timeout=timeout)
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else None
+            generation.update(
+                level="ERROR",
+                status_message=str(exc),
+                metadata={**observed, "http_status": status, "duration_ms": _elapsed_ms(started)},
+            )
+            raise
+        except Exception as exc:
+            generation.update(
+                level="ERROR",
+                status_message=str(exc),
+                metadata={**observed, "duration_ms": _elapsed_ms(started)},
+            )
+            raise
+        generation.update(
+            output=result,
+            usage_details=normalize_usage(result.get("usage")),
+            metadata={**observed, "http_status": 200, "duration_ms": _elapsed_ms(started)},
+        )
+        return result
 
 
 def _responses_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -670,6 +789,17 @@ def chat_with_tools(
         while tool_rounds <= max_tool_rounds:
             _emit_progress(on_progress, "thinking", "Thinking…")
             round_tools = active_tools if tool_rounds < max_tool_rounds else None
+            parameters = _model_parameters(
+                transport=transport,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                reasoning=reasoning,
+                verbosity=verbosity,
+            )
+            metadata: dict[str, Any] = {"round": tool_rounds + 1, "transport": transport}
+            image_refs = _latest_image_refs(conversation)
+            if image_refs:
+                metadata["images"] = image_refs
             if transport == "responses":
                 payload = _responses_payload(
                     conversation,
@@ -679,11 +809,14 @@ def chat_with_tools(
                     reasoning=reasoning,
                     verbosity=verbosity,
                 )
-                result = _post_json(
+                result = _traced_post(
                     config.responses_url or "",
                     payload,
                     config,
                     timeout=request_timeout,
+                    name="azure-responses",
+                    metadata=metadata,
+                    model_parameters=parameters,
                 )
                 message = _assistant_message_from_responses(result)
             else:
@@ -696,7 +829,15 @@ def chat_with_tools(
                     reasoning=reasoning,
                     verbosity=verbosity,
                 )
-                result = _post_chat_completion(payload, config, timeout=request_timeout)
+                result = _traced_post(
+                    config.api_url or "",
+                    payload,
+                    config,
+                    timeout=request_timeout,
+                    name="azure-chat",
+                    metadata=metadata,
+                    model_parameters=parameters,
+                )
                 message = result["choices"][0]["message"]
             tool_calls = message.get("tool_calls") or []
 
@@ -724,7 +865,53 @@ def chat_with_tools(
                     args = {}
                 stage, detail = _progress_for_tool(name, args)
                 _emit_progress(on_progress, stage, detail)
-                exec_result = execute_tool(name, args)
+                with start_tool(name=name or "tool", arguments=args) as tool_span:
+                    tool_started = time.perf_counter()
+                    try:
+                        exec_result = execute_tool(name, args)
+                    except Exception as exc:
+                        tool_span.update(
+                            level="ERROR",
+                            status_message=str(exc),
+                            metadata={
+                                "duration_ms": _elapsed_ms(tool_started),
+                                "success": False,
+                            },
+                        )
+                        raise
+                    parsed = _parsed_tool_content(exec_result)
+                    succeeded = _tool_succeeded(parsed)
+                    frames = frames_from_tool_result(exec_result, args)
+                    images = (
+                        [
+                            exported_image(
+                                frame.path,
+                                camera_id=frame.camera_id,
+                                camera_name=frame.camera_name,
+                            )
+                            for frame in frames
+                        ]
+                        if tracing_enabled()
+                        else []
+                    )
+                    tool_metadata = {
+                        "duration_ms": _elapsed_ms(tool_started),
+                        "success": succeeded,
+                        "image_count": len(frames),
+                    }
+                    if succeeded:
+                        tool_span.update(
+                            output={"content": parsed, "images": images},
+                            metadata=tool_metadata,
+                        )
+                    else:
+                        error = parsed.get("error") if isinstance(parsed, dict) else None
+                        tool_span.update(
+                            output={"content": parsed, "images": images},
+                            metadata=tool_metadata,
+                            level="ERROR",
+                            status_message=str(error or "Tool failed"),
+                        )
                 conversation.append(
                     {
                         "role": "tool",
@@ -733,7 +920,6 @@ def chat_with_tools(
                     }
                 )
 
-                frames = frames_from_tool_result(exec_result, args)
                 fetched_frames.extend(frames)
                 round_frames.extend(frames)
 

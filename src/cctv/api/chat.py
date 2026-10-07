@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import time
+import uuid
 from typing import Any
 
 from cctv.analysis.azure_vision import ProgressCallback, chat_with_tools
+from cctv.observability.tracing import start_turn
 from cctv.api.schemas import ChatMessage
 from cctv.api.store import Conversation, image_urls_for_paths
 from cctv.api.turn_log import append_turn_log, tool_names_from_messages
@@ -54,23 +56,51 @@ def run_chat_turn(
     verbosity = clamp_verbosity(option, agent_config.verbosity.get(selected_model))
 
     started = time.perf_counter()
-    result = chat_with_tools(
-        conversation.azure_messages,
-        config=azure_config,
-        system_prompt=system_prompt,
-        tools=active_tools,
-        parse_json=False,
-        max_tool_rounds=MAX_TOOL_ROUNDS,
-        on_progress=on_progress,
-        reasoning=reasoning,
-        verbosity=verbosity,
-        transport=transport,
-    )
+    turn_id = uuid.uuid4().hex
+    with start_turn(
+        turn_id=turn_id,
+        session_id=conversation.id,
+        user_input=user_content,
+        metadata={
+            "model": selected_model,
+            "transport": transport,
+            "reasoning": reasoning,
+            "verbosity": verbosity,
+            "tools": [
+                tool["function"]["name"]
+                for tool in active_tools
+                if isinstance(tool.get("function"), dict) and tool["function"].get("name")
+            ],
+        },
+    ) as turn:
+        result = chat_with_tools(
+            conversation.azure_messages,
+            config=azure_config,
+            system_prompt=system_prompt,
+            tools=active_tools,
+            parse_json=False,
+            max_tool_rounds=MAX_TOOL_ROUNDS,
+            on_progress=on_progress,
+            reasoning=reasoning,
+            verbosity=verbosity,
+            transport=transport,
+        )
+        if result.get("success"):
+            turn.update(output=_assistant_text(result.get("analysis", "")))
+        else:
+            error = str(result.get("error") or "Chat turn failed")
+            turn.update(level="ERROR", status_message=error, output={"error": error})
     duration_ms = int((time.perf_counter() - started) * 1000)
     if not result.get("success"):
         conversation.messages.pop()
         conversation.azure_messages.pop()
-        _write_turn_log(conversation, result, duration_ms=duration_ms, tools=agent_config.tools)
+        _write_turn_log(
+            conversation,
+            result,
+            duration_ms=duration_ms,
+            tools=agent_config.tools,
+            turn_id=turn_id,
+        )
         return conversation, result
 
     conversation.azure_messages = [
@@ -87,7 +117,13 @@ def run_chat_turn(
         )
     )
     conversation.suggestions = list(result.get("followups") or [])
-    _write_turn_log(conversation, result, duration_ms=duration_ms, tools=agent_config.tools)
+    _write_turn_log(
+        conversation,
+        result,
+        duration_ms=duration_ms,
+        tools=agent_config.tools,
+        turn_id=turn_id,
+    )
     return conversation, result
 
 
@@ -97,11 +133,13 @@ def _write_turn_log(
     *,
     duration_ms: int,
     tools: Any,
+    turn_id: str,
 ) -> None:
     usage = result.get("usage") or {}
     append_turn_log(
         {
             "conversation_id": conversation.id,
+            "turn_id": turn_id,
             "success": bool(result.get("success")),
             "tool_rounds": result.get("tool_rounds"),
             "tool_names": tool_names_from_messages(result.get("messages") or conversation.azure_messages),
