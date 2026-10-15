@@ -1,0 +1,20 @@
+---
+description: Update README and runtime docs when user-facing behavior changes
+alwaysApply: true
+---
+
+# Keep the overview current
+
+When a change alters how someone runs, configures, or uses this project, update the matching doc in the same change. Skip docs for an internal refactor that does not change those facts.
+
+- `README.md` — catalog counts and id pattern, features, config files, run and test commands.
+- `docs/AGENT.md` — tool loop, routing, config merge, HTTP API, config panel.
+- `AGENTS.md` — how to run the API, UI, and tests, and which config file holds what.
+
+```markdown
+# BAD — new run command, README still shows the old one
+make test
+
+# GOOD — README Tests uses the command that actually runs
+make test
+```

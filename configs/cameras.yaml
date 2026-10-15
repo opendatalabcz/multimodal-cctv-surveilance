@@ -5,6 +5,9 @@ sectors:
 - id: japan
   name: Japan
   enabled: true
+- id: namibia
+  name: Namibia
+  enabled: true
 locations:
 - id: charles_bridge
   name: Charles Bridge
@@ -36,12 +39,6 @@ locations:
   enabled: true
   lat: 50.03
   lon: 14.394
-- id: dejvice
-  name: Dejvice
-  sector_id: prague
-  enabled: true
-  lat: 50.099
-  lon: 14.393
 - id: hybernska
   name: Hybernská
   sector_id: prague
@@ -66,12 +63,46 @@ locations:
   enabled: true
   lat: 50.0874
   lon: 14.4174
+- id: argentinska
+  name: Argentinská
+  sector_id: prague
+  enabled: true
+  lat: 50.10801334192914
+  lon: 14.443475723107651
+- id: strahovsky_tunel
+  name: Strahovský tunel
+  sector_id: prague
+  enabled: true
+- id: tunel_mrazovka
+  name: Tunel Mrázovka
+  sector_id: prague
+  enabled: true
+- id: namesti_kinskych
+  name: Náměstí Kinských
+  sector_id: prague
+  enabled: true
 - id: tokachi_obihiro
   name: Tokachi-Obihiro
   sector_id: japan
   enabled: true
   lat: 42.7335
   lon: 143.2175
+- id: tokyo_airport
+  name: Tokyo Airport
+  sector_id: japan
+  enabled: true
+- id: desert
+  name: Desert
+  sector_id: namibia
+  enabled: true
+- id: small_pond
+  name: Small Pond
+  sector_id: namibia
+  enabled: true
+- id: river
+  name: River
+  sector_id: namibia
+  enabled: true
 cameras:
 - id: charles_bridge_101200
   name: '101200'
@@ -103,15 +134,15 @@ cameras:
   sector_id: prague
   location_id: budejovicka
   enabled: true
-- id: nuselak_404033
-  name: '404033'
-  source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/404033/image
-  sector_id: prague
-  location_id: nuselak
-  enabled: true
 - id: nuselak_404032
   name: '404032'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/404032/image
+  sector_id: prague
+  location_id: nuselak
+  enabled: true
+- id: nuselak_404033
+  name: '404033'
+  source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/404033/image
   sector_id: prague
   location_id: nuselak
   enabled: true
@@ -127,21 +158,15 @@ cameras:
   sector_id: prague
   location_id: barandak
   enabled: true
-- id: dejvice_106040
-  name: '106040'
-  source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/106040/image
-  sector_id: prague
-  location_id: dejvice
-  enabled: true
 - id: hybernska_101048
   name: '101048'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/101048/image
   sector_id: prague
   location_id: hybernska
   enabled: true
-- id: belocerekevska_510034
-  name: '510034'
-  source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/510034/image
+- id: belocerekevska_410034
+  name: '410034'
+  source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/410034/image
   sector_id: prague
   location_id: belocerekevska
   enabled: true
@@ -157,9 +182,81 @@ cameras:
   sector_id: prague
   location_id: marianske_namesti
   enabled: true
+- id: argentinska_107009
+  name: '107009'
+  source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/107009/image
+  sector_id: prague
+  location_id: argentinska
+  enabled: true
+- id: argentinska_107033
+  name: '107033'
+  source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/107033/image
+  sector_id: prague
+  location_id: argentinska
+  enabled: true
+- id: argentinska_500065
+  name: '500065'
+  source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500065/image
+  sector_id: prague
+  location_id: argentinska
+  enabled: true
+- id: strahovsky_tunel_500232
+  name: '500232'
+  source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500232/image
+  sector_id: prague
+  location_id: strahovsky_tunel
+  enabled: true
+- id: strahovsky_tunel_500263
+  name: '500263'
+  source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500263/image
+  sector_id: prague
+  location_id: strahovsky_tunel
+  enabled: true
+- id: tunel_mrazovka_500336
+  name: '500336'
+  source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500336/image
+  sector_id: prague
+  location_id: tunel_mrazovka
+  enabled: true
+- id: tunel_mrazovka_500372
+  name: '500372'
+  source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500372/image
+  sector_id: prague
+  location_id: tunel_mrazovka
+  enabled: true
+- id: namesti_kinskych_500508
+  name: '500508'
+  source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500508/image
+  sector_id: prague
+  location_id: namesti_kinskych
+  enabled: true
 - id: tokachi_obihiro_live
   name: Live
   source: https://www.youtube.com/watch?v=IDXRscHtp2s
   sector_id: japan
   location_id: tokachi_obihiro
+  enabled: true
+- id: tokyo_airport_live
+  name: Live
+  source: https://www.youtube.com/watch?v=3w4zEyFamuA
+  sector_id: japan
+  location_id: tokyo_airport
+  enabled: true
+- id: desert_live
+  name: Live
+  source: https://www.youtube.com/watch?v=AeMUdOPFcXI
+  sector_id: namibia
+  location_id: desert
+  enabled: true
+- id: small_pond_live
+  name: Live
+  source: https://www.youtube.com/watch?v=ydYDqZQpim8
+  sector_id: namibia
+  location_id: small_pond
+  enabled: true
+- id: river_live
+  name: Live
+  source: https://www.youtube.com/watch?v=qwvk5hbEJnY
+  sector_id: namibia
+  location_id: river
   enabled: true

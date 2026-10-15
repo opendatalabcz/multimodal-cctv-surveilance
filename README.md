@@ -1,68 +1,61 @@
 # CCTV agent
 
-Python package for multimodal CCTV analysis, with a FastAPI chat API and a React UI.
+A FastAPI chat API and a React UI for looking at configured CCTV stills. The model runs a custom Azure function-calling loop: it fetches frames, then finishes the turn by calling `submit_answer`. The UI talks to the API over `/api` only.
 
-## Docs
+Runtime detail is in [docs/AGENT.md](docs/AGENT.md).
 
-- [Agent runtime, camera tools, routing, and external services](docs/AGENT.md)
+## Catalog
 
-## Camera catalog hierarchy
+Cameras are grouped **sector → location → camera**. A camera is available only when the sector, the location, and the camera are all enabled.
 
-Configured cameras are grouped **sector → location → camera**. The committed catalog has **Prague** (10 locations, 14 cameras) and **Japan** (1 location, 1 YouTube livestream) — 15 cameras total. See [AGENT.md](docs/AGENT.md) for schema, enablement rules, and runtime flow.
+The committed catalog has **26 cameras** in three sectors:
 
-```mermaid
-flowchart TD
-  prague[Prague]
-  japan[Japan]
-  charlesBridge[Charles Bridge]
-  hybernska[Hybernska]
-  tokachi[Tokachi Obihiro]
-  camA[101200]
-  camB[101201]
-  camH[101048]
-  camJ[YouTube live]
-  prague --> charlesBridge
-  prague --> hybernska
-  japan --> tokachi
-  charlesBridge --> camA
-  charlesBridge --> camB
-  hybernska --> camH
-  tokachi --> camJ
-```
+| Sector | Locations | Cameras |
+| --- | --- | --- |
+| Prague | 13 | 21 stills from the city camera portal |
+| Japan | Tokachi-Obihiro, Tokyo Airport | 2 YouTube livestreams |
+| Namibia | Desert, Small Pond, River | 3 YouTube livestreams |
 
-## Features
+Prague locations: Charles Bridge (2), Holešovičky (2), Budějovická (1), Nuselský most (2), Barrandovský most (2), Hybernská (1), Bělocerkevská (1), Ječná (1), Mariánské náměstí (1), Argentinská (3), Strahovský tunel (2), Tunel Mrázovka (2), Náměstí Kinských (1).
 
-- **Camera-first chat**: the agent fetches live JPEGs from configured cameras before answering.
-- **Three-level enablement**: sector AND location AND camera toggles in the Config panel.
-- **Three independent tool toggles** (`internet`, `weather`, `maps`) via `GET/PUT /api/config`.
-- **External tools** (when enabled): DuckDuckGo web search, Open-Meteo weather, OpenStreetMap Nominatim map lookup.
+A Prague camera id is `{location_id}_{portal id}` and its name is that portal id, for example `charles_bridge_101200` / `101200`. A livestream id ends in `_live`, for example `tokachi_obihiro_live`.
 
-Toggles take effect on the next chat message. External services are demo/research-grade public APIs without uptime guarantees.
+## Config
+
+| File | What it holds |
+| --- | --- |
+| `configs/cameras.yaml` | Committed sectors, locations, and cameras |
+| `configs/cameras.local.yaml` | Gitignored camera edits, additions, and removals |
+| `configs/agent.yaml` | Committed model catalog and default tool flags |
+| `configs/agent.local.yaml` | Gitignored model, reasoning, verbosity, and tool toggles |
+
+`GET/PUT /api/config` merges each committed file with its overlay. The Config panel writes overlays only. Secrets stay in the environment.
+
+## Chat
+
+- The header selects the model. The catalog default is GPT-5.6 Luna. GPT-4o and GPT-6 Astra are also listed. Luna and Astra can set reasoning effort and verbosity; GPT-4o cannot.
+- `list_cameras` and `get_camera_image` are always available. One image call takes every matching camera, up to 16 frames.
+- Optional tools follow three independent toggles: `internet` (DuckDuckGo), `weather` (Open-Meteo), and `maps` (OpenStreetMap Nominatim). They apply on the next message.
+- A turn ends only when the model calls `submit_answer` with the visible markdown, the camera ids to show, and up to three follow-up questions.
+- Conversations live in memory and reset when the API stops. Each turn also appends a line to `logs/chat_turns.jsonl`. Langfuse tracing is off unless `LANGFUSE_ENABLED` and both Langfuse keys are set.
+
+External services are public demo APIs without an uptime guarantee.
 
 ## Run locally
 
-API (from this directory):
-
 ```bash
-uv sync
-uv run cctv-api
-# or: uv run uvicorn cctv.api.app:app --reload --port 8000
+make install_dev
+make up
 ```
 
-UI:
+`make install_dev` installs the Python package (including pytest) and the frontend dependencies. `make up` starts the API on port 8000 and the UI on port 5173. The UI proxies `/api` to the API.
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-The Vite app is at http://localhost:5173 and proxies `/api` to port 8000. Azure OpenAI credentials come from the environment (never from the frontend).
+`make api` and `make ui` start one process. `make help` lists every target.
 
 ## Tests
 
 ```bash
-uv run pytest
+make test
 ```
 
 Default tests mock external HTTP; no live network required.

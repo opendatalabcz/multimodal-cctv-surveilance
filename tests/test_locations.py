@@ -232,11 +232,23 @@ def test_committed_catalog_counts_and_entries() -> None:
 
     prague_cameras = [camera for camera in config.cameras if camera.sector_id == "prague"]
 
-    assert len(config.cameras) == 15
-    assert len(prague_cameras) == 14
-    assert len(prague_locations) == 10
-    assert len(japan_locations) == 1
-    assert any(location.id == "marianske_namesti" for location in config.locations)
+    japan_cameras = [camera for camera in config.cameras if camera.sector_id == "japan"]
+    namibia_locations = [
+        location for location in config.locations if location.sector_id == "namibia"
+    ]
+
+    assert len(config.cameras) == 26
+    assert len(prague_cameras) == 21
+    assert len(prague_locations) == 13
+    assert len(japan_locations) == 2
+    assert len(japan_cameras) == 2
+    assert len(namibia_locations) == 3
+    assert any(location.id == "argentinska" for location in config.locations)
+    assert all(camera.id != "dejvice_106040" for camera in config.cameras)
+    assert any(
+        camera.id == "belocerekevska_410034" and camera.source.endswith("/410034/image")
+        for camera in config.cameras
+    )
     assert any(
         camera.id == "tokachi_obihiro_live"
         and "youtube.com/watch?v=IDXRscHtp2s" in camera.source

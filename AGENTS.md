@@ -4,22 +4,15 @@ FastAPI package in `src/cctv/`, React/Vite UI in `frontend/`. The only coupling 
 
 ## Run
 
-API (port 8000):
-
 ```bash
-uv sync
-uv run cctv-api
+make install_dev   # Python package (including pytest) and frontend deps
+make up            # API :8000 and UI :5173
+make api           # API only
+make ui            # UI only
+make test          # pytest, mocked HTTP, no live network
 ```
 
-UI (port 5173, proxies `/api` to 8000):
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Tests (mocked HTTP, no live network): `uv run pytest`.
+The UI proxies `/api` to port 8000.
 
 ## Config and secrets
 

@@ -138,31 +138,13 @@ Committed catalog counts:
 
 | Level | Count | Notes |
 | --- | --- | --- |
-| Sectors | 2 | Prague, Japan (+ implicit Unassigned for legacy) |
-| Locations | 11 | 10 Prague + 1 Japan (Tokachi-Obihiro) |
-| Cameras | 15 | 14 Prague HTTP stills + 1 YouTube livestream |
+| Sectors | 3 | Prague, Japan, Namibia (+ implicit Unassigned for legacy) |
+| Locations | 18 | 13 Prague + 2 Japan + 3 Namibia |
+| Cameras | 26 | 21 Prague portal stills + 5 YouTube livestreams |
 
-```mermaid
-flowchart TD
-  prague[Prague]
-  japan[Japan]
-  charlesBridge[Charles Bridge]
-  hybernska[Hybernska]
-  tokachi[Tokachi Obihiro]
-  camA[101200]
-  camB[101201]
-  camH[101048]
-  camJ[YouTube live]
-  prague --> charlesBridge
-  prague --> hybernska
-  japan --> tokachi
-  charlesBridge --> camA
-  charlesBridge --> camB
-  hybernska --> camH
-  tokachi --> camJ
-```
+Prague locations: Charles Bridge (2), Holešovičky (2), Budějovická (1), Nuselský most (2), Barrandovský most (2), Hybernská (1), Bělocerkevská (`410034`), Ječná (1), Mariánské náměstí (1), Argentinská (3), Strahovský tunel (2), Tunel Mrázovka (2), Náměstí Kinských (1). Japan is Tokachi-Obihiro (`IDXRscHtp2s`) and Tokyo Airport (`3w4zEyFamuA`). Namibia is three watering-hole livestreams: Desert (`AeMUdOPFcXI`), Small Pond (`ydYDqZQpim8`), and River (`qwvk5hbEJnY`).
 
-Prague locations come from `src/cctv/fetch/monitor_config.json` plus Mariánské náměstí (`101164`). Japan uses the Tokachi-Obihiro YouTube livestream (`IDXRscHtp2s`).
+A Prague camera id is `{location_id}_{portal id}` and its name is that portal id. A livestream id ends in `_live`.
 
 ### Sectors, locations, and effective enablement
 
@@ -199,7 +181,7 @@ The system prompt (`src/cctv/config/prompt.py`) instructs the model to:
 
 - Fetch **all configured cameras** that match a named place (by name or GPS area) in **one** `get_camera_image` call (`cameras: [...]`), not a single random sample and not one tool call per camera.
 - For questions with **no location**, sample **one camera per configured location** when locations exist (otherwise fall back to GPS clustering).
-- Fetch every matching camera. One `get_camera_image` call accepts at most 16 frames (a Prague-wide fetch is 14).
+- Fetch every matching camera. One `get_camera_image` call accepts at most 16 frames. Prague has 21 cameras, so a city-wide fetch is truncated at that cap.
 - Describe **visible** conditions from camera frames first.
 - Use `get_weather` only when the Weather toggle is on, and clearly label measured/forecast data vs camera-observed conditions.
 - Use `web_search` for news/context when Internet search is on — **not** as a weather API.
@@ -276,29 +258,21 @@ Conversations are in memory and reset when the API process stops. The UI stores 
 
 ## Run
 
-From the Python project root (`Project/multimodal-cctv-surveilance`):
+From this directory:
 
 ```bash
-uv sync
-uv run cctv-api
-# or: uv run uvicorn cctv.api.app:app --reload --port 8000
+make install_dev
+make up
 ```
 
-Frontend:
-
-```bash
-cd frontend
-npm run dev
-```
-
-Open http://localhost:5173. Vite proxies `/api` to port 8000. Set Azure OpenAI env vars for the API process.
+`make up` starts the API on port 8000 and the UI on http://localhost:5173. Vite proxies `/api` to the API. `make api` and `make ui` start one process. Set Azure OpenAI env vars for the API process.
 
 ## Tests
 
 Default pytest uses mocked HTTP — no live network:
 
 ```bash
-uv run pytest
+make test
 ```
 
 ## Config panel UI
