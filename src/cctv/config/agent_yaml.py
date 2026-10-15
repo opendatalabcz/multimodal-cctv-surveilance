@@ -27,14 +27,35 @@ from cctv.config.models import (
 from cctv.utils.paths import project_root
 
 
+_CAMERA_KEYS = (
+    "sectors",
+    "locations",
+    "cameras",
+    "remove_sector_ids",
+    "remove_location_ids",
+    "remove_camera_ids",
+)
+_AGENT_KEYS = ("tools", "models", "model", "reasoning", "verbosity")
+
+
 def agent_config_path() -> Path:
-    """Committed camera catalog and default tool flags."""
+    """Committed model catalog, selected model, and default tool flags."""
     return project_root() / "configs" / "agent.yaml"
 
 
+def camera_config_path() -> Path:
+    """Committed sector, location, and camera catalog."""
+    return agent_config_path().with_name("cameras.yaml")
+
+
 def agent_overlay_path() -> Path:
-    """Gitignored local overrides (toggles, extra/edited cameras)."""
+    """Gitignored local overrides for tools, model, reasoning, and verbosity."""
     return project_root() / "configs" / "agent.local.yaml"
+
+
+def camera_overlay_path() -> Path:
+    """Gitignored local overrides for sectors, locations, and cameras."""
+    return agent_overlay_path().with_name("cameras.local.yaml")
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
@@ -52,15 +73,54 @@ def _write_yaml(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _pick(data: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
+    return {key: data[key] for key in keys if key in data}
+
+
+def _combined_base(camera_data: dict[str, Any], agent_data: dict[str, Any]) -> dict[str, Any]:
+    """Camera catalog from ``cameras.yaml`` when that file exists.
+
+    A single ``agent.yaml`` that still contains cameras is the legacy layout,
+    used when the camera file is absent.
+    """
+    if camera_data:
+        data = _pick(camera_data, _CAMERA_KEYS)
+        data.update(_pick(agent_data, _AGENT_KEYS))
+        return data
+    return agent_data
+
+
 def load_base_config(path: Path | None = None) -> AgentConfig:
-    data = _read_yaml(path or agent_config_path())
+    if path is not None:
+        data = _read_yaml(path)
+    else:
+        data = _combined_base(_read_yaml(camera_config_path()), _read_yaml(agent_config_path()))
     if not data:
         return normalize_agent_config(AgentConfig())
     return normalize_agent_config(AgentConfig.model_validate(data))
 
 
+def _migrate_legacy_overlay() -> None:
+    """Move camera deltas out of an old combined ``agent.local.yaml``."""
+    legacy = _read_yaml(agent_overlay_path())
+    camera_payload = _pick(legacy, _CAMERA_KEYS)
+    if not camera_payload or camera_overlay_path().is_file():
+        return
+    _write_yaml(camera_overlay_path(), camera_payload)
+    agent_payload = {key: value for key, value in legacy.items() if key not in _CAMERA_KEYS}
+    if agent_payload:
+        _write_yaml(agent_overlay_path(), agent_payload)
+    else:
+        agent_overlay_path().unlink(missing_ok=True)
+
+
 def load_overlay(path: Path | None = None) -> AgentOverlay:
-    data = _read_yaml(path or agent_overlay_path())
+    if path is not None:
+        data = _read_yaml(path)
+    else:
+        _migrate_legacy_overlay()
+        data = _read_yaml(camera_overlay_path())
+        data.update(_read_yaml(agent_overlay_path()))
     if not data:
         return AgentOverlay()
     return AgentOverlay.model_validate(data)
@@ -333,9 +393,12 @@ def save_agent_config(config: AgentConfig, path: Path | None = None) -> None:
         payload.pop("reasoning", None)
     if not payload.get("verbosity"):
         payload.pop("verbosity", None)
-    dest = agent_overlay_path()
+    _write_overlay(camera_overlay_path(), _pick(payload, _CAMERA_KEYS))
+    _write_overlay(agent_overlay_path(), _pick(payload, _AGENT_KEYS))
+
+
+def _write_overlay(path: Path, payload: dict[str, Any]) -> None:
     if not payload:
-        if dest.is_file():
-            dest.unlink()
+        path.unlink(missing_ok=True)
         return
-    _write_yaml(dest, payload)
+    _write_yaml(path, payload)

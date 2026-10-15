@@ -190,8 +190,9 @@ logs/
 node_modules/
 frontend/dist/
 
-# Local agent overlay (toggles and experimental cameras)
+# Local overlays (model choices and experimental cameras)
 configs/agent.local.yaml
+configs/cameras.local.yaml
 
 # Local Cursor skills (machine-specific installs and symlinks)
 .cursor/skills/

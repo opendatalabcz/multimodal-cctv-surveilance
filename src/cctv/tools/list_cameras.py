@@ -1,4 +1,4 @@
-"""Model-facing tool: list cameras from ``configs/agent.yaml``."""
+"""Model-facing tool: list cameras from ``configs/cameras.yaml``."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ LIST_CAMERAS_TOOL: dict[str, Any] = {
     "function": {
         "name": "list_cameras",
         "description": (
-            "List effectively enabled cameras configured in the UI / agent.yaml. "
+            "List effectively enabled cameras configured in the UI / cameras.yaml. "
             "Use this before get_camera_image if you are unsure of the id or name. "
             "Do not invent cameras that are not in this list; tell the user to add them "
             "in the Config panel."

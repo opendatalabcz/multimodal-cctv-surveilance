@@ -18,14 +18,18 @@ Revisit Deep Agents only if you need long research traces, parallel subagents, o
 | `src/cctv/api/` | FastAPI: config, conversations, image files |
 | `src/cctv/analysis/azure_vision.py` | `chat_with_tools` loop |
 | `src/cctv/tools/` | Tool schemas + executors |
-| `configs/agent.yaml` | Committed camera catalog and default tool flags |
-| `configs/agent.local.yaml` | Gitignored overlay: toggles, extra/edited cameras |
+| `configs/cameras.yaml` | Committed sector, location, and camera catalog |
+| `configs/cameras.local.yaml` | Gitignored camera overlay: edits, additions, removals |
+| `configs/agent.yaml` | Committed model catalog and default tool flags |
+| `configs/agent.local.yaml` | Gitignored agent overlay: tool toggles, model, reasoning, verbosity |
 | `src/cctv/fetch/image_source.py` | Low-level `get_image(source)` (URLs, Prague ids, YouTube live) |
 
 ```mermaid
 flowchart LR
   configPanel[Config panel]
-  agentYaml[agent.yaml catalog]
+  cameraYaml[cameras.yaml catalog]
+  cameraLocal[cameras.local.yaml overlay]
+  agentYaml[agent.yaml settings]
   agentLocal[agent.local.yaml overlay]
   chatUI[Chat UI]
   fastApi[FastAPI run_chat_turn]
@@ -36,21 +40,25 @@ flowchart LR
   jpeg[JPEG on disk]
   vlm[VLM + UI image URLs]
 
+  configPanel --> cameraLocal
   configPanel --> agentLocal
+  cameraLocal --> cameraYaml
   agentLocal --> agentYaml
   chatUI --> fastApi
   fastApi --> chatLoop
   chatLoop --> tools
   tools --> getCamera
-  getCamera --> agentYaml
+  getCamera --> cameraYaml
   getCamera --> fetch
   fetch --> jpeg
   jpeg --> vlm
 ```
 
-## Config (`configs/agent.yaml` + `configs/agent.local.yaml`)
+## Config (`cameras.yaml` + `agent.yaml`)
 
-`configs/agent.yaml` is the committed catalog (demo cameras, default flags). `GET/PUT /api/config` merges that with gitignored `configs/agent.local.yaml`. The Config panel only writes the overlay: tool toggles, extra cameras/locations, edits, and removals. Updating the catalog in git still applies unless the overlay overrides the same id.
+`configs/cameras.yaml` is the committed camera catalog. `configs/agent.yaml` is the committed model catalog and default tool flags. `GET/PUT /api/config` merges each file with its gitignored overlay, `configs/cameras.local.yaml` and `configs/agent.local.yaml`. The Config panel writes overlays only: camera edits go to the camera overlay, and tool toggles, model, reasoning, and verbosity go to the agent overlay. Updating a committed file still applies unless the overlay overrides the same value.
+
+The example below is the merged shape. Sectors, locations, and cameras live in the camera file. Tools and models live in the agent file.
 
 ```yaml
 sectors:
@@ -118,7 +126,7 @@ models:
 model: gpt-5.6-luna
 ```
 
-The chat header selects `model` and, when the model allows it, `reasoning` and `verbosity`. Each model keeps its own values. The catalog stays in `configs/agent.yaml`. The overlay stores `model` only when the choice differs from the catalog default, and a reasoning or verbosity entry only when it differs from that model's own default. `PUT /api/config` ignores a client `models` list and rejects an unknown model id or a value that model does not allow. If `AZURE_OPENAI_MODEL` names a deployment missing from the file, that deployment is appended so it stays selectable. A legacy Luna `default` reasoning value is clamped to its explicit catalog default, `medium`.
+The chat header selects `model` and, when the model allows it, `reasoning` and `verbosity`. Each model keeps its own values. The model catalog stays in `configs/agent.yaml`. The agent overlay stores `model` only when the choice differs from the catalog default, and a reasoning or verbosity entry only when it differs from that model's own default. `PUT /api/config` ignores a client `models` list and rejects an unknown model id or a value that model does not allow. If `AZURE_OPENAI_MODEL` names a deployment missing from the file, that deployment is appended so it stays selectable. A legacy Luna `default` reasoning value is clamped to its explicit catalog default, `medium`.
 
 Luna and Astra use the Responses API (`/openai/v1/responses`) for tool-enabled chat because Azure rejects function tools combined with explicit reasoning on Chat Completions. Their effort is sent as `reasoning.effort`; non-medium verbosity is sent as `text.verbosity`. Each response asks for `reasoning.encrypted_content`. Those reasoning items are stored only on the in-memory Azure transcript and replayed before the matching function calls, so the model can continue the thought without writing it into the visible answer. Luna supports `none`, `low`, `medium`, `high`, `xhigh`, and `max`; Astra supports the same list except `none`. GPT-4o stays on Chat Completions with no reasoning or verbosity control, and those fields are omitted. Camera metadata analysis sends no tools and neither setting, so it stays on Chat Completions for every model. Each assistant reply stores the deployment id, and the UI shows its catalog label. The welcome message is unlabeled. `provider` is `azure` for every shipped option; an unknown provider is rejected and does not call Azure. A later open-source model needs its own client.
 

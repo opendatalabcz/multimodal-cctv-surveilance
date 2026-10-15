@@ -20,7 +20,7 @@ GET_CAMERA_IMAGE_TOOL: dict[str, Any] = {
         "name": "get_camera_image",
         "description": (
             "Fetch current frames from effectively enabled cameras listed in the Config panel / "
-            "agent.yaml. Pass one or more camera ids or display names in `cameras` (preferred). "
+            "cameras.yaml. Pass one or more camera ids or display names in `cameras` (preferred). "
             "`camera` is accepted for a single name. Do not issue one tool call per camera. "
             "Include every camera that matches the question. One call accepts at most 16. "
             "Unknown names: tell the user to add name, optional GPS, and source URL "

@@ -12,7 +12,7 @@ Folders: `pages/`, `features/chat`, `features/config`, `shared/api`, `shared/mod
 
 Config and conversation state live in FastAPI. After `GET/PUT /api/config` or `POST /api/conversations/{id}/messages`, adopt the returned state. Do not keep a second client-side catalog.
 
-- Config writes only the overlay (`configs/agent.local.yaml` on the server).
+- Config writes only the overlays (`configs/cameras.local.yaml` and `configs/agent.local.yaml` on the server).
 - Assistant turns may include `imageUrls` for cited frames. Load images from `/api/images/...`, not base64 in JSON.
 
 ## Security and UX (v1)

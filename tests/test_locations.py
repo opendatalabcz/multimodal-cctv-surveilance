@@ -5,8 +5,8 @@ from unittest.mock import patch
 import pytest
 
 from cctv.config.agent_yaml import (
-    agent_config_path,
     load_agent_config,
+    load_base_config,
     load_overlay,
     overlay_from_diff,
     save_agent_config,
@@ -222,7 +222,7 @@ def test_overlay_from_diff_tracks_location_removals() -> None:
 
 
 def test_committed_catalog_counts_and_entries() -> None:
-    config = load_agent_config(agent_config_path())
+    config = load_base_config()
     prague_locations = [
         location for location in config.locations if location.sector_id == "prague"
     ]

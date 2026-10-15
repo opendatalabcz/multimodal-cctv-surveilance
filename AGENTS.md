@@ -23,8 +23,9 @@ Tests (mocked HTTP, no live network): `uv run pytest`.
 
 ## Config and secrets
 
-- Committed catalog: [`configs/agent.yaml`](configs/agent.yaml).
-- Local overlay (gitignored): `configs/agent.local.yaml`. The Config panel writes this file only.
+- Committed camera catalog: [`configs/cameras.yaml`](configs/cameras.yaml). Local overlay: `configs/cameras.local.yaml`.
+- Committed agent settings (models, tool flags): [`configs/agent.yaml`](configs/agent.yaml). Local overlay: `configs/agent.local.yaml`.
+- The Config panel writes the overlays only.
 - Azure OpenAI and other secrets stay in the environment / FastAPI. Never put keys in the frontend.
 
 ## Runtime

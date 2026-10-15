@@ -27,6 +27,6 @@ New tools: schema + executor in `src/cctv/tools/`, register in `__init__.py`, ad
 ## Frames and config
 
 - Persist JPEGs on disk; serve via path-safe `GET /api/images/...`. Do not put large base64 blobs in JSON transcripts.
-- `GET/PUT /api/config` merges committed `configs/agent.yaml` with gitignored `configs/agent.local.yaml`. Never commit the overlay.
+- `GET/PUT /api/config` merges `configs/cameras.yaml` and `configs/agent.yaml` with their gitignored `*.local.yaml` overlays. Never commit an overlay.
 
 Runtime details: [`docs/AGENT.md`](docs/AGENT.md).

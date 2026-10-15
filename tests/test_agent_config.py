@@ -333,3 +333,54 @@ def test_legacy_reasoning_string_loads_for_the_selected_model(tmp_path, monkeypa
     assert merged.model == "gpt-6-astra"
     assert merged.reasoning["gpt-6-astra"] == "low"
     assert merged.reasoning["gpt-5.6-luna"] == "medium"
+
+
+def test_split_files_merge_cameras_and_agent_settings(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AZURE_OPENAI_MODEL", "gpt-5.6-luna")
+    base_path = tmp_path / "agent.yaml"
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: base_path)
+    monkeypatch.setattr(
+        "cctv.config.agent_yaml.agent_overlay_path",
+        lambda: tmp_path / "agent.local.yaml",
+    )
+    (tmp_path / "cameras.yaml").write_text(
+        "cameras:\n- id: bridge\n  name: Bridge\n  source: '101200'\n",
+        encoding="utf-8",
+    )
+    base_path.write_text(
+        "tools:\n  internet: true\n  weather: false\n  maps: false\nmodel: gpt-4o\n",
+        encoding="utf-8",
+    )
+
+    loaded = load_agent_config()
+
+    assert loaded.cameras[0].id == "bridge"
+    assert loaded.tools.internet is True
+    assert loaded.model == "gpt-4o"
+
+
+def test_legacy_overlay_moves_cameras_out_of_agent_local(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AZURE_OPENAI_MODEL", "gpt-5.6-luna")
+    base_path = tmp_path / "agent.yaml"
+    overlay_path = tmp_path / "agent.local.yaml"
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: base_path)
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay_path)
+    (tmp_path / "cameras.yaml").write_text(
+        "cameras:\n- id: bridge\n  name: Bridge\n  source: '101200'\n",
+        encoding="utf-8",
+    )
+    base_path.write_text("model: gpt-5.6-luna\n", encoding="utf-8")
+    overlay_path.write_text(
+        "cameras:\n- id: extra\n  name: Extra\n  source: '9'\nmodel: gpt-4o\n",
+        encoding="utf-8",
+    )
+
+    loaded = load_agent_config()
+
+    camera_overlay = (tmp_path / "cameras.local.yaml").read_text(encoding="utf-8")
+    agent_overlay = overlay_path.read_text(encoding="utf-8")
+    assert "extra" in camera_overlay
+    assert "cameras:" not in agent_overlay
+    assert "gpt-4o" in agent_overlay
+    assert {camera.id for camera in loaded.cameras} == {"bridge", "extra"}
+    assert loaded.model == "gpt-4o"
