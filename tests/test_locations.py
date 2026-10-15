@@ -238,7 +238,7 @@ def test_committed_catalog_counts_and_entries() -> None:
     assert len(japan_locations) == 1
     assert any(location.id == "marianske_namesti" for location in config.locations)
     assert any(
-        camera.id == "tokachi_obihiro"
+        camera.id == "tokachi_obihiro_live"
         and "youtube.com/watch?v=IDXRscHtp2s" in camera.source
         for camera in config.cameras
     )

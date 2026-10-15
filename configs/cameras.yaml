@@ -73,8 +73,8 @@ locations:
   lat: 42.7335
   lon: 143.2175
 cameras:
-- id: charles_bridge
-  name: Charles Bridge
+- id: charles_bridge_101200
+  name: '101200'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/101200/image
   sector_id: prague
   location_id: charles_bridge
@@ -133,8 +133,8 @@ cameras:
   sector_id: prague
   location_id: dejvice
   enabled: true
-- id: hybernska
-  name: Hybernská
+- id: hybernska_101048
+  name: '101048'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/101048/image
   sector_id: prague
   location_id: hybernska
@@ -145,20 +145,20 @@ cameras:
   sector_id: prague
   location_id: belocerekevska
   enabled: true
-- id: jecna
-  name: Ječná
+- id: jecna_202020
+  name: '202020'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/202020/image
   sector_id: prague
   location_id: jecna
   enabled: true
-- id: marianske_namesti
-  name: Mariánské náměstí
+- id: marianske_namesti_101164
+  name: '101164'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/101164/image
   sector_id: prague
   location_id: marianske_namesti
   enabled: true
-- id: tokachi_obihiro
-  name: Tokachi-Obihiro live
+- id: tokachi_obihiro_live
+  name: Live
   source: https://www.youtube.com/watch?v=IDXRscHtp2s
   sector_id: japan
   location_id: tokachi_obihiro

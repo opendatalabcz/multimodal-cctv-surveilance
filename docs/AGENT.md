@@ -76,8 +76,8 @@ locations:
     lat: 50.0865
     lon: 14.4119
 cameras:
-  - id: charles_bridge
-    name: Charles Bridge
+  - id: charles_bridge_101200
+    name: "101200"
     source: "https://.../cameras/101200/image"
     sector_id: prague
     location_id: charles_bridge
