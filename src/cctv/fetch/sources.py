@@ -27,14 +27,6 @@ class SourceType(str, Enum):
     HTTP_IMAGE = "http_image"
 
 
-def _known_camera_ids(config: dict[str, Any] | None = None) -> set[str]:
-    config = config or load_monitor_config()
-    ids: set[str] = set()
-    for camera_ids in config.get("cameras", {}).values():
-        ids.update(camera_ids)
-    return ids
-
-
 def _is_youtube(source: str) -> bool:
     return any(pattern.search(source) for pattern in _YOUTUBE_PATTERNS)
 
@@ -53,11 +45,7 @@ def camera_place_id(camera_id: str, config: dict[str, Any] | None = None) -> str
     return None
 
 
-def classify_source(
-    source: str,
-    *,
-    config: dict[str, Any] | None = None,
-) -> tuple[SourceType, dict[str, Any]]:
+def classify_source(source: str) -> tuple[SourceType, dict[str, Any]]:
     """Return ``(source_type, info)`` for a user-provided source string.
 
     ``info`` holds normalized fields such as ``url`` or ``camera_id``.
@@ -72,10 +60,6 @@ def classify_source(
     camera_id = _prague_camera_id_from_url(source)
     if camera_id:
         return SourceType.PRAGUE_CAMERA, {"camera_id": camera_id, "url": source}
-
-    known_ids = _known_camera_ids(config)
-    if _CAMERA_ID.match(source) and source in known_ids:
-        return SourceType.PRAGUE_CAMERA, {"camera_id": source}
 
     parsed = urlparse(source)
     if parsed.scheme in ("http", "https") and parsed.netloc:

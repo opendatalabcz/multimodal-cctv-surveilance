@@ -1,4 +1,4 @@
-"""OpenAI function-calling tool that fetches a CCTV / livestream still."""
+"""Fetch a still and return tool metadata plus the JPEG path."""
 
 from __future__ import annotations
 
@@ -7,34 +7,6 @@ from pathlib import Path
 from typing import Any
 
 from cctv.fetch.image_source import get_image
-
-GET_IMAGE_TOOL: dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": "get_image",
-        "description": (
-            "Fetch the current frame from a public CCTV or live video source. "
-            "Pass a YouTube **live** stream URL, a Prague municipal camera image URL "
-            "(…/cameras/{id}/image), a known Prague camera id, or any direct image URL. "
-            "Prague cameras may return a sleep-mode placeholder on the first request; "
-            "if likely_unavailable is true, wait a few seconds and call again. "
-            "YouTube sources must be live streams, not finished VOD uploads."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "source": {
-                    "type": "string",
-                    "description": (
-                        "YouTube live URL, camera image URL, or Prague camera id "
-                        "(e.g. 101048)."
-                    ),
-                }
-            },
-            "required": ["source"],
-        },
-    },
-}
 
 
 def _tool_metadata(result: dict[str, Any]) -> dict[str, Any]:

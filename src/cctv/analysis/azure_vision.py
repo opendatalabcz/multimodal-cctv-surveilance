@@ -1052,29 +1052,3 @@ def chat_with_tools(
         return {"success": False, "error": f"Azure API request failed: {exc}"}
     except Exception as exc:
         return {"success": False, "error": f"Unexpected error: {exc}"}
-
-
-def analyze_with_tools(
-    prompt: str,
-    config: AzureOpenAIConfig | None = None,
-    *,
-    tools: list[dict[str, Any]] | None = None,
-    parse_json: bool = True,
-    max_tokens: int = 1500,
-    temperature: float | None = None,
-    max_tool_rounds: int = 3,
-    request_timeout: int = 90,
-) -> dict[str, Any]:
-    """Run a single-turn Azure vision chat with the default camera tools."""
-    result = chat_with_tools(
-        [{"role": "user", "content": prompt}],
-        config=config,
-        tools=tools,
-        parse_json=parse_json,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        max_tool_rounds=max_tool_rounds,
-        request_timeout=request_timeout,
-    )
-    result.pop("messages", None)
-    return result

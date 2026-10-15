@@ -11,7 +11,7 @@ from PIL import Image
 
 from cctv.fetch.image_source import get_image, register_sleep_placeholder_hash
 from cctv.fetch.sources import SourceType, classify_source
-from cctv.tools.get_image import GET_IMAGE_TOOL, execute_get_image
+from cctv.tools.get_image import execute_get_image
 
 
 def _jpeg_bytes(color: tuple[int, int, int] = (10, 20, 30)) -> bytes:
@@ -49,11 +49,6 @@ def test_classify_source(source: str, expected_type: SourceType, key: str) -> No
 def test_classify_source_unknown_raises() -> None:
     with pytest.raises(ValueError, match="Unrecognized"):
         classify_source("not-a-valid-source")
-
-
-def test_get_image_tool_schema() -> None:
-    assert GET_IMAGE_TOOL["function"]["name"] == "get_image"
-    assert "source" in GET_IMAGE_TOOL["function"]["parameters"]["properties"]
 
 
 def test_get_image_prague_path(tmp_path, monkeypatch) -> None:

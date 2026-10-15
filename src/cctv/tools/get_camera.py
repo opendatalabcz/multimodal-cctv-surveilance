@@ -33,7 +33,7 @@ GET_CAMERA_IMAGE_TOOL: dict[str, Any] = {
                     "type": "array",
                     "items": {"type": "string"},
                     "description": (
-                        "Configured camera ids or names, e.g. [\"charles_bridge\", \"Hybernská\"]. "
+                        "Configured camera ids or names, e.g. [\"charles_bridge_101200\", \"101201\"]. "
                         "A single string is also accepted."
                     ),
                 },

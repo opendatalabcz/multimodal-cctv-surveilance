@@ -1203,3 +1203,10 @@ def test_a_failed_forced_submit_does_not_show_the_draft() -> None:
     assert result["success"] is False
     assert result["error"] == "The model did not submit an answer"
     assert "messages" not in result
+
+
+def test_chat_with_tools_missing_config() -> None:
+    config = AzureOpenAIConfig(api_key=None, endpoint=None, model=None)
+    result = chat_with_tools([{"role": "user", "content": "Hello"}], config=config)
+    assert result["success"] is False
+    assert "configuration missing" in result["error"]
