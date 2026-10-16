@@ -82,12 +82,6 @@ def _pick_stream_format(info: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-def _pick_stream_url(info: dict[str, Any]) -> str | None:
-    chosen = _pick_stream_format(info)
-    url = chosen.get("url") if chosen else None
-    return str(url) if url else None
-
-
 def _last_playlist_media_url(playlist_text: str, playlist_url: str) -> str | None:
     media: list[str] = []
     for raw in playlist_text.splitlines():

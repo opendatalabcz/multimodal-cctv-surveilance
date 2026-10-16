@@ -253,13 +253,7 @@ def test_conversation_message_flow(client, tmp_path) -> None:
     }
 
     with patch("cctv.api.chat.chat_with_tools", return_value=chat_result):
-        message_response = client.post(
-            f"/api/conversations/{conversation_id}/messages",
-            json={"content": "How busy is it?"},
-        )
-
-    assert message_response.status_code == 200
-    body = message_response.json()
+        body = _stream_conversation(client, conversation_id, "How busy is it?")
     assert len(body["messages"]) == 3
     assert body["messages"][0]["role"] == "assistant"
     assert body["messages"][1]["role"] == "user"
@@ -369,27 +363,6 @@ def test_put_config_rejects_sector_deletion_with_cameras(client, tmp_path, monke
     assert "Cannot remove sector" in response.json()["detail"]
 
 
-def test_post_message_chat_failure(client) -> None:
-    create_response = client.post("/api/conversations")
-    conversation_id = create_response.json()["id"]
-
-    with patch(
-        "cctv.api.chat.chat_with_tools",
-        return_value={"success": False, "error": "Azure OpenAI configuration missing"},
-    ):
-        response = client.post(
-            f"/api/conversations/{conversation_id}/messages",
-            json={"content": "hello"},
-        )
-
-    assert response.status_code == 502
-    assert "configuration missing" in response.json()["detail"]
-
-    transcript = client.get(f"/api/conversations/{conversation_id}").json()
-    assert len(transcript["messages"]) == 1
-    assert transcript["messages"][0]["role"] == "assistant"
-
-
 def _sse_events(body: str) -> list[dict]:
     events: list[dict] = []
     for block in body.split("\n\n"):
@@ -399,15 +372,25 @@ def _sse_events(body: str) -> list[dict]:
     return events
 
 
+def _stream_conversation(client, conversation_id: str, content: str) -> dict:
+    with client.stream(
+        "POST",
+        f"/api/conversations/{conversation_id}/messages/stream",
+        json={"content": content},
+    ) as response:
+        assert response.status_code == 200
+        events = _sse_events("".join(response.iter_text()))
+    assert events[-1]["type"] == "done"
+    return events[-1]["conversation"]
+
+
 def test_message_stream_emits_status_then_done(client) -> None:
     conversation_id = client.post("/api/conversations").json()["id"]
 
     def fake_chat(*args, on_progress=None, **kwargs):
         if on_progress:
-            on_progress({"type": "status", "stage": "fetching", "detail": "Fetching 2 cameras…"})
-            on_progress(
-                {"type": "status", "stage": "analyzing", "detail": "Analyzing 2 camera frames…"}
-            )
+            on_progress({"type": "status", "detail": "Fetching 2 cameras…"})
+            on_progress({"type": "status", "detail": "Analyzing 2 camera frames…"})
         return {
             "success": True,
             "analysis": "The street looks calm.",
@@ -431,7 +414,7 @@ def test_message_stream_emits_status_then_done(client) -> None:
     events = _sse_events(body)
     assert [event["type"] for event in events] == ["status", "status", "done"]
     assert events[0]["detail"] == "Fetching 2 cameras…"
-    assert events[1]["stage"] == "analyzing"
+    assert events[1]["detail"] == "Analyzing 2 camera frames…"
     done = events[-1]
     assert done["conversation"]["id"] == conversation_id
     assert done["conversation"]["messages"][-1]["content"] == "The street looks calm."
@@ -562,10 +545,7 @@ def test_reply_followups_replace_the_welcome_suggestions(client) -> None:
         "followups": ["Has it cleared yet?", "What about Ječná?"],
     }
     with patch("cctv.api.chat.chat_with_tools", return_value=chat_result):
-        body = client.post(
-            f"/api/conversations/{conversation_id}/messages",
-            json={"content": "How busy is it?"},
-        ).json()
+        body = _stream_conversation(client, conversation_id, "How busy is it?")
     assert body["suggestions"] == ["Has it cleared yet?", "What about Ječná?"]
     assert client.get(f"/api/conversations/{conversation_id}").json()["suggestions"] == [
         "Has it cleared yet?",
@@ -585,10 +565,7 @@ def test_reply_without_followups_clears_suggestions(client) -> None:
         "image_paths": [],
     }
     with patch("cctv.api.chat.chat_with_tools", return_value=chat_result):
-        body = client.post(
-            f"/api/conversations/{conversation_id}/messages",
-            json={"content": "hi"},
-        ).json()
+        body = _stream_conversation(client, conversation_id, "hi")
     assert body["suggestions"] == []
 
 
@@ -606,13 +583,7 @@ def test_put_config_does_not_rewrite_after_user_turn(client) -> None:
         "image_paths": [],
     }
     with patch("cctv.api.chat.chat_with_tools", return_value=chat_result):
-        assert (
-            client.post(
-                f"/api/conversations/{conversation_id}/messages",
-                json={"content": "hello"},
-            ).status_code
-            == 200
-        )
+        _stream_conversation(client, conversation_id, "hello")
     payload = {
         "sectors": [],
         "locations": [],

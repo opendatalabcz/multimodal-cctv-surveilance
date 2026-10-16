@@ -39,35 +39,34 @@ from cctv.utils.paths import data_root
 CCTV_FRAMES_TYPE = "cctv_frames"
 ProgressCallback = Callable[[dict[str, Any]], None]
 
-_TOOL_STATUS: dict[str, tuple[str, str]] = {
-    "web_search": ("tool", "Searching the web…"),
-    "get_weather": ("tool", "Looking up weather…"),
-    "search_map": ("tool", "Searching the map…"),
-    "reverse_geocode": ("tool", "Looking up that place…"),
-    "list_cameras": ("tool", "Listing cameras…"),
+_TOOL_STATUS: dict[str, str] = {
+    "web_search": "Searching the web…",
+    "get_weather": "Looking up weather…",
+    "search_map": "Searching the map…",
+    "reverse_geocode": "Looking up that place…",
+    "list_cameras": "Listing cameras…",
 }
 
 
 def _emit_progress(
     on_progress: ProgressCallback | None,
-    stage: str,
     detail: str,
 ) -> None:
     if on_progress is None:
         return
-    on_progress({"type": "status", "stage": stage, "detail": detail})
+    on_progress({"type": "status", "detail": detail})
 
 
-def _progress_for_tool(name: str, arguments: dict[str, Any]) -> tuple[str, str]:
+def _progress_for_tool(name: str, arguments: dict[str, Any]) -> str:
     if name == "get_camera_image":
         queries = _camera_queries(arguments)
         count = len(queries)
         if count == 1:
-            return "fetching", f"Fetching {queries[0]}…"
+            return f"Fetching {queries[0]}…"
         if count > 1:
-            return "fetching", f"Fetching {count} cameras…"
-        return "fetching", "Fetching cameras…"
-    return _TOOL_STATUS.get(name, ("tool", f"Running {name or 'a tool'}…"))
+            return f"Fetching {count} cameras…"
+        return "Fetching cameras…"
+    return _TOOL_STATUS.get(name, f"Running {name or 'a tool'}…")
 
 
 def encode_image_to_base64(image_path: str | Path) -> str:
@@ -109,14 +108,11 @@ def analyze_images(
     prompt: str,
     config: AzureOpenAIConfig | None = None,
     *,
-    parse_json: bool = True,
     max_tokens: int = 1500,
-    temperature: float | None = None,
 ) -> dict:
     """Send one or more JPEG images plus a prompt to Azure OpenAI vision.
 
-    ``max_tokens`` is sent as ``max_completion_tokens``. ``temperature`` is only
-    included when set, since newer deployments accept the default value only.
+    ``max_tokens`` is sent as ``max_completion_tokens``.
     """
     config = config or load_azure_openai_config()
     if not config.is_configured or not config.api_url:
@@ -144,9 +140,6 @@ def analyze_images(
         "messages": [{"role": "user", "content": content}],
         "max_completion_tokens": max_tokens,
     }
-    if temperature is not None:
-        payload["temperature"] = temperature
-
     try:
         names = [Path(path).name for path in image_paths]
         print(f"Analyzing {len(image_paths)} image(s): {', '.join(names)}")
@@ -160,7 +153,6 @@ def analyze_images(
             model_parameters=_model_parameters(
                 transport="chat_completions",
                 max_tokens=max_tokens,
-                temperature=temperature,
             ),
             metadata={
                 "image_paths": [str(path) for path in image_paths],
@@ -169,13 +161,10 @@ def analyze_images(
             include_images=capture_images_enabled(),
         )
         analysis_text = result["choices"][0]["message"]["content"]
-        if parse_json:
-            try:
-                analysis = _parse_json_payload(analysis_text)
-            except json.JSONDecodeError:
-                analysis = {"raw_response": analysis_text}
-        else:
-            analysis = analysis_text
+        try:
+            analysis = _parse_json_payload(analysis_text)
+        except json.JSONDecodeError:
+            analysis = {"raw_response": analysis_text}
         return {
             "success": True,
             "analysis": analysis,
@@ -198,7 +187,6 @@ def _chat_completion_payload(
     *,
     tools: list[dict[str, Any]] | None = None,
     max_tokens: int = 1500,
-    temperature: float | None = None,
     reasoning: str | None = None,
     verbosity: str | None = None,
     tool_choice: dict[str, Any] | None = None,
@@ -208,8 +196,6 @@ def _chat_completion_payload(
         "messages": materialize_for_azure(messages),
         "max_completion_tokens": max_tokens,
     }
-    if temperature is not None:
-        payload["temperature"] = temperature
     if reasoning and reasoning != "default":
         payload["reasoning_effort"] = reasoning
     if verbosity and verbosity != "medium":
@@ -255,13 +241,10 @@ def _model_parameters(
     *,
     transport: str,
     max_tokens: int,
-    temperature: float | None = None,
     reasoning: str | None = None,
     verbosity: str | None = None,
 ) -> dict[str, Any]:
     parameters: dict[str, Any] = {"transport": transport, "max_tokens": max_tokens}
-    if temperature is not None:
-        parameters["temperature"] = temperature
     if reasoning:
         parameters["reasoning"] = reasoning
     if verbosity:
@@ -782,18 +765,10 @@ def _finalize_submission(
     camera_ids: list[str],
     followups: list[str],
     tool_rounds: int,
-    parse_json: bool,
     config: AzureOpenAIConfig,
 ) -> dict[str, Any]:
     display_paths = select_cited_paths(fetched_frames, camera_ids)
     message = {"role": "assistant", "content": answer}
-    if parse_json:
-        try:
-            analysis: Any = _parse_json_payload(answer)
-        except json.JSONDecodeError:
-            analysis = {"raw_response": answer}
-    else:
-        analysis = answer
     stored = list(messages)
     if fetched_frames:
         stored = _compact_frame_refs_for_storage(
@@ -802,7 +777,7 @@ def _finalize_submission(
         )
     return {
         "success": True,
-        "analysis": analysis,
+        "analysis": answer,
         "raw_response": answer,
         "usage": result.get("usage", {}),
         "timestamp": datetime.now().isoformat(),
@@ -821,9 +796,7 @@ def chat_with_tools(
     *,
     system_prompt: str | None = None,
     tools: list[dict[str, Any]] | None = None,
-    parse_json: bool = False,
     max_tokens: int = 1500,
-    temperature: float | None = None,
     max_tool_rounds: int = 3,
     request_timeout: int = 90,
     on_progress: ProgressCallback | None = None,
@@ -863,7 +836,7 @@ def chat_with_tools(
 
     try:
         while tool_rounds <= max_tool_rounds:
-            _emit_progress(on_progress, "thinking", "Thinking…")
+            _emit_progress(on_progress, "Thinking…")
             if force_submit:
                 round_tools = _tools_including_submit(active_tools)
                 tool_choice = _submit_tool_choice(transport)
@@ -873,7 +846,6 @@ def chat_with_tools(
             parameters = _model_parameters(
                 transport=transport,
                 max_tokens=max_tokens,
-                temperature=temperature,
                 reasoning=reasoning,
                 verbosity=verbosity,
             )
@@ -907,7 +879,6 @@ def chat_with_tools(
                     config,
                     tools=round_tools,
                     max_tokens=max_tokens,
-                    temperature=temperature,
                     reasoning=reasoning,
                     verbosity=verbosity,
                     tool_choice=tool_choice,
@@ -959,7 +930,6 @@ def chat_with_tools(
                     camera_ids=camera_ids,
                     followups=followups,
                     tool_rounds=tool_rounds,
-                    parse_json=parse_json,
                     config=config,
                 )
             if force_submit:
@@ -973,8 +943,8 @@ def chat_with_tools(
                 if name == SUBMIT_ANSWER:
                     conversation.append(_tool_error_message(tool_call, wait_for_tools_error()))
                     continue
-                stage, detail = _progress_for_tool(name, args)
-                _emit_progress(on_progress, stage, detail)
+                detail = _progress_for_tool(name, args)
+                _emit_progress(on_progress, detail)
                 with start_tool(name=name or "tool", arguments=args) as tool_span:
                     tool_started = time.perf_counter()
                     try:
@@ -1043,7 +1013,7 @@ def chat_with_tools(
                     if count == 1
                     else f"Analyzing {count} camera frames…"
                 )
-                _emit_progress(on_progress, "analyzing", analyzing)
+                _emit_progress(on_progress, analyzing)
 
             tool_rounds += 1
 

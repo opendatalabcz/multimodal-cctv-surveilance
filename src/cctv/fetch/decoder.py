@@ -64,12 +64,10 @@ class CameraImageFetcher:
     def fetch_camera_image(
         self,
         camera_id: str,
-        save_to_file: bool = True,
         custom_output_dir: str | None = None,
     ) -> dict[str, Any]:
         output_dir = custom_output_dir or self.output_dir
-        if save_to_file:
-            os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
 
         url = self._get_camera_url(camera_id)
         self._print(f"Downloading data from camera {camera_id}...")
@@ -86,15 +84,6 @@ class CameraImageFetcher:
                 return self._failure(camera_id, "No base64 data in response")
 
             image_bytes = base64.b64decode(base64_data)
-            if not save_to_file:
-                img = Image.open(BytesIO(image_bytes))
-                return {
-                    "success": True,
-                    "camera_id": camera_id,
-                    "dimensions": img.size,
-                    "size_bytes": len(image_bytes),
-                }
-
             result = self._save_frame(image_bytes, camera_id, output_dir)
             self._print(f"✅ Image saved: {result['filename']}")
             return result

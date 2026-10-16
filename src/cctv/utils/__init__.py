@@ -1,15 +1,1 @@
-from cctv.utils.azure import AzureOpenAIConfig, load_azure_openai_config, resolve_azure_config
-from cctv.utils.paths import (
-    data_root,
-    images_dir,
-    project_root,
-)
-
-__all__ = [
-    "AzureOpenAIConfig",
-    "data_root",
-    "images_dir",
-    "load_azure_openai_config",
-    "resolve_azure_config",
-    "project_root",
-]
+"""Shared path and Azure configuration helpers."""

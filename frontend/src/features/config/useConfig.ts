@@ -31,7 +31,6 @@ interface UseConfigResult {
   setModel: (modelId: string) => Promise<void>
   setReasoning: (effort: string) => Promise<void>
   setVerbosity: (level: string) => Promise<void>
-  setToolFlag: (key: keyof AppConfig['tools'], value: boolean) => void
   analysisStates: Record<string, CameraAnalysisState>
   analyzeCameras: (cameraIds: string[]) => Promise<void>
   analyzeMissingCameras: () => Promise<void>
@@ -518,18 +517,6 @@ export function useConfig(): UseConfigResult {
     [config, savedConfig],
   )
 
-  const setToolFlag = useCallback((key: keyof AppConfig['tools'], value: boolean) => {
-    setConfig((current) => {
-      if (!current) {
-        return current
-      }
-      return {
-        ...current,
-        tools: { ...current.tools, [key]: value },
-      }
-    })
-  }, [])
-
   return {
     config,
     isLoading,
@@ -557,7 +544,6 @@ export function useConfig(): UseConfigResult {
     setModel,
     setReasoning,
     setVerbosity,
-    setToolFlag,
     analysisStates,
     analyzeCameras,
     analyzeMissingCameras,

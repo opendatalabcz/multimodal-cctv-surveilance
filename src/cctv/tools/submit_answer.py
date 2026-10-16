@@ -53,15 +53,6 @@ _WAIT_FOR_TOOLS = (
 )
 
 
-def execute_submit_answer(_arguments: dict[str, Any] | None = None) -> dict[str, Any]:
-    """The chat loop intercepts this tool. A direct call is not a finished turn."""
-    return {
-        "tool_content": json.dumps({"success": False, "error": _WAIT_FOR_TOOLS}),
-        "image_path": None,
-        "image_paths": [],
-    }
-
-
 def submit_tool_error(reason: str) -> str:
     return json.dumps({"success": False, "error": reason})
 

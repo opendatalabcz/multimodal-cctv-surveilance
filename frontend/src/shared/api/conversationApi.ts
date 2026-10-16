@@ -11,20 +11,8 @@ export async function getConversation(id: string): Promise<Conversation> {
   return response.data
 }
 
-export async function sendMessage(
-  conversationId: string,
-  content: string,
-): Promise<Conversation> {
-  const response = await apiClient.post<Conversation>(
-    `/conversations/${conversationId}/messages`,
-    { content },
-  )
-  return response.data
-}
-
 interface StreamStatusEvent {
   type: 'status'
-  stage: string
   detail: string
 }
 

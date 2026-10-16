@@ -78,7 +78,6 @@ def run_chat_turn(
             config=azure_config,
             system_prompt=system_prompt,
             tools=active_tools,
-            parse_json=False,
             max_tool_rounds=MAX_TOOL_ROUNDS,
             on_progress=on_progress,
             reasoning=reasoning,

@@ -1,5 +1,4 @@
 import base64
-import hashlib
 import json
 import os
 from io import BytesIO
@@ -9,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from PIL import Image
 
-from cctv.fetch.image_source import get_image, register_sleep_placeholder_hash
+from cctv.fetch.image_source import get_image
 from cctv.fetch.sources import SourceType, classify_source
 from cctv.tools.get_image import execute_get_image
 
@@ -137,26 +136,6 @@ def test_get_image_http_json_base64(tmp_path, monkeypatch) -> None:
 
     assert result["success"] is True
     assert result["source_type"] == "http_image"
-
-
-def test_likely_unavailable_placeholder(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("CCTV_DATA_DIR", str(tmp_path))
-    placeholder = _jpeg_bytes((200, 200, 200))
-    register_sleep_placeholder_hash(hashlib.sha256(placeholder).hexdigest())
-    payload = {"contentBase64": base64.b64encode(placeholder).decode("ascii")}
-
-    class FakeResponse:
-        status_code = 200
-
-        @staticmethod
-        def json() -> dict:
-            return payload
-
-    with patch("cctv.fetch.decoder.get_url", return_value=FakeResponse()):
-        result = get_image("101048", verbose=False)
-
-    assert result["success"] is True
-    assert result["likely_unavailable"] is True
 
 
 def test_execute_get_image_metadata_only(tmp_path, monkeypatch) -> None:

@@ -1,3 +1,1 @@
-from cctv.api.app import app, create_app
-
-__all__ = ["app", "create_app"]
+"""FastAPI application, schemas, storage, and streaming helpers."""

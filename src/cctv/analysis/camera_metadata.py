@@ -49,10 +49,6 @@ def analyze_camera_metadata(
     if not image_path:
         metadata = _tool_error(fetched)
         raise RuntimeError(f"Could not fetch camera frame: {metadata}")
-    if _likely_unavailable_fetch(fetched):
-        raise RuntimeError(
-            "Camera is not currently accessible; kept the existing preview and description"
-        )
 
     if azure_config is None:
         try:
@@ -64,7 +60,6 @@ def analyze_camera_metadata(
         [image_path],
         ANALYSIS_PROMPT,
         config=azure_config,
-        parse_json=True,
         max_tokens=300,
     )
     if not result.get("success"):
@@ -131,17 +126,6 @@ def _validated_analysis(payload: Any, source: str, preview_path: str | None = No
         analyzed_at=datetime.now().astimezone(),
         preview_path=preview_path,
     )
-
-
-def _likely_unavailable_fetch(fetched: dict[str, Any]) -> bool:
-    inner = fetched.get("fetch_result")
-    if isinstance(inner, dict) and inner.get("likely_unavailable"):
-        return True
-    try:
-        payload = json.loads(fetched.get("tool_content") or "{}")
-    except (TypeError, json.JSONDecodeError):
-        return False
-    return bool(isinstance(payload, dict) and payload.get("likely_unavailable"))
 
 
 def _tool_error(result: dict[str, Any]) -> str:

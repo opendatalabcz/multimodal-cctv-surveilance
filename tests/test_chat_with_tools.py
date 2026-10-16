@@ -75,7 +75,6 @@ def test_chat_with_tools_multi_turn_history() -> None:
             [{"role": "user", "content": "Hello"}],
             config=_fake_config(),
             system_prompt="You are a CCTV assistant.",
-            parse_json=False,
         )
         history = list(first_result["messages"])
         history.append({"role": "user", "content": "What changed since last time?"})
@@ -83,7 +82,6 @@ def test_chat_with_tools_multi_turn_history() -> None:
             history,
             config=_fake_config(),
             system_prompt="You are a CCTV assistant.",
-            parse_json=False,
         )
 
     assert first_result["success"] is True
@@ -152,7 +150,6 @@ def test_parallel_tool_calls_answer_every_id_before_images() -> None:
             [{"role": "user", "content": "Compare both cameras."}],
             config=_fake_config(),
             system_prompt="You are a CCTV assistant.",
-            parse_json=False,
         )
 
     assert result["success"] is True
@@ -232,7 +229,6 @@ def test_batch_camera_tool_injects_all_image_paths() -> None:
             [{"role": "user", "content": "Compare both cameras."}],
             config=_fake_config(),
             system_prompt="You are a CCTV assistant.",
-            parse_json=False,
         )
 
     assert result["success"] is True
@@ -315,13 +311,16 @@ def test_on_progress_emits_fetching_then_analyzing() -> None:
         result = chat_with_tools(
             [{"role": "user", "content": "Compare both cameras."}],
             config=_fake_config(),
-            parse_json=False,
             on_progress=progress.append,
         )
 
     assert result["success"] is True
-    stages = [event["stage"] for event in progress]
-    assert stages == ["thinking", "fetching", "analyzing", "thinking"]
+    assert [event["detail"] for event in progress] == [
+        "Thinking…",
+        "Fetching 2 cameras…",
+        "Analyzing 2 camera frames…",
+        "Thinking…",
+    ]
     assert progress[1]["detail"] == "Fetching 2 cameras…"
     assert progress[2]["detail"] == "Analyzing 2 camera frames…"
     assert all(event["type"] == "status" for event in progress)
@@ -394,7 +393,6 @@ def test_on_progress_emits_fetching_then_analyzing() -> None:
             [{"role": "user", "content": "Compare both cameras."}],
             config=_fake_config(),
             system_prompt="You are a CCTV assistant.",
-            parse_json=False,
         )
 
     assert result["success"] is True
@@ -467,7 +465,6 @@ def test_empty_cite_block_hides_all_fetched_images() -> None:
         result = chat_with_tools(
             [{"role": "user", "content": "Do not attach images."}],
             config=_fake_config(),
-            parse_json=False,
         )
 
     assert result["image_paths"] == []
@@ -558,7 +555,6 @@ def test_stored_history_keeps_frame_refs_not_base64() -> None:
         result = chat_with_tools(
             [{"role": "user", "content": "How is cam_a?"}],
             config=_fake_config(),
-            parse_json=False,
         )
 
     stored = json_mod.dumps(result["messages"])
@@ -640,7 +636,6 @@ def test_follow_up_without_fetch_reattaches_last_cited_frames() -> None:
             [{"role": "user", "content": "Compare both cameras."}],
             config=_fake_config(),
             system_prompt="You are a CCTV assistant.",
-            parse_json=False,
         )
         history = list(first["messages"])
         history.append({"role": "user", "content": "What is on the left?"})
@@ -648,7 +643,6 @@ def test_follow_up_without_fetch_reattaches_last_cited_frames() -> None:
             history,
             config=_fake_config(),
             system_prompt="You are a CCTV assistant.",
-            parse_json=False,
         )
 
     assert second["success"] is True
@@ -725,14 +719,12 @@ def test_second_fetch_stubs_previous_frames() -> None:
         first = chat_with_tools(
             [{"role": "user", "content": "Show cam_a"}],
             config=_fake_config(),
-            parse_json=False,
         )
         history = list(first["messages"])
         history.append({"role": "user", "content": "Now cam_c"})
         chat_with_tools(
             history,
             config=_fake_config(),
-            parse_json=False,
         )
 
     after_second_fetch = posted_payloads[3]["messages"]
@@ -915,7 +907,6 @@ def test_luna_responses_tool_round_returns_assistant_text() -> None:
             transport="responses",
             reasoning="high",
             verbosity="high",
-            parse_json=False,
         )
 
     execute.assert_called_once_with("list_cameras", {})
@@ -987,7 +978,6 @@ def test_submit_answer_is_stored_as_an_assistant_message() -> None:
         result = chat_with_tools(
             [{"role": "user", "content": "How is the bridge?"}],
             config=_fake_config(),
-            parse_json=False,
         )
 
     assert result["success"] is True
@@ -1070,7 +1060,6 @@ def test_submit_answer_alongside_a_camera_fetch_waits() -> None:
         result = chat_with_tools(
             [{"role": "user", "content": "Look at cam_a."}],
             config=_fake_config(),
-            parse_json=False,
         )
 
     assert result["success"] is True
@@ -1114,7 +1103,6 @@ def test_plain_text_is_replaced_by_a_forced_submit_answer() -> None:
             [{"role": "user", "content": "What do you see?"}],
             config=_fake_config(),
             system_prompt="You are a CCTV assistant.",
-            parse_json=False,
         )
 
     assert result["success"] is True
@@ -1175,7 +1163,6 @@ def test_responses_plain_text_forces_submit_answer_by_name() -> None:
             [{"role": "user", "content": "Hello"}],
             config=config,
             transport="responses",
-            parse_json=False,
         )
 
     assert result["success"] is True
@@ -1197,7 +1184,6 @@ def test_a_failed_forced_submit_does_not_show_the_draft() -> None:
         result = chat_with_tools(
             [{"role": "user", "content": "Hello"}],
             config=_fake_config(),
-            parse_json=False,
         )
 
     assert result["success"] is False

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -10,9 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 
 from cctv.analysis.camera_metadata import analyze_camera_metadata
-from cctv.api.chat import run_chat_turn
 from cctv.api.schemas import (
-    CameraConfig,
     ConfigResponse,
     ConversationResponse,
     PostMessageRequest,
@@ -24,10 +21,9 @@ from cctv.config.agent_yaml import (
     load_agent_config,
     save_agent_config,
 )
+from cctv.config.models import CameraConfig
 from cctv.observability.tracing import flush_traces
 from cctv.utils.paths import data_root
-
-logger = logging.getLogger("cctv.api")
 
 store = ConversationStore()
 
@@ -83,19 +79,6 @@ def create_app() -> FastAPI:
         conversation = store.get(conversation_id)
         if conversation is None:
             raise HTTPException(status_code=404, detail="Conversation not found")
-        return conversation.to_response()
-
-    @app.post("/api/conversations/{conversation_id}/messages", response_model=ConversationResponse)
-    def post_message(conversation_id: str, body: PostMessageRequest) -> ConversationResponse:
-        conversation = store.get(conversation_id)
-        if conversation is None:
-            raise HTTPException(status_code=404, detail="Conversation not found")
-
-        conversation, result = run_chat_turn(conversation, body.content)
-        if not result.get("success"):
-            error = result.get("error", "Chat turn failed")
-            logger.error("Chat turn failed for %s: %s", conversation_id, error)
-            raise HTTPException(status_code=502, detail=error)
         return conversation.to_response()
 
     @app.post("/api/conversations/{conversation_id}/messages/stream")

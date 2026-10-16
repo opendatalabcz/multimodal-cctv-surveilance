@@ -21,7 +21,6 @@ def _tool_metadata(result: dict[str, Any]) -> dict[str, Any]:
         "filepath",
         "dimensions",
         "size_bytes",
-        "likely_unavailable",
         "error",
         "captured_at",
         "url",

@@ -20,7 +20,7 @@ ToolExecutor = Callable[[dict[str, Any]], dict[str, Any]]
 @dataclass(frozen=True)
 class RegisteredTool:
     schema: dict[str, Any]
-    execute: ToolExecutor
+    execute: ToolExecutor | None
 
 
 _TOOLS: dict[str, RegisteredTool] = {}
@@ -33,7 +33,7 @@ _OPTIONAL_BY_FLAG: tuple[tuple[str, str], ...] = (
 )
 
 
-def register_tool(schema: dict[str, Any], execute: ToolExecutor) -> None:
+def register_tool(schema: dict[str, Any], execute: ToolExecutor | None = None) -> None:
     name = schema["function"]["name"]
     _TOOLS[name] = RegisteredTool(schema=schema, execute=execute)
 
@@ -69,6 +69,14 @@ def execute_tool(name: str, arguments: dict[str, Any] | None = None) -> dict[str
     if registered is None:
         return {
             "tool_content": json.dumps({"success": False, "error": f"Unknown tool: {name}"}),
+            "image_path": None,
+            "image_paths": [],
+        }
+    if registered.execute is None:
+        return {
+            "tool_content": json.dumps(
+                {"success": False, "error": f"Tool cannot be executed directly: {name}"}
+            ),
             "image_path": None,
             "image_paths": [],
         }

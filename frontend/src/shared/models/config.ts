@@ -38,7 +38,7 @@ export interface CameraAnalysis {
   preview_path?: string | null
 }
 
-export function imageUrlForPath(path: string): string {
+function imageUrlForPath(path: string): string {
   const encoded = path.split('/').map(encodeURIComponent).join('/')
   return `/api/images/${encoded}`
 }
@@ -63,7 +63,7 @@ export interface Camera {
   analysis: CameraAnalysis | null
 }
 
-export interface ToolsConfig {
+interface ToolsConfig {
   internet: boolean
   weather: boolean
   maps: boolean
@@ -78,8 +78,6 @@ export interface ModelReasoning {
 export interface ModelOption {
   id: string
   label: string
-  provider: string
-  transport: string
   reasoning: ModelReasoning
   verbosity: ModelReasoning
 }
@@ -126,13 +124,6 @@ export function modelLabel(modelId: string | null | undefined, models: ModelOpti
 export const UNASSIGNED_SECTOR_ID = 'unassigned'
 export const UNASSIGNED_LOCATION_ID = 'unassigned'
 
-export function unassignedLocationId(sectorId: string): string {
-  if (sectorId === UNASSIGNED_SECTOR_ID) {
-    return UNASSIGNED_LOCATION_ID
-  }
-  return `${sectorId}_unassigned`
-}
-
 export function createEmptySector(): Sector {
   return {
     id: crypto.randomUUID(),
@@ -166,7 +157,7 @@ export function createEmptyCamera(sectorId: string, locationId: string): Camera 
   }
 }
 
-export function isCameraEffective(
+function isCameraEffective(
   sector: Sector,
   location: Location,
   camera: Camera,
@@ -182,7 +173,7 @@ export function camerasInLocation(locationId: string, cameras: Camera[]): Camera
   return cameras.filter((camera) => camera.location_id === locationId)
 }
 
-export function camerasInSector(sectorId: string, cameras: Camera[]): Camera[] {
+function camerasInSector(sectorId: string, cameras: Camera[]): Camera[] {
   return cameras.filter((camera) => camera.sector_id === sectorId)
 }
 

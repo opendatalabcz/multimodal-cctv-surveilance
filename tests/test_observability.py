@@ -232,7 +232,6 @@ def test_disabled_tracing_does_not_construct_a_client(monkeypatch) -> None:
         result = chat_with_tools(
             [{"role": "user", "content": "Hello"}],
             config=_azure(),
-            parse_json=False,
         )
 
     assert result["success"] is True
@@ -409,7 +408,6 @@ def test_capture_images_attaches_each_frame_once(tmp_path, monkeypatch) -> None:
         result = chat_with_tools(
             [{"role": "user", "content": "Look"}],
             config=_azure(),
-            parse_json=False,
         )
 
     assert result["success"] is True
@@ -482,7 +480,6 @@ def test_responses_usage_and_encrypted_content_are_normalized(monkeypatch) -> No
             [{"role": "user", "content": "Hello"}],
             config=_azure(),
             transport="responses",
-            parse_json=False,
         )
 
     assert result["success"] is True
@@ -513,7 +510,6 @@ def test_azure_error_is_traced_and_does_not_raise(monkeypatch) -> None:
         result = chat_with_tools(
             [{"role": "user", "content": "Hello"}],
             config=_azure(),
-            parse_json=False,
         )
 
     assert result["success"] is False
@@ -537,7 +533,6 @@ def test_tracing_failures_do_not_fail_the_chat(monkeypatch) -> None:
         result = chat_with_tools(
             [{"role": "user", "content": "Hello"}],
             config=_azure(),
-            parse_json=False,
         )
 
     assert result["success"] is True
@@ -548,7 +543,6 @@ def test_tracing_failures_do_not_fail_the_chat(monkeypatch) -> None:
         again = chat_with_tools(
             [{"role": "user", "content": "Hello"}],
             config=_azure(),
-            parse_json=False,
         )
     assert again["success"] is True
     flush_traces()
@@ -636,7 +630,6 @@ def test_tool_failure_is_an_error_span(monkeypatch) -> None:
         result = chat_with_tools(
             [{"role": "user", "content": "Weather?"}],
             config=_azure(),
-            parse_json=False,
         )
 
     assert result["success"] is True
