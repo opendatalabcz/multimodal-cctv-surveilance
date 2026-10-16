@@ -1,4 +1,4 @@
-"""Terminal tool: the visible answer, cited cameras, and follow-up questions."""
+"""Terminal tool: the visible answer, presented images, and follow-up questions."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ SUBMIT_ANSWER_TOOL: dict[str, Any] = {
         "name": SUBMIT_ANSWER,
         "description": (
             "Finish the turn. Call this only after every other tool has returned. "
-            "Put the markdown the user should see in answer, the configured camera "
-            "ids that answer discusses in camera_ids, and up to three short next "
-            "questions in followups. Do not mention this tool in the answer."
+            "Put the markdown the user should see in answer, the frames to show in "
+            "images, and up to three short next questions in followups. "
+            "Do not mention this tool in the answer."
         ),
         "parameters": {
             "type": "object",
@@ -24,13 +24,61 @@ SUBMIT_ANSWER_TOOL: dict[str, Any] = {
                     "type": "string",
                     "description": "Markdown reply shown to the user.",
                 },
-                "camera_ids": {
+                "images": {
                     "type": "array",
-                    "items": {"type": "string"},
                     "description": (
-                        "Configured camera ids discussed in the answer. "
-                        "Use an empty list when the answer discusses no frames."
+                        "Frames to show, in display order. Use an empty list when "
+                        "the answer shows no frames. Only include cameras fetched "
+                        "in this turn."
                     ),
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "camera_id": {
+                                "type": "string",
+                                "description": "Configured id of a frame fetched in this turn.",
+                            },
+                            "annotations": {
+                                "type": "array",
+                                "description": (
+                                    "Highlights on this frame. Use an empty list when none fit. "
+                                    "Coordinates are integers from 0 to 1000, with x and y "
+                                    "normalized independently. Omit annotations you cannot place. "
+                                    "At most eight annotations."
+                                ),
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {
+                                            "type": "string",
+                                            "enum": ["box", "point", "line", "polygon"],
+                                            "description": (
+                                                "box: two opposite corners. point: one point. "
+                                                "line: 2 to 8 points. polygon: 3 to 12 points."
+                                            ),
+                                        },
+                                        "label": {
+                                            "type": "string",
+                                            "description": "Optional label, at most 80 characters.",
+                                        },
+                                        "points": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "array",
+                                                "items": {"type": "integer"},
+                                                "minItems": 2,
+                                                "maxItems": 2,
+                                            },
+                                        },
+                                    },
+                                    "required": ["type", "points"],
+                                    "additionalProperties": False,
+                                },
+                            },
+                        },
+                        "required": ["camera_id", "annotations"],
+                        "additionalProperties": False,
+                    },
                 },
                 "followups": {
                     "type": "array",
@@ -41,7 +89,7 @@ SUBMIT_ANSWER_TOOL: dict[str, Any] = {
                     ),
                 },
             },
-            "required": ["answer", "camera_ids", "followups"],
+            "required": ["answer", "images", "followups"],
             "additionalProperties": False,
         },
     },

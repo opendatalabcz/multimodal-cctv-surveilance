@@ -33,7 +33,7 @@ def _submit(answer: str) -> dict:
                 "function": {
                     "name": "submit_answer",
                     "arguments": json.dumps(
-                        {"answer": answer, "camera_ids": [], "followups": []}
+                        {"answer": answer, "images": [], "followups": []}
                     ),
                 },
             }
@@ -453,7 +453,7 @@ def test_responses_usage_and_encrypted_content_are_normalized(monkeypatch) -> No
     client = RecordingClient()
     _enable(monkeypatch, client)
 
-    arguments = json.dumps({"answer": "Clear.", "camera_ids": [], "followups": []})
+    arguments = json.dumps({"answer": "Clear.", "images": [], "followups": []})
 
     def fake_post(url, headers=None, json=None, timeout=None):
         return _ok_response(

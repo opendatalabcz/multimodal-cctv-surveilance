@@ -250,6 +250,16 @@ def test_conversation_message_flow(client, tmp_path) -> None:
             },
         ],
         "image_paths": ["camera_images/test/frame.jpg"],
+        "images": [
+            {
+                "path": "camera_images/test/frame.jpg",
+                "camera_id": "cam_a",
+                "annotations": [
+                    {"type": "box", "label": "Car", "points": [[10, 20], [30, 40]]},
+                    {"type": "point", "points": [[50, 60]]},
+                ],
+            }
+        ],
     }
 
     with patch("cctv.api.chat.chat_with_tools", return_value=chat_result):
@@ -259,7 +269,16 @@ def test_conversation_message_flow(client, tmp_path) -> None:
     assert body["messages"][1]["role"] == "user"
     assert body["messages"][2]["role"] == "assistant"
     assert body["messages"][2]["content"] == "The street looks calm."
-    assert body["messages"][2]["imageUrls"] == ["/api/images/camera_images/test/frame.jpg"]
+    assert body["messages"][2]["images"] == [
+        {
+            "url": "/api/images/camera_images/test/frame.jpg",
+            "cameraId": "cam_a",
+            "annotations": [
+                {"type": "box", "label": "Car", "points": [[10, 20], [30, 40]]},
+                {"type": "point", "label": None, "points": [[50, 60]]},
+            ],
+        }
+    ]
 
     get_response = client.get(f"/api/conversations/{conversation_id}")
     assert get_response.status_code == 200
@@ -271,7 +290,7 @@ def test_conversation_message_flow(client, tmp_path) -> None:
     assert entry["conversation_id"] == conversation_id
     assert len(entry["turn_id"]) == 32
     assert entry["success"] is True
-    assert entry["cameras"] == ["camera_images/test/frame.jpg"]
+    assert entry["images"] == [{"camera_id": "cam_a", "annotations": ["box", "point"]}]
     assert "duration_ms" in entry
 
 
@@ -399,6 +418,13 @@ def test_message_stream_emits_status_then_done(client) -> None:
                 {"role": "assistant", "content": "The street looks calm."},
             ],
             "image_paths": ["camera_images/test/frame.jpg"],
+            "images": [
+                {
+                    "path": "camera_images/test/frame.jpg",
+                    "camera_id": "cam_a",
+                    "annotations": [],
+                }
+            ],
         }
 
     with patch("cctv.api.chat.chat_with_tools", side_effect=fake_chat):
@@ -418,8 +444,12 @@ def test_message_stream_emits_status_then_done(client) -> None:
     done = events[-1]
     assert done["conversation"]["id"] == conversation_id
     assert done["conversation"]["messages"][-1]["content"] == "The street looks calm."
-    assert done["conversation"]["messages"][-1]["imageUrls"] == [
-        "/api/images/camera_images/test/frame.jpg"
+    assert done["conversation"]["messages"][-1]["images"] == [
+        {
+            "url": "/api/images/camera_images/test/frame.jpg",
+            "cameraId": "cam_a",
+            "annotations": [],
+        }
     ]
 
 

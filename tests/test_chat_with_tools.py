@@ -10,6 +10,10 @@ from cctv.analysis.azure_vision import (
 from cctv.utils.azure import AzureOpenAIConfig
 
 
+def _presented(camera_ids: list[str] | None = None) -> list[dict]:
+    return [{"camera_id": camera_id, "annotations": []} for camera_id in (camera_ids or [])]
+
+
 def _submit_message(answer: str, camera_ids: list[str] | None = None) -> dict:
     return {
         "role": "assistant",
@@ -23,7 +27,7 @@ def _submit_message(answer: str, camera_ids: list[str] | None = None) -> dict:
                     "arguments": json_mod.dumps(
                         {
                             "answer": answer,
-                            "camera_ids": camera_ids or [],
+                            "images": _presented(camera_ids),
                             "followups": [],
                         }
                     ),
@@ -402,7 +406,7 @@ def test_on_progress_emits_fetching_then_analyzing() -> None:
     assert result["messages"][-1]["content"] == "Only A is busy."
 
 
-def test_empty_cite_block_hides_all_fetched_images() -> None:
+def test_empty_images_list_hides_all_fetched_images() -> None:
     responses = [
         {
             "choices": [
@@ -475,6 +479,121 @@ def test_empty_cite_block_hides_all_fetched_images() -> None:
         if isinstance(message.get("content"), list)
         for part in message["content"]
     )
+
+
+def test_presented_annotations_drop_invalid_geometry() -> None:
+    responses = [
+        {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_one",
+                                "type": "function",
+                                "function": {
+                                    "name": "get_camera_image",
+                                    "arguments": '{"cameras": ["cam_a", "cam_b"]}',
+                                },
+                            }
+                        ],
+                    }
+                }
+            ],
+            "usage": {},
+        },
+        {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_submit",
+                                "type": "function",
+                                "function": {
+                                    "name": "submit_answer",
+                                    "arguments": json_mod.dumps(
+                                        {
+                                            "answer": "A is stopped.",
+                                            "images": [
+                                                {
+                                                    "camera_id": "cam_b",
+                                                    "annotations": [],
+                                                },
+                                                {
+                                                    "camera_id": "cam_a",
+                                                    "annotations": [
+                                                        {
+                                                            "type": "box",
+                                                            "label": "Stopped vehicle",
+                                                            "points": [[420, 510], [600, 670]],
+                                                        },
+                                                        {
+                                                            "type": "point",
+                                                            "points": [[1200, 10]],
+                                                        },
+                                                        {"type": "arrow", "points": [[1, 1]]},
+                                                    ],
+                                                },
+                                                {"camera_id": "missing", "annotations": []},
+                                            ],
+                                            "followups": [],
+                                        }
+                                    ),
+                                },
+                            }
+                        ],
+                    }
+                }
+            ],
+            "usage": {},
+        },
+    ]
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        response = MagicMock()
+        response.json.return_value = responses.pop(0)
+        return response
+
+    def fake_execute(name, arguments):
+        cameras = arguments["cameras"]
+        return {
+            "tool_content": '{"success": true}',
+            "image_paths": [f"/tmp/{camera}.jpg" for camera in cameras],
+            "image_labels": [
+                {"path": f"/tmp/{camera}.jpg", "camera_id": camera} for camera in cameras
+            ],
+        }
+
+    with (
+        patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post),
+        patch("cctv.analysis.azure_vision.execute_tool", side_effect=fake_execute),
+        patch(
+            "cctv.analysis.azure_vision._vision_image_part",
+            side_effect=lambda path: {"type": "image_url", "image_url": {"url": str(path)}},
+        ),
+    ):
+        result = chat_with_tools(
+            [{"role": "user", "content": "What is stopped?"}],
+            config=_fake_config(),
+        )
+
+    assert result["success"] is True
+    assert result["image_paths"][0].endswith("cam_b.jpg")
+    assert result["image_paths"][1].endswith("cam_a.jpg")
+    assert result["images"][0]["camera_id"] == "cam_b"
+    assert result["images"][0]["annotations"] == []
+    assert result["images"][1]["annotations"] == [
+        {
+            "type": "box",
+            "points": [[420, 510], [600, 670]],
+            "label": "Stopped vehicle",
+        }
+    ]
 
 
 def _image_payloads(messages: list[dict]) -> list[list[str]]:
@@ -563,7 +682,7 @@ def test_stored_history_keeps_frame_refs_not_base64() -> None:
     assert len(_image_payloads(posted_payloads[1]["messages"])) == 1
 
 
-def test_follow_up_without_fetch_reattaches_last_cited_frames() -> None:
+def test_follow_up_without_fetch_reattaches_presented_frames() -> None:
     fetch_responses = [
         {
             "choices": [
@@ -870,7 +989,7 @@ def test_luna_responses_tool_round_returns_assistant_text() -> None:
                     "arguments": json_mod.dumps(
                         {
                             "answer": "Two cameras.",
-                            "camera_ids": [],
+                            "images": [],
                             "followups": [],
                         }
                     ),
@@ -964,7 +1083,7 @@ def test_submit_answer_is_stored_as_an_assistant_message() -> None:
     message["tool_calls"][0]["function"]["arguments"] = json_mod.dumps(
         {
             "answer": "The bridge is quiet.",
-            "camera_ids": ["charles_bridge"],
+            "images": [{"camera_id": "charles_bridge", "annotations": []}],
             "followups": [
                 "Has it cleared yet?",
                 "Has it cleared yet?",
@@ -1016,7 +1135,7 @@ def test_submit_answer_alongside_a_camera_fetch_waits() -> None:
                                     "arguments": json_mod.dumps(
                                         {
                                             "answer": "Too early.",
-                                            "camera_ids": ["cam_a"],
+                                            "images": [{"camera_id": "cam_a", "annotations": []}],
                                             "followups": [],
                                         }
                                     ),
@@ -1137,7 +1256,7 @@ def test_responses_plain_text_forces_submit_answer_by_name() -> None:
                     "call_id": "call_submit",
                     "name": "submit_answer",
                     "arguments": json_mod.dumps(
-                        {"answer": "Final.", "camera_ids": [], "followups": []}
+                        {"answer": "Final.", "images": [], "followups": []}
                     ),
                 }
             ],

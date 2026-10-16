@@ -9,8 +9,18 @@ from pathlib import Path
 from typing import Any
 
 MAX_FOLLOWUPS = 3
+MAX_ANNOTATIONS = 8
+MAX_LABEL_CHARS = 80
+COORD_MAX = 1000
 _MAX_FOLLOWUP_CHARS = 120
 _LIST_MARKER = re.compile(r"^(?:[-*+•]|\d+[.)])\s*")
+_POINT_LIMITS: dict[str, tuple[int, int]] = {
+    "point": (1, 1),
+    "box": (2, 2),
+    "line": (2, 8),
+    "polygon": (3, 12),
+}
+_BAD_LABEL = object()
 
 
 @dataclass(frozen=True)
@@ -22,6 +32,28 @@ class FetchedFrame:
     def keys(self) -> set[str]:
         values = (self.camera_id, self.camera_name, Path(self.path).stem)
         return {value.strip().lower() for value in values if value and str(value).strip()}
+
+
+@dataclass(frozen=True)
+class ImageAnnotation:
+    type: str
+    points: tuple[tuple[int, int], ...]
+    label: str | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "type": self.type,
+            "points": [list(point) for point in self.points],
+        }
+        if self.label:
+            payload["label"] = self.label
+        return payload
+
+
+@dataclass(frozen=True)
+class PresentedImage:
+    frame: FetchedFrame
+    annotations: tuple[ImageAnnotation, ...]
 
 
 def normalize_followups(values: list[Any]) -> list[str]:
@@ -40,19 +72,29 @@ def normalize_followups(values: list[Any]) -> list[str]:
     return questions
 
 
-def select_cited_paths(frames: list[FetchedFrame], citations: list[str]) -> list[str]:
+def select_presented_images(frames: list[FetchedFrame], images: Any) -> list[PresentedImage]:
+    """Keep fetched frames named in ``images``, in that order, with valid annotations."""
     by_key: dict[str, FetchedFrame] = {}
     for frame in frames:
         for key in frame.keys():
             by_key[key] = frame
-    selected: list[str] = []
+    selected: list[PresentedImage] = []
     seen: set[str] = set()
-    for citation in citations:
-        frame = by_key.get(citation.strip().lower())
+    if not isinstance(images, list):
+        return []
+    for item in images:
+        if not isinstance(item, dict):
+            continue
+        camera_id = item.get("camera_id")
+        if not isinstance(camera_id, str) or not camera_id.strip():
+            continue
+        frame = by_key.get(camera_id.strip().lower())
         if frame is None or frame.path in seen:
             continue
-        selected.append(frame.path)
         seen.add(frame.path)
+        selected.append(
+            PresentedImage(frame=frame, annotations=tuple(_annotations(item.get("annotations"))))
+        )
     return selected
 
 
@@ -95,6 +137,78 @@ def frames_from_tool_result(
             camera_id = queries[index]
         frames.append(FetchedFrame(path=path, camera_id=camera_id, camera_name=camera_name))
     return frames
+
+
+def _annotations(value: Any) -> list[ImageAnnotation]:
+    if not isinstance(value, list):
+        return []
+    kept: list[ImageAnnotation] = []
+    for item in value:
+        annotation = _annotation(item)
+        if annotation is None:
+            continue
+        kept.append(annotation)
+        if len(kept) == MAX_ANNOTATIONS:
+            break
+    return kept
+
+
+def _annotation(value: Any) -> ImageAnnotation | None:
+    if not isinstance(value, dict):
+        return None
+    kind = value.get("type")
+    if not isinstance(kind, str) or kind not in _POINT_LIMITS:
+        return None
+    raw_points = value.get("points")
+    if not isinstance(raw_points, list):
+        return None
+    points: list[tuple[int, int]] = []
+    for raw in raw_points:
+        point = _point(raw)
+        if point is None:
+            return None
+        points.append(point)
+    low, high = _POINT_LIMITS[kind]
+    if not low <= len(points) <= high:
+        return None
+    label = _label(value.get("label"))
+    if label is _BAD_LABEL:
+        return None
+    return ImageAnnotation(type=kind, points=tuple(points), label=label)
+
+
+def _point(value: Any) -> tuple[int, int] | None:
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        return None
+    x = _coord(value[0])
+    y = _coord(value[1])
+    if x is None or y is None:
+        return None
+    return (x, y)
+
+
+def _coord(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if isinstance(value, float) and not value.is_integer():
+        return None
+    number = int(value)
+    if number < 0 or number > COORD_MAX:
+        return None
+    return number
+
+
+def _label(value: Any) -> str | None | object:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return _BAD_LABEL
+    text = value.strip()
+    if not text:
+        return None
+    if len(text) > MAX_LABEL_CHARS:
+        return _BAD_LABEL
+    return text
 
 
 def _optional_str(value: Any) -> str | None:

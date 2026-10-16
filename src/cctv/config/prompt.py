@@ -247,9 +247,14 @@ def build_system_prompt(config: AgentConfig) -> str:
             "When describing a scene, call get_camera_image with the relevant cameras, "
             "look at the returned frames, then finish by calling submit_answer.",
             "Put only the visible markdown in answer. Do not mention submit_answer there.",
-            "List every camera you discuss, and only those, in camera_ids using configured ids. "
-            "Pass an empty camera_ids list when you discuss no frames. "
-            "The user only sees the images you list, not every frame you fetched.",
+            "List every camera the user should see, and only those, in images using configured ids. "
+            "Pass an empty images list when you show no frames. "
+            "The user only sees the images you list, not every frame you fetched. "
+            "Each image may include annotations. A box is two opposite corners, a point is one point, "
+            "a line is 2 to 8 points, and a polygon is 3 to 12 points. "
+            "Coordinates are integers from 0 to 1000, with x and y normalized independently. "
+            "Add a short label when it helps. Use at most eight annotations on one image. "
+            "Omit annotations you cannot place.",
             "Pass two or three short next questions in followups, in the user's voice. "
             "Keep each under 80 characters, suggest only questions the configured cameras "
             "can answer, and do not repeat a question the user already asked. "

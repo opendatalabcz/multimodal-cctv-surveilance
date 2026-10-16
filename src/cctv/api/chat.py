@@ -4,18 +4,64 @@ import time
 import uuid
 from typing import Any
 
+from pydantic import ValidationError
+
 from cctv.analysis.azure_vision import ProgressCallback, chat_with_tools
-from cctv.observability.tracing import start_turn
-from cctv.api.schemas import ChatMessage
+from cctv.api.schemas import ChatMessage, ImageAnnotation, PresentedImage
 from cctv.api.store import Conversation, image_urls_for_paths
 from cctv.api.turn_log import append_turn_log, tool_names_from_messages
 from cctv.config.agent_yaml import load_agent_config
 from cctv.config.models import clamp_reasoning, clamp_verbosity, model_by_id
 from cctv.config.prompt import build_system_prompt
+from cctv.observability.tracing import start_turn
 from cctv.tools.registry import tool_schemas_for_config
 from cctv.utils.azure import AzureOpenAIConfig, resolve_azure_config
 
 MAX_TOOL_ROUNDS = 16
+
+
+def _presented_images(images: Any) -> list[PresentedImage]:
+    if not isinstance(images, list):
+        return []
+    presented: list[PresentedImage] = []
+    for item in images:
+        if not isinstance(item, dict):
+            continue
+        path = item.get("path")
+        if not isinstance(path, str) or not path:
+            continue
+        annotations: list[ImageAnnotation] = []
+        for raw in item.get("annotations") or []:
+            if not isinstance(raw, dict):
+                continue
+            try:
+                annotations.append(ImageAnnotation.model_validate(raw))
+            except ValidationError:
+                continue
+        presented.append(
+            PresentedImage(
+                url=image_urls_for_paths([path])[0],
+                cameraId=str(item.get("camera_id") or ""),
+                annotations=annotations,
+            )
+        )
+    return presented
+
+
+def _logged_images(images: Any) -> list[dict[str, Any]]:
+    if not isinstance(images, list):
+        return []
+    logged: list[dict[str, Any]] = []
+    for item in images:
+        if not isinstance(item, dict):
+            continue
+        annotations = [
+            annotation.get("type")
+            for annotation in item.get("annotations") or []
+            if isinstance(annotation, dict) and annotation.get("type")
+        ]
+        logged.append({"camera_id": item.get("camera_id"), "annotations": annotations})
+    return logged
 
 
 def _assistant_text(analysis: Any) -> str:
@@ -106,12 +152,11 @@ def run_chat_turn(
         message for message in result["messages"] if message.get("role") != "system"
     ]
     assistant_content = _assistant_text(result.get("analysis", ""))
-    image_urls = image_urls_for_paths(result.get("image_paths") or [])
     conversation.messages.append(
         ChatMessage(
             role="assistant",
             content=assistant_content,
-            imageUrls=image_urls,
+            images=_presented_images(result.get("images") or []),
             model=result.get("model") or azure_config.model,
         )
     )
@@ -142,7 +187,7 @@ def _write_turn_log(
             "success": bool(result.get("success")),
             "tool_rounds": result.get("tool_rounds"),
             "tool_names": tool_names_from_messages(result.get("messages") or conversation.azure_messages),
-            "cameras": result.get("image_paths") or [],
+            "images": _logged_images(result.get("images") or []),
             "image_count": result.get("image_count"),
             "tokens": usage,
             "duration_ms": duration_ms,

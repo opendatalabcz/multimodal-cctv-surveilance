@@ -11,11 +11,11 @@ from typing import Any
 import requests
 
 import cctv.tools  # noqa: F401  — register default tools
-from cctv.analysis.citations import (
+from cctv.analysis.presentation import (
     FetchedFrame,
     frames_from_tool_result,
     normalize_followups,
-    select_cited_paths,
+    select_presented_images,
 )
 from cctv.observability.tracing import (
     capture_images_enabled,
@@ -544,7 +544,9 @@ def _fetched_images_message(frames: list[FetchedFrame]) -> dict[str, Any]:
             "type": "text",
             "text": (
                 "Here are the fetched frames for analysis, in this order. "
-                "When you finish, pass the camera ids you discuss to submit_answer.\n"
+                "When you finish, list the frames to show in submit_answer images. "
+                "Annotation coordinates run from 0 to 1000 on each axis. "
+                "Omit annotations you cannot place.\n"
                 + "\n".join(labels)
             ),
         },
@@ -674,7 +676,7 @@ def _compact_frame_refs_for_storage(
     return compacted
 
 
-def _kept_frames_for_citations(
+def _kept_frames(
     fetched_frames: list[FetchedFrame],
     display_paths: list[str],
 ) -> list[FetchedFrame]:
@@ -736,13 +738,14 @@ def _string_list(value: Any) -> list[str]:
     return items
 
 
-def _submission(arguments: dict[str, Any]) -> tuple[str, list[str], list[str]] | None:
+def _submission(arguments: dict[str, Any]) -> tuple[str, list[Any], list[str]] | None:
     answer = arguments.get("answer")
     if not isinstance(answer, str) or not answer.strip():
         return None
-    return answer.strip(), _string_list(arguments.get("camera_ids")), normalize_followups(
-        _string_list(arguments.get("followups"))
-    )
+    images = arguments.get("images")
+    if not isinstance(images, list):
+        images = []
+    return answer.strip(), images, normalize_followups(_string_list(arguments.get("followups")))
 
 
 def _tool_error_message(tool_call: dict[str, Any], content: str) -> dict[str, Any]:
@@ -762,18 +765,19 @@ def _finalize_submission(
     *,
     messages: list[dict[str, Any]],
     fetched_frames: list[FetchedFrame],
-    camera_ids: list[str],
+    images: list[Any],
     followups: list[str],
     tool_rounds: int,
     config: AzureOpenAIConfig,
 ) -> dict[str, Any]:
-    display_paths = select_cited_paths(fetched_frames, camera_ids)
+    presented = select_presented_images(fetched_frames, images)
+    display_paths = [item.frame.path for item in presented]
     message = {"role": "assistant", "content": answer}
     stored = list(messages)
     if fetched_frames:
         stored = _compact_frame_refs_for_storage(
             stored,
-            _kept_frames_for_citations(fetched_frames, display_paths),
+            _kept_frames(fetched_frames, display_paths),
         )
     return {
         "success": True,
@@ -783,6 +787,14 @@ def _finalize_submission(
         "timestamp": datetime.now().isoformat(),
         "image_paths": [_relative_to_data_root(path) for path in display_paths],
         "image_count": len(display_paths),
+        "images": [
+            {
+                "path": _relative_to_data_root(item.frame.path),
+                "camera_id": item.frame.camera_id,
+                "annotations": [annotation.as_dict() for annotation in item.annotations],
+            }
+            for item in presented
+        ],
         "model": config.model,
         "tool_rounds": tool_rounds,
         "messages": stored + [message],
@@ -812,10 +824,10 @@ def chat_with_tools(
     a frame-ref user message is stored (paths, not base64). Each Azure POST
     expands only the latest frame-ref to vision parts. A turn succeeds only
     when ``submit_answer`` returns a non-empty answer. Plain text is sent back
-    once with that tool required, then dropped. ``image_paths`` are the frames
-    named in ``camera_ids``. On success, ``messages`` is the compact history
-    plus a normal assistant message. ``on_progress`` receives status dicts
-    (stage + detail) for the UI.
+    once with that tool required, then dropped. ``images`` are the frames the
+    model chose to show, with any valid annotations. On success, ``messages`` is
+    the compact history plus a normal assistant message. ``on_progress`` receives
+    status dicts (stage + detail) for the UI.
     """
     config = config or load_azure_openai_config()
     if not config.is_configured or not config.api_url:
@@ -919,7 +931,7 @@ def chat_with_tools(
                     )
                     tool_rounds += 1
                     continue
-                answer, camera_ids, followups = submission
+                answer, images, followups = submission
                 if rejected_prose is not None:
                     conversation = [item for item in conversation if item is not rejected_prose]
                 return _finalize_submission(
@@ -927,7 +939,7 @@ def chat_with_tools(
                     result,
                     messages=conversation,
                     fetched_frames=fetched_frames,
-                    camera_ids=camera_ids,
+                    images=images,
                     followups=followups,
                     tool_rounds=tool_rounds,
                     config=config,

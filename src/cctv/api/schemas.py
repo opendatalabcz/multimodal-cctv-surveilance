@@ -11,10 +11,22 @@ class ConfigResponse(AgentConfig):
     """GET/PUT /api/config body."""
 
 
+class ImageAnnotation(BaseModel):
+    type: Literal["box", "point", "line", "polygon"]
+    points: list[list[int]]
+    label: str | None = None
+
+
+class PresentedImage(BaseModel):
+    url: str
+    cameraId: str
+    annotations: list[ImageAnnotation] = Field(default_factory=list)
+
+
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str
-    imageUrls: list[str] = Field(default_factory=list)
+    images: list[PresentedImage] = Field(default_factory=list)
     model: str | None = None
 
 

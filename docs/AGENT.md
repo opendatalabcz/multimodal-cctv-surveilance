@@ -200,7 +200,7 @@ Tools exposed to Azure depend on the current toggles (`cctv.tools.tool_schemas_f
 | --- | --- | --- |
 | `list_cameras` | always | JSON list of **effectively enabled** cameras (id, name, GPS, source, source_type, sector_id, location_id, location_name) |
 | `get_camera_image` | always | Resolves YAML `source` for one or more **effectively enabled** cameras, fetches stills (in parallel), returns metadata + JPEG paths; disabled or unknown ids return a clear error per camera |
-| `submit_answer` | always | Ends the turn. Arguments are the visible markdown, the camera ids to show, and up to three follow-up questions. A plain-text ending is not shown; the loop asks once more with this tool required |
+| `submit_answer` | always | Ends the turn. Arguments are the visible markdown, the frames to show (with optional box, point, line, or polygon highlights), and up to three follow-up questions. A plain-text ending is not shown; the loop asks once more with this tool required |
 | `web_search` | `internet` | Up to 5 DuckDuckGo text results (title, URL, snippet) via `ddgs` |
 | `get_weather` | `weather` | Open-Meteo current conditions + 3-day forecast (coordinates or place name) |
 | `search_map` | `maps` | Nominatim place search (≤5 results) |
@@ -222,9 +222,9 @@ These are free public services without uptime guarantees:
 
 External failures return a tool result (not a chat crash) so the model can explain that the source was unavailable.
 
-After `get_camera_image` succeeds, `chat_with_tools` appends a **frame-ref** user message (JPEG paths and camera ids, not base64). Each Azure POST expands only the **latest** frame-ref to vision parts (`detail: high`); older refs become a `Previously viewed: …` stub. The turn ends when the model calls `submit_answer`. `camera_ids` selects which fetched frames stay on the latest ref, so a follow-up with no new fetch can still see those stills. An empty list shows no frames. FastAPI copies those paths to `imageUrls` like `/api/images/...` for the chat UI. The stored transcript is a normal assistant message, not the tool call. Do not put large base64 blobs in stored transcripts. `get_camera_image` accepts `cameras: [id or name, ...]` (and `camera` for a single name). There is a hard cap of 16 images per call.
+After `get_camera_image` succeeds, `chat_with_tools` appends a **frame-ref** user message (JPEG paths and camera ids, not base64). Each Azure POST expands only the **latest** frame-ref to vision parts (`detail: high`); older refs become a `Previously viewed: …` stub. The turn ends when the model calls `submit_answer`. `images` selects which fetched frames stay on the latest ref, in that order, so a follow-up with no new fetch can still see those stills. An empty list shows no frames. Each image may include annotations: `box` (two opposite corners), `point` (one point), `line` (2–8 points), or `polygon` (3–12 points). Coordinates are integers from 0 to 1000, with x and y normalized independently. Unknown cameras, duplicate frames, unknown types, and malformed geometry are dropped; a bad annotation does not reject the answer. At most eight annotations are kept per image. FastAPI sends each kept frame as `{ url, cameraId, annotations }` with a URL like `/api/images/...`. The GUI draws the annotations over the original JPEG. The stored transcript is a normal assistant message, not the tool call. Do not put large base64 blobs in stored transcripts. `get_camera_image` accepts `cameras: [id or name, ...]` (and `camera` for a single name). There is a hard cap of 16 images per call.
 
-Each chat turn appends one JSON line to `logs/chat_turns.jsonl` under the data directory (`turn_id`, `conversation_id`, tool rounds/names, cited cameras, Azure `usage`, `duration_ms`). `turn_id` is also the Langfuse trace id when tracing is on.
+Each chat turn appends one JSON line to `logs/chat_turns.jsonl` under the data directory (`turn_id`, `conversation_id`, tool rounds/names, presented camera ids and annotation types, Azure `usage`, `duration_ms`). `turn_id` is also the Langfuse trace id when tracing is on.
 
 ## LLM tracing (Langfuse)
 
