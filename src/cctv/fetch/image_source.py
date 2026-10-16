@@ -14,9 +14,9 @@ from PIL import Image
 
 from cctv.fetch.decoder import CameraImageFetcher
 from cctv.fetch.http import get_url
-from cctv.fetch.sources import SourceType, camera_place_id, classify_source
+from cctv.fetch.sources import SourceType, classify_source
 from cctv.fetch.youtube import extract_video_id, fetch_livestream_frame
-from cctv.utils.paths import images_dir, place_data_dir
+from cctv.utils.paths import images_dir
 
 _SLEEP_PLACEHOLDER_SHA256: set[str] = set()
 
@@ -64,9 +64,6 @@ def _youtube_output_dir(video_id: str, output_dir: Path | None) -> Path:
 def _prague_output_dir(camera_id: str, output_dir: Path | None) -> Path:
     if output_dir is not None:
         return output_dir
-    place_id = camera_place_id(camera_id)
-    if place_id:
-        return place_data_dir(place_id)
     return images_dir() / "prague" / camera_id
 
 

@@ -41,7 +41,3 @@ def data_root() -> Path:
 
 def images_dir() -> Path:
     return data_root() / IMAGES_DIRNAME
-
-
-def place_data_dir(place_id: str) -> Path:
-    return images_dir() / place_id

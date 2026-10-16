@@ -15,14 +15,17 @@ Revisit Deep Agents only if you need long research traces, parallel subagents, o
 | Piece | Role |
 | --- | --- |
 | `frontend/` | React chat + config panel |
-| `src/cctv/api/` | FastAPI: config, conversations, image files |
-| `src/cctv/analysis/azure_vision.py` | `chat_with_tools` loop |
+| `src/cctv/api/` | FastAPI: config, conversations, chat turns, image files |
+| `src/cctv/analysis/` | `chat_with_tools`, camera metadata, frame selection |
 | `src/cctv/tools/` | Tool schemas + executors |
+| `src/cctv/config/` | YAML load/save, effective enablement, system prompt |
+| `src/cctv/fetch/` | Stills from Prague ids, image URLs, and YouTube live |
+| `src/cctv/observability/` | Optional Langfuse tracing |
+| `src/cctv/utils/` | Azure env config and filesystem paths |
 | `configs/cameras.yaml` | Committed sector, location, and camera catalog |
 | `configs/cameras.local.yaml` | Gitignored camera overlay: edits, additions, removals |
 | `configs/agent.yaml` | Committed model catalog and default tool flags |
 | `configs/agent.local.yaml` | Gitignored agent overlay: tool toggles, model, reasoning, verbosity |
-| `src/cctv/fetch/image_source.py` | Low-level `get_image(source)` (URLs, Prague ids, YouTube live) |
 
 ```mermaid
 flowchart LR

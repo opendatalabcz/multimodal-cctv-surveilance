@@ -7,8 +7,6 @@ from enum import Enum
 from typing import Any
 from urllib.parse import urlparse
 
-from cctv.fetch.config import load_monitor_config
-
 _YOUTUBE_PATTERNS = (
     re.compile(r"(?:https?://)?(?:www\.)?youtube\.com/watch\?", re.I),
     re.compile(r"(?:https?://)?(?:www\.)?youtube\.com/live/", re.I),
@@ -34,15 +32,6 @@ def _is_youtube(source: str) -> bool:
 def _prague_camera_id_from_url(source: str) -> str | None:
     match = _PRAGUE_CAMERA_URL.search(source)
     return match.group(1) if match else None
-
-
-def camera_place_id(camera_id: str, config: dict[str, Any] | None = None) -> str | None:
-    """Map a Prague camera id to its place key in monitor_config, if known."""
-    config = config or load_monitor_config()
-    for place_id, camera_ids in config.get("cameras", {}).items():
-        if camera_id in camera_ids:
-            return place_id
-    return None
 
 
 def classify_source(source: str) -> tuple[SourceType, dict[str, Any]]:

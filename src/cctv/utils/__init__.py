@@ -2,7 +2,6 @@ from cctv.utils.azure import AzureOpenAIConfig, load_azure_openai_config, resolv
 from cctv.utils.paths import (
     data_root,
     images_dir,
-    place_data_dir,
     project_root,
 )
 
@@ -12,6 +11,5 @@ __all__ = [
     "images_dir",
     "load_azure_openai_config",
     "resolve_azure_config",
-    "place_data_dir",
     "project_root",
 ]
