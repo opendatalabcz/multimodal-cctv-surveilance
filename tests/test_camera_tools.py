@@ -3,10 +3,15 @@ from pathlib import Path
 from unittest.mock import patch
 
 from cctv.config.agent_yaml import load_agent_config, save_agent_config
-from cctv.config.models import AgentConfig, CameraAnalysis, CameraConfig
+from cctv.config.models import (
+    DEFAULT_MAX_IMAGES_PER_REQUEST,
+    AgentConfig,
+    CameraAnalysis,
+    CameraConfig,
+)
 from cctv.config.prompt import build_system_prompt
 import cctv.tools  # noqa: F401
-from cctv.tools.get_camera import HARD_IMAGE_CAP, resolve_camera
+from cctv.tools.get_camera import resolve_camera
 from cctv.tools.registry import default_tool_schemas, execute_tool
 
 
@@ -158,14 +163,14 @@ def test_get_camera_image_partial_unknown(tmp_path, monkeypatch) -> None:
     assert meta["results"][1]["camera_id"] == "charles_bridge"
 
 
-def test_get_camera_image_hard_cap(tmp_path, monkeypatch) -> None:
+def test_get_camera_image_pages_at_the_model_limit(tmp_path, monkeypatch) -> None:
     cameras = [
         CameraConfig(
             id=f"cam_{index}",
             name=f"Cam {index}",
             source=f"https://example.invalid/{index}.jpg",
         )
-        for index in range(HARD_IMAGE_CAP + 3)
+        for index in range(DEFAULT_MAX_IMAGES_PER_REQUEST + 3)
     ]
     path = tmp_path / "agent.yaml"
     overlay = tmp_path / "agent.local.yaml"
@@ -180,13 +185,51 @@ def test_get_camera_image_hard_cap(tmp_path, monkeypatch) -> None:
             "fetch_result": {"success": True},
         }
 
-    names = [f"cam_{index}" for index in range(HARD_IMAGE_CAP + 3)]
+    names = [f"cam_{index}" for index in range(DEFAULT_MAX_IMAGES_PER_REQUEST + 3)]
     with patch("cctv.tools.get_camera.execute_get_image", side_effect=fake_get):
-        result = execute_tool("get_camera_image", {"cameras": names})
+        first = execute_tool("get_camera_image", {"cameras": names})
+        second = execute_tool(
+            "get_camera_image",
+            {"cameras": names, "offset": DEFAULT_MAX_IMAGES_PER_REQUEST},
+        )
+    first_meta = json.loads(first["tool_content"])
+    second_meta = json.loads(second["tool_content"])
+    assert first_meta["fetched"] == DEFAULT_MAX_IMAGES_PER_REQUEST
+    assert first_meta["total"] == DEFAULT_MAX_IMAGES_PER_REQUEST + 3
+    assert first_meta["offset"] == 0
+    assert first_meta["limit"] == DEFAULT_MAX_IMAGES_PER_REQUEST
+    assert first_meta["next_offset"] == DEFAULT_MAX_IMAGES_PER_REQUEST
+    assert second_meta["fetched"] == 3
+    assert second_meta["offset"] == DEFAULT_MAX_IMAGES_PER_REQUEST
+    assert "next_offset" not in second_meta
+
+
+def test_get_camera_image_clamps_requested_page_size(tmp_path, monkeypatch) -> None:
+    cameras = [
+        CameraConfig(id=f"cam_{index}", name=f"Cam {index}", source=str(index))
+        for index in range(4)
+    ]
+    path = tmp_path / "agent.yaml"
+    overlay = tmp_path / "agent.local.yaml"
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: path)
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay)
+    save_agent_config(AgentConfig(cameras=cameras), path)
+
+    with patch(
+        "cctv.tools.get_camera.execute_get_image",
+        side_effect=lambda source: {
+            "tool_content": json.dumps({"success": True}),
+            "image_path": f"/tmp/{source}.jpg",
+        },
+    ):
+        result = execute_tool(
+            "get_camera_image",
+            {"cameras": [camera.id for camera in cameras], "offset": 1, "limit": 1000},
+        )
     meta = json.loads(result["tool_content"])
-    assert meta["fetched"] == HARD_IMAGE_CAP
-    assert len(meta["skipped"]) == 3
-    assert "preferred cap" not in (meta.get("note") or "")
+    assert meta["limit"] == DEFAULT_MAX_IMAGES_PER_REQUEST
+    assert meta["offset"] == 1
+    assert meta["fetched"] == 3
 
 
 def test_get_camera_image_missing_arguments() -> None:

@@ -74,6 +74,7 @@ interface ChatPanelProps {
   onSelectVerbosity: (level: string) => void
   onSend: (content: string) => void
   onNewChat?: () => void
+  onOpenConfig?: () => void
 }
 
 export function ChatPanel({
@@ -92,6 +93,7 @@ export function ChatPanel({
   onSelectVerbosity,
   onSend,
   onNewChat,
+  onOpenConfig,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -160,6 +162,11 @@ export function ChatPanel({
           {onNewChat && (
             <Button size="small" variant="outlined" onClick={onNewChat} disabled={isSending} sx={{ whiteSpace: 'nowrap' }}>
               New chat
+            </Button>
+          )}
+          {onOpenConfig && (
+            <Button size="small" variant="outlined" onClick={onOpenConfig} sx={{ whiteSpace: 'nowrap' }}>
+              Configuration
             </Button>
           )}
         </Box>

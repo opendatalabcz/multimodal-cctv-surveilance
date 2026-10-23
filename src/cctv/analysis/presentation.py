@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 MAX_FOLLOWUPS = 3
-MAX_ANNOTATIONS = 8
+MAX_ANNOTATIONS = 1000
 MAX_LABEL_CHARS = 80
 COORD_MAX = 1000
 _MAX_FOLLOWUP_CHARS = 120

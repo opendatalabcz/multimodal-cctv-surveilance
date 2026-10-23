@@ -77,7 +77,8 @@ def test_prompt_camera_first_and_forecast_qualification() -> None:
     prompt = build_system_prompt(AgentConfig(tools=ToolsConfig(weather=True, internet=True)))
     assert "one camera per distinct place" in prompt
     assert "one get_camera_image call" in prompt
-    assert "at most 16 cameras" in prompt
+    assert "at most 32 cameras" in prompt
+    assert "next_offset" in prompt
     assert "soft cap" not in prompt
     assert "Clearly label measured/forecast data" in prompt
     assert "Do not use web_search as a weather API" in prompt
@@ -166,12 +167,25 @@ def test_run_chat_turn_passes_max_tool_rounds() -> None:
         }
 
     with (
-        patch("cctv.api.chat.load_agent_config", return_value=AgentConfig()),
+        patch(
+            "cctv.api.chat.load_agent_config",
+            return_value=AgentConfig(
+                models=[
+                    ModelOption(
+                        id="gpt-test",
+                        label="Test",
+                        max_images_per_request=7,
+                    )
+                ],
+                model="gpt-test",
+            ),
+        ),
         patch("cctv.api.chat.chat_with_tools", side_effect=fake_chat),
     ):
         run_chat_turn(conversation, "hello", config=_fake_config())
 
     assert captured["max_tool_rounds"] == 16
+    assert captured["max_images"] == 7
 
 
 def test_resolve_azure_config_keeps_credentials_and_switches_deployment() -> None:

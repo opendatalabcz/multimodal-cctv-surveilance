@@ -8,10 +8,13 @@ from typing import Any
 
 from cctv.config.agent_yaml import load_agent_config
 from cctv.config.effective import is_camera_effective
-from cctv.config.models import CameraConfig
+from cctv.config.models import (
+    DEFAULT_MAX_IMAGES_PER_REQUEST,
+    CameraConfig,
+    model_by_id,
+)
 from cctv.tools.get_image import execute_get_image
 
-HARD_IMAGE_CAP = 16
 _FETCH_WORKERS = 4
 
 GET_CAMERA_IMAGE_TOOL: dict[str, Any] = {
@@ -22,7 +25,8 @@ GET_CAMERA_IMAGE_TOOL: dict[str, Any] = {
             "Fetch current frames from effectively enabled cameras listed in the Config panel / "
             "cameras.yaml. Pass one or more camera ids or display names in `cameras` (preferred). "
             "`camera` is accepted for a single name. Do not issue one tool call per camera. "
-            "Include every camera that matches the question. One call accepts at most 16. "
+            "Include every camera that matches the question. Results are paged; if the result "
+            "has next_offset, call again with the same cameras and that offset. "
             "Unknown names: tell the user to add name, optional GPS, and source URL "
             "in the Config panel. Do not pass raw URLs here."
         ),
@@ -40,6 +44,19 @@ GET_CAMERA_IMAGE_TOOL: dict[str, Any] = {
                 "camera": {
                     "type": "string",
                     "description": "Single camera id or name if you are not using cameras[].",
+                },
+                "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Zero-based camera offset for the next page. Defaults to 0.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": (
+                        "Requested page size. Defaults to and cannot exceed the selected "
+                        "model's max_images_per_request."
+                    ),
                 },
             },
         },
@@ -134,10 +151,28 @@ def _fetch_many(queries: list[str]) -> list[tuple[dict[str, Any], str | None]]:
     return [item for item in ordered if item is not None]
 
 
+def _nonnegative_int(value: Any, default: int) -> int:
+    if isinstance(value, bool):
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed >= 0 else default
+
+
+def _model_page_limit() -> int:
+    config = load_agent_config()
+    option = model_by_id(config.models, config.model)
+    if option is None:
+        return DEFAULT_MAX_IMAGES_PER_REQUEST
+    return option.max_images_per_request
+
+
 def execute_get_camera_image(arguments: dict[str, Any] | None = None) -> dict[str, Any]:
     args = arguments or {}
-    queries = _camera_queries(args)
-    if not queries:
+    all_queries = _camera_queries(args)
+    if not all_queries:
         return {
             "tool_content": json.dumps(
                 {
@@ -151,15 +186,11 @@ def execute_get_camera_image(arguments: dict[str, Any] | None = None) -> dict[st
             "image_labels": [],
         }
 
-    skipped: list[str] = []
-    note = None
-    if len(queries) > HARD_IMAGE_CAP:
-        skipped = queries[HARD_IMAGE_CAP:]
-        queries = queries[:HARD_IMAGE_CAP]
-        note = (
-            f"Hard cap of {HARD_IMAGE_CAP} images applied; "
-            f"skipped {len(skipped)} extra camera(s)."
-        )
+    max_limit = _model_page_limit()
+    offset = _nonnegative_int(args.get("offset"), 0)
+    requested_limit = _nonnegative_int(args.get("limit"), max_limit)
+    limit = min(max(1, requested_limit), max_limit)
+    queries = all_queries[offset : offset + limit]
 
     rows = _fetch_many(queries)
     results: list[dict[str, Any]] = []
@@ -180,12 +211,14 @@ def execute_get_camera_image(arguments: dict[str, Any] | None = None) -> dict[st
         "success": bool(image_paths) or (len(results) == 1 and results[0].get("success") is True),
         "count": len(results),
         "fetched": len(image_paths),
+        "total": len(all_queries),
+        "offset": offset,
+        "limit": limit,
         "results": results,
     }
-    if skipped:
-        payload["skipped"] = skipped
-    if note:
-        payload["note"] = note
+    next_offset = offset + len(queries)
+    if next_offset < len(all_queries):
+        payload["next_offset"] = next_offset
     if len(results) == 1:
         payload.update(results[0])
 

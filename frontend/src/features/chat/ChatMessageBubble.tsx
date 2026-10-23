@@ -20,8 +20,13 @@ const HALO = '#111827'
 export function ChatMessageBubble({ message, modelLabel }: ChatMessageBubbleProps) {
   const isUser = message.role === 'user'
   const [expandedUrl, setExpandedUrl] = useState<string | null>(null)
+  const [activeAnnotation, setActiveAnnotation] = useState<number | null>(null)
   const images = message.images ?? []
   const expanded = images.find((image) => image.url === expandedUrl) ?? null
+  const closeExpanded = () => {
+    setExpandedUrl(null)
+    setActiveAnnotation(null)
+  }
 
   return (
     <Box
@@ -34,7 +39,7 @@ export function ChatMessageBubble({ message, modelLabel }: ChatMessageBubbleProp
       <Paper
         elevation={0}
         sx={{
-          maxWidth: '75%',
+          maxWidth: isUser ? '75%' : '90%',
           px: 2,
           py: 1.5,
           bgcolor: isUser ? 'primary.main' : 'grey.100',
@@ -75,10 +80,13 @@ export function ChatMessageBubble({ message, modelLabel }: ChatMessageBubbleProp
                   overflow: 'hidden',
                   lineHeight: 0,
                   cursor: 'zoom-in',
-                  maxWidth: '100%',
+                  flex: '1 1 280px',
+                  width: 'min(100%, 420px)',
+                  minWidth: 'min(280px, 100%)',
+                  maxWidth: 480,
                 }}
               >
-                <AnnotatedFrame image={image} maxHeight={240} />
+                <AnnotatedFrame image={image} maxHeight={240} thumbnail />
               </Box>
             ))}
           </Box>
@@ -86,15 +94,41 @@ export function ChatMessageBubble({ message, modelLabel }: ChatMessageBubbleProp
 
         <Dialog
           open={expanded !== null}
-          onClose={() => setExpandedUrl(null)}
+          onClose={closeExpanded}
           maxWidth="lg"
           fullWidth
         >
-          <DialogContent sx={{ p: 1, textAlign: 'center' }}>
-            {expanded && <AnnotatedFrame image={expanded} maxHeight="80vh" />}
+          <DialogContent
+            sx={{
+              p: 1,
+              display: 'flex',
+              flexDirection: { xs: 'column', md: 'row' },
+              alignItems: 'stretch',
+              gap: 1,
+            }}
+          >
+            {expanded && (
+              <>
+                <Box sx={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+                  <AnnotatedFrame
+                    image={expanded}
+                    maxHeight="78vh"
+                    activeAnnotation={activeAnnotation}
+                    onActiveAnnotation={setActiveAnnotation}
+                  />
+                </Box>
+                {expanded.annotations.length > 0 && (
+                  <AnnotationLegend
+                    annotations={expanded.annotations}
+                    activeAnnotation={activeAnnotation}
+                    onActiveAnnotation={setActiveAnnotation}
+                  />
+                )}
+              </>
+            )}
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setExpandedUrl(null)}>Close</Button>
+            <Button onClick={closeExpanded}>Close</Button>
           </DialogActions>
         </Dialog>
       </Paper>
@@ -105,12 +139,26 @@ export function ChatMessageBubble({ message, modelLabel }: ChatMessageBubbleProp
 function AnnotatedFrame({
   image,
   maxHeight,
+  thumbnail = false,
+  activeAnnotation = null,
+  onActiveAnnotation,
 }: {
   image: PresentedImage
   maxHeight: number | string
+  thumbnail?: boolean
+  activeAnnotation?: number | null
+  onActiveAnnotation?: (index: number | null) => void
 }) {
   return (
-    <Box sx={{ position: 'relative', display: 'inline-block', maxWidth: '100%', lineHeight: 0 }}>
+    <Box
+      sx={{
+        position: 'relative',
+        display: 'inline-block',
+        width: thumbnail ? '100%' : 'auto',
+        maxWidth: '100%',
+        lineHeight: 0,
+      }}
+    >
       <Box
         component="img"
         src={image.url}
@@ -119,18 +167,32 @@ function AnnotatedFrame({
           display: 'block',
           maxWidth: '100%',
           maxHeight,
-          width: 'auto',
+          width: thumbnail ? '100%' : 'auto',
           height: 'auto',
         }}
       />
-      {image.annotations.length > 0 && <AnnotationOverlay annotations={image.annotations} />}
+      {image.annotations.length > 0 && (
+        <AnnotationOverlay
+          annotations={image.annotations}
+          activeAnnotation={activeAnnotation}
+          onActiveAnnotation={thumbnail ? undefined : onActiveAnnotation}
+        />
+      )}
     </Box>
   )
 }
 
-function AnnotationOverlay({ annotations }: { annotations: ImageAnnotation[] }) {
+function AnnotationOverlay({
+  annotations,
+  activeAnnotation,
+  onActiveAnnotation,
+}: {
+  annotations: ImageAnnotation[]
+  activeAnnotation: number | null
+  onActiveAnnotation?: (index: number | null) => void
+}) {
   return (
-    <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+    <Box sx={{ position: 'absolute', inset: 0, pointerEvents: onActiveAnnotation ? 'auto' : 'none' }}>
       <Box
         component="svg"
         viewBox="0 0 1000 1000"
@@ -138,17 +200,42 @@ function AnnotationOverlay({ annotations }: { annotations: ImageAnnotation[] }) 
         sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
       >
         {annotations.map((annotation, index) => (
-          <Geometry key={`${annotation.type}-${index}`} annotation={annotation} />
+          <Geometry
+            key={`${annotation.type}-${index}`}
+            annotation={annotation}
+            active={activeAnnotation === null || activeAnnotation === index}
+            interactive={Boolean(onActiveAnnotation)}
+            onMouseEnter={() => onActiveAnnotation?.(index)}
+            onMouseLeave={() => onActiveAnnotation?.(null)}
+          />
         ))}
       </Box>
-      {annotations.map((annotation, index) => (
-        <PointAndLabel key={`${annotation.type}-mark-${index}`} annotation={annotation} />
-      ))}
     </Box>
   )
 }
 
-function Geometry({ annotation }: { annotation: ImageAnnotation }) {
+function Geometry({
+  annotation,
+  active,
+  interactive,
+  onMouseEnter,
+  onMouseLeave,
+}: {
+  annotation: ImageAnnotation
+  active: boolean
+  interactive: boolean
+  onMouseEnter: () => void
+  onMouseLeave: () => void
+}) {
+  const events = {
+    onMouseEnter,
+    onMouseLeave,
+    style: {
+      cursor: interactive ? 'pointer' : 'default',
+      opacity: active ? 1 : 0.25,
+      pointerEvents: interactive ? ('visiblePainted' as const) : ('none' as const),
+    },
+  }
   if (annotation.type === 'box' && annotation.points.length === 2) {
     const [first, second] = annotation.points
     const x = Math.min(first[0], second[0])
@@ -156,116 +243,133 @@ function Geometry({ annotation }: { annotation: ImageAnnotation }) {
     const width = Math.abs(second[0] - first[0])
     const height = Math.abs(second[1] - first[1])
     return (
-      <>
-        <rect x={x} y={y} width={width} height={height} fill="none" {...haloStroke()} />
-        <rect x={x} y={y} width={width} height={height} {...markStroke()} />
-      </>
+      <g {...events}>
+        <rect x={x} y={y} width={width} height={height} {...haloStroke(active)} />
+        <rect x={x} y={y} width={width} height={height} {...markStroke(active)} />
+      </g>
     )
   }
   if (annotation.type === 'line' && annotation.points.length >= 2) {
     const points = pointList(annotation.points)
     return (
-      <>
-        <polyline points={points} fill="none" {...haloStroke()} />
-        <polyline points={points} {...markStroke()} />
-      </>
+      <g {...events}>
+        <polyline points={points} {...haloStroke(active)} />
+        <polyline points={points} {...markStroke(active)} />
+      </g>
     )
   }
   if (annotation.type === 'polygon' && annotation.points.length >= 3) {
     const points = pointList(annotation.points)
     return (
-      <>
-        <polygon points={points} fill="none" {...haloStroke()} />
-        <polygon points={points} {...markStroke()} />
-      </>
+      <g {...events}>
+        <polygon points={points} {...haloStroke(active)} />
+        <polygon points={points} {...markStroke(active)} />
+      </g>
+    )
+  }
+  if (annotation.type === 'point' && annotation.points[0]) {
+    const [x, y] = annotation.points[0]
+    return (
+      <g {...events}>
+        <circle cx={x} cy={y} r={8} {...haloStroke(active)} />
+        <circle cx={x} cy={y} r={6} {...markStroke(active)} />
+      </g>
     )
   }
   return null
 }
 
-function PointAndLabel({ annotation }: { annotation: ImageAnnotation }) {
-  const anchor = labelAnchor(annotation)
-  return (
-    <>
-      {annotation.type === 'point' && annotation.points[0] && <PointMark point={annotation.points[0]} />}
-      {annotation.label && anchor && <HighlightLabel x={anchor[0]} y={anchor[1]} text={annotation.label} />}
-    </>
-  )
-}
-
-function PointMark({ point }: { point: number[] }) {
+function AnnotationLegend({
+  annotations,
+  activeAnnotation,
+  onActiveAnnotation,
+}: {
+  annotations: ImageAnnotation[]
+  activeAnnotation: number | null
+  onActiveAnnotation: (index: number | null) => void
+}) {
   return (
     <Box
+      aria-label="Image annotations"
       sx={{
-        position: 'absolute',
-        left: `${point[0] / 10}%`,
-        top: `${point[1] / 10}%`,
-        width: 12,
-        height: 12,
-        marginLeft: '-6px',
-        marginTop: '-6px',
-        borderRadius: '50%',
-        boxSizing: 'border-box',
-        border: `2px solid ${MARK}`,
-        boxShadow: `0 0 0 2px ${HALO}`,
-      }}
-    />
-  )
-}
-
-function HighlightLabel({ x, y, text }: { x: number; y: number; text: string }) {
-  const above = y > 80
-  return (
-    <Box
-      component="span"
-      sx={{
-        position: 'absolute',
-        left: `${x / 10}%`,
-        top: `${y / 10}%`,
-        transform: above ? 'translate(6px, -130%)' : 'translate(6px, 8px)',
-        color: MARK,
-        fontSize: 12,
-        fontWeight: 600,
-        lineHeight: 1.2,
-        whiteSpace: 'nowrap',
-        textShadow: `0 0 2px ${HALO}, 0 0 4px ${HALO}, 1px 1px 0 ${HALO}`,
+        width: { xs: '100%', md: 260 },
+        maxHeight: { xs: 220, md: '78vh' },
+        overflow: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 0.5,
       }}
     >
-      {text}
+      {annotations.map((annotation, index) => (
+        <Box
+          key={`${annotation.type}-legend-${index}`}
+          component="button"
+          type="button"
+          onMouseEnter={() => onActiveAnnotation(index)}
+          onMouseLeave={() => onActiveAnnotation(null)}
+          onFocus={() => onActiveAnnotation(index)}
+          onBlur={() => onActiveAnnotation(null)}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            width: '100%',
+            p: 1,
+            border: 0,
+            borderRadius: 1,
+            textAlign: 'left',
+            bgcolor: activeAnnotation === index ? 'action.selected' : 'transparent',
+            color: 'text.primary',
+            cursor: 'pointer',
+          }}
+        >
+          <Box
+            component="span"
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 24,
+              height: 24,
+              flexShrink: 0,
+              borderRadius: '50%',
+              bgcolor: HALO,
+              color: MARK,
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            {index + 1}
+          </Box>
+          <Box component="span" sx={{ lineHeight: 1.25 }}>
+            {annotation.label || `${annotation.type} ${index + 1}`}
+          </Box>
+        </Box>
+      ))}
     </Box>
   )
-}
-
-function labelAnchor(annotation: ImageAnnotation): number[] | null {
-  if (annotation.points.length === 0) {
-    return null
-  }
-  if (annotation.type === 'box' && annotation.points.length === 2) {
-    const [first, second] = annotation.points
-    return [Math.min(first[0], second[0]), Math.min(first[1], second[1])]
-  }
-  return annotation.points[0]
 }
 
 function pointList(points: number[][]): string {
   return points.map((point) => `${point[0]},${point[1]}`).join(' ')
 }
 
-function haloStroke() {
+function haloStroke(active: boolean) {
   return {
     stroke: HALO,
-    strokeWidth: 5,
+    strokeWidth: active ? 7 : 5,
+    fill: 'none',
     vectorEffect: 'non-scaling-stroke' as const,
     strokeLinejoin: 'round' as const,
     strokeLinecap: 'round' as const,
   }
 }
 
-function markStroke() {
+function markStroke(active: boolean) {
   return {
     fill: 'none',
     stroke: MARK,
-    strokeWidth: 2,
+    strokeWidth: active ? 3 : 2,
     vectorEffect: 'non-scaling-stroke' as const,
     strokeLinejoin: 'round' as const,
     strokeLinecap: 'round' as const,

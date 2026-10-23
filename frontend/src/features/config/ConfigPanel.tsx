@@ -44,6 +44,7 @@ interface ConfigPanelProps {
   onAnalyzeCamera: (cameraId: string) => void
   onAnalyzeMissing: () => void
   onAnalyzeAll: () => void
+  onClose?: () => void
 }
 
 export function ConfigPanel({
@@ -71,6 +72,7 @@ export function ConfigPanel({
   onAnalyzeCamera,
   onAnalyzeMissing,
   onAnalyzeAll,
+  onClose,
 }: ConfigPanelProps) {
   const [expandedSectors, setExpandedSectors] = useState<Record<string, boolean>>({})
   const [expandedLocations, setExpandedLocations] = useState<Record<string, boolean>>({})
@@ -108,8 +110,23 @@ export function ConfigPanel({
         bgcolor: 'background.paper',
       }}
     >
-      <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+      <Box
+        sx={{
+          px: 2,
+          py: 1.5,
+          borderBottom: 1,
+          borderColor: 'divider',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+        }}
+      >
         <Typography variant="h6">Configuration</Typography>
+        {onClose && (
+          <Button size="small" onClick={onClose} sx={{ ml: 'auto' }}>
+            Close
+          </Button>
+        )}
       </Box>
 
       <Box sx={{ flex: 1, overflow: 'auto', px: 2, py: 2 }}>

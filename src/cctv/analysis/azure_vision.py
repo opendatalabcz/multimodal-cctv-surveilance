@@ -17,6 +17,7 @@ from cctv.analysis.presentation import (
     normalize_followups,
     select_presented_images,
 )
+from cctv.config.models import DEFAULT_MAX_IMAGES_PER_REQUEST
 from cctv.observability.tracing import (
     capture_images_enabled,
     exported_image,
@@ -25,7 +26,7 @@ from cctv.observability.tracing import (
     tracing_enabled,
 )
 from cctv.observability.usage import normalize_usage
-from cctv.tools.get_camera import HARD_IMAGE_CAP, _camera_queries
+from cctv.tools.get_camera import _camera_queries
 from cctv.tools.registry import default_tool_schemas, execute_tool
 from cctv.tools.submit_answer import (
     SUBMIT_ANSWER,
@@ -60,7 +61,11 @@ def _emit_progress(
 def _progress_for_tool(name: str, arguments: dict[str, Any]) -> str:
     if name == "get_camera_image":
         queries = _camera_queries(arguments)
-        count = len(queries)
+        offset = arguments.get("offset", 0)
+        limit = arguments.get("limit", len(queries))
+        offset = offset if isinstance(offset, int) and not isinstance(offset, bool) else 0
+        limit = limit if isinstance(limit, int) and not isinstance(limit, bool) else len(queries)
+        count = len(queries[max(0, offset) : max(0, offset) + max(1, limit)])
         if count == 1:
             return f"Fetching {queries[0]}…"
         if count > 1:
@@ -190,10 +195,11 @@ def _chat_completion_payload(
     reasoning: str | None = None,
     verbosity: str | None = None,
     tool_choice: dict[str, Any] | None = None,
+    max_images: int = DEFAULT_MAX_IMAGES_PER_REQUEST,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": config.model,
-        "messages": materialize_for_azure(messages),
+        "messages": materialize_for_azure(messages, max_images=max_images),
         "max_completion_tokens": max_tokens,
     }
     if reasoning and reasoning != "default":
@@ -369,11 +375,15 @@ def _responses_content(content: Any, *, role: str) -> list[dict[str, Any]] | str
     return parts
 
 
-def _responses_input(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+def _responses_input(
+    messages: list[dict[str, Any]],
+    *,
+    max_images: int = DEFAULT_MAX_IMAGES_PER_REQUEST,
+) -> tuple[str, list[dict[str, Any]]]:
     """Turn stored chat messages into Responses instructions plus input items."""
     instructions: list[str] = []
     items: list[dict[str, Any]] = []
-    for message in materialize_for_azure(messages):
+    for message in materialize_for_azure(messages, max_images=max_images):
         role = message.get("role")
         if role == "system":
             content = message.get("content")
@@ -420,8 +430,9 @@ def _responses_payload(
     reasoning: str | None = None,
     verbosity: str | None = None,
     tool_choice: dict[str, Any] | None = None,
+    max_images: int = DEFAULT_MAX_IMAGES_PER_REQUEST,
 ) -> dict[str, Any]:
-    instructions, items = _responses_input(messages)
+    instructions, items = _responses_input(messages, max_images=max_images)
     effective_reasoning = "medium" if not reasoning or reasoning == "default" else reasoning
     payload: dict[str, Any] = {
         "model": config.model,
@@ -615,7 +626,7 @@ def _stub_user_message(frames: list[FetchedFrame]) -> dict[str, Any]:
 
 def _expand_visual_message(
     message: dict[str, Any],
-    max_images: int = HARD_IMAGE_CAP,
+    max_images: int = DEFAULT_MAX_IMAGES_PER_REQUEST,
 ) -> dict[str, Any]:
     content = message.get("content")
     if not isinstance(content, list):
@@ -640,7 +651,7 @@ def _expand_visual_message(
 
 def materialize_for_azure(
     messages: list[dict[str, Any]],
-    max_images: int = HARD_IMAGE_CAP,
+    max_images: int = DEFAULT_MAX_IMAGES_PER_REQUEST,
 ) -> list[dict[str, Any]]:
     """Expand only the latest frame-ref (or legacy vision) message for Azure."""
     visual_indices = [index for index, message in enumerate(messages) if _has_visual_payload(message)]
@@ -815,6 +826,7 @@ def chat_with_tools(
     reasoning: str | None = None,
     verbosity: str | None = None,
     transport: str = "chat_completions",
+    max_images: int = DEFAULT_MAX_IMAGES_PER_REQUEST,
 ) -> dict[str, Any]:
     """Run a multi-turn Azure vision chat with function calling.
 
@@ -874,6 +886,7 @@ def chat_with_tools(
                     reasoning=reasoning,
                     verbosity=verbosity,
                     tool_choice=tool_choice,
+                    max_images=max_images,
                 )
                 result = _traced_post(
                     config.responses_url or "",
@@ -894,6 +907,7 @@ def chat_with_tools(
                     reasoning=reasoning,
                     verbosity=verbosity,
                     tool_choice=tool_choice,
+                    max_images=max_images,
                 )
                 result = _traced_post(
                     config.api_url or "",

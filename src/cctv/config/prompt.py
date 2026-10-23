@@ -13,7 +13,14 @@ from cctv.config.effective import (
     normalize_agent_config,
     sector_for_camera,
 )
-from cctv.config.models import AgentConfig, CameraConfig, LocationConfig, SectorConfig
+from cctv.config.models import (
+    DEFAULT_MAX_IMAGES_PER_REQUEST,
+    AgentConfig,
+    CameraConfig,
+    LocationConfig,
+    SectorConfig,
+    model_by_id,
+)
 
 
 def _capability_lines(config: AgentConfig) -> list[str]:
@@ -181,6 +188,12 @@ def build_welcome_message(config: AgentConfig) -> str:
 
 
 def build_system_prompt(config: AgentConfig) -> str:
+    selected_model = model_by_id(config.models, config.model)
+    image_page_size = (
+        selected_model.max_images_per_request
+        if selected_model is not None
+        else DEFAULT_MAX_IMAGES_PER_REQUEST
+    )
     lines = [
         "You are a CCTV surveillance assistant.",
         "Always prefer live camera evidence before external data.",
@@ -192,7 +205,9 @@ def build_system_prompt(config: AgentConfig) -> str:
         f"- When the question has no location (e.g. 'what is the weather like today?'), "
         f"{_no_location_sampling_hint(config)}",
         "- Fetch every camera that matches the question. Do not sample. "
-        "One get_camera_image call accepts at most 16 cameras.",
+        f"One get_camera_image page contains at most {image_page_size} cameras. "
+        "If its result has next_offset, call get_camera_image again with the same cameras "
+        "and that offset before answering.",
         "- If the user names a place with no matching configured camera, tell them to add it "
         "in the Config panel (name, optional GPS, source URL). "
         "If map or weather toggles are on, you may use those tools for context instead.",
@@ -253,8 +268,7 @@ def build_system_prompt(config: AgentConfig) -> str:
             "Each image may include annotations. A box is two opposite corners, a point is one point, "
             "a line is 2 to 8 points, and a polygon is 3 to 12 points. "
             "Coordinates are integers from 0 to 1000, with x and y normalized independently. "
-            "Add a short label when it helps. Use at most eight annotations on one image. "
-            "Omit annotations you cannot place.",
+            "Add a short label when it helps. Omit annotations you cannot place.",
             "Pass two or three short next questions in followups, in the user's voice. "
             "Keep each under 80 characters, suggest only questions the configured cameras "
             "can answer, and do not repeat a question the user already asked. "

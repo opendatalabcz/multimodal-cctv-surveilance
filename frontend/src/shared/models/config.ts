@@ -78,6 +78,7 @@ export interface ModelReasoning {
 export interface ModelOption {
   id: string
   label: string
+  max_images_per_request: number
   reasoning: ModelReasoning
   verbosity: ModelReasoning
 }

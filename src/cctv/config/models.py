@@ -71,6 +71,9 @@ class ModelReasoning(BaseModel):
     locked: bool = False
 
 
+DEFAULT_MAX_IMAGES_PER_REQUEST = 32
+
+
 class ModelOption(BaseModel):
     """One deployment the chat UI can select.
 
@@ -86,6 +89,7 @@ class ModelOption(BaseModel):
     label: str
     provider: str = "azure"
     transport: Literal["chat_completions", "responses"] = "chat_completions"
+    max_images_per_request: int = Field(default=DEFAULT_MAX_IMAGES_PER_REQUEST, ge=1)
     reasoning: ModelReasoning = Field(default_factory=ModelReasoning)
     verbosity: ModelReasoning = Field(
         default_factory=lambda: ModelReasoning(choices=[], default="medium", locked=True)

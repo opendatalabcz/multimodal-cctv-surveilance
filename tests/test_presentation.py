@@ -88,7 +88,7 @@ def test_select_presented_images_keeps_valid_shapes_and_drops_bad_geometry() -> 
     ]
 
 
-def test_select_presented_images_caps_annotations_at_eight() -> None:
+def test_select_presented_images_keeps_more_than_eight_annotations() -> None:
     presented = select_presented_images(
         _frames(),
         [
@@ -102,15 +102,25 @@ def test_select_presented_images_caps_annotations_at_eight() -> None:
         ],
     )
     assert [annotation.label for annotation in presented[0].annotations] == [
-        "0",
-        "1",
-        "2",
-        "3",
-        "4",
-        "5",
-        "6",
-        "7",
+        str(index) for index in range(10)
     ]
+
+
+def test_select_presented_images_has_a_thousand_annotation_guard() -> None:
+    presented = select_presented_images(
+        _frames(),
+        [
+            {
+                "camera_id": "cam_a",
+                "annotations": [
+                    {"type": "point", "label": str(index), "points": [[index, index]]}
+                    for index in range(1001)
+                ],
+            }
+        ],
+    )
+    assert len(presented[0].annotations) == 1000
+    assert presented[0].annotations[-1].label == "999"
 
 
 def test_missing_annotations_still_shows_the_frame() -> None:

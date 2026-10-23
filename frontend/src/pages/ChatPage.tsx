@@ -2,7 +2,9 @@ import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import CircularProgress from '@mui/material/CircularProgress'
 import CssBaseline from '@mui/material/CssBaseline'
+import Drawer from '@mui/material/Drawer'
 import { ThemeProvider, createTheme } from '@mui/material/styles'
+import useMediaQuery from '@mui/material/useMediaQuery'
 import { useCallback, useEffect, useState } from 'react'
 import { ChatPanel } from '../features/chat/ChatPanel'
 import { useChat } from '../features/chat/useChat'
@@ -22,6 +24,8 @@ const theme = createTheme({
 export function ChatPage() {
   const [bootError, setBootError] = useState<string | null>(null)
   const [isBooting, setIsBooting] = useState(true)
+  const [configOpen, setConfigOpen] = useState(false)
+  const narrowLayout = useMediaQuery('(max-width:959.95px)')
 
   const {
     config,
@@ -201,7 +205,7 @@ export function ChatPage() {
           </Alert>
         )}
         <Box sx={{ flex: 1, display: 'flex', minHeight: 0 }}>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ flex: 1, minWidth: narrowLayout ? 0 : 520 }}>
             <ChatPanel
               messages={messages}
               suggestions={suggestions}
@@ -218,9 +222,45 @@ export function ChatPage() {
               onSelectVerbosity={(level) => void setVerbosity(level)}
               onSend={sendMessage}
               onNewChat={() => void startNewConversation()}
+              onOpenConfig={narrowLayout ? () => setConfigOpen(true) : undefined}
             />
           </Box>
-          <Box sx={{ width: 420, flexShrink: 0 }}>
+          {!narrowLayout && (
+            <Box sx={{ width: 420, flexShrink: 0 }}>
+              <ConfigPanel
+                config={config}
+                isLoading={configLoading}
+                isSaving={isSaving}
+                isDirty={isDirty}
+                error={configError}
+                onSave={handleSaveConfig}
+                onToggleTool={handleToggleTool}
+                onUpdateCamera={updateCamera}
+                onAddCamera={addCamera}
+                onRemoveCamera={removeCamera}
+                onMoveCamera={moveCamera}
+                onUpdateSector={updateSector}
+                onAddSector={addSector}
+                onRemoveSector={removeSector}
+                onUpdateLocation={updateLocation}
+                onAddLocation={addLocation}
+                onRemoveLocation={removeLocation}
+                onToggleSectorEnabled={handleToggleSectorEnabled}
+                onToggleLocationEnabled={handleToggleLocationEnabled}
+                onToggleCameraEnabled={handleToggleCameraEnabled}
+                analysisStates={analysisStates}
+                onAnalyzeCamera={(cameraId) => void analyzeCameras([cameraId])}
+                onAnalyzeMissing={() => void analyzeMissingCameras()}
+                onAnalyzeAll={() => void analyzeAllCameras()}
+              />
+            </Box>
+          )}
+          <Drawer
+            anchor="right"
+            open={narrowLayout && configOpen}
+            onClose={() => setConfigOpen(false)}
+            slotProps={{ paper: { sx: { width: 'min(420px, 100vw)' } } }}
+          >
             <ConfigPanel
               config={config}
               isLoading={configLoading}
@@ -246,8 +286,9 @@ export function ChatPage() {
               onAnalyzeCamera={(cameraId) => void analyzeCameras([cameraId])}
               onAnalyzeMissing={() => void analyzeMissingCameras()}
               onAnalyzeAll={() => void analyzeAllCameras()}
+              onClose={() => setConfigOpen(false)}
             />
-          </Box>
+          </Drawer>
         </Box>
       </Box>
     </ThemeProvider>

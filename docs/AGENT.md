@@ -94,6 +94,7 @@ models:
     label: GPT-5.6 Luna
     provider: azure
     transport: responses
+    max_images_per_request: 32
     reasoning:
       choices: [none, low, medium, high, xhigh, max]
       default: medium
@@ -106,6 +107,7 @@ models:
     label: GPT-4o
     provider: azure
     transport: chat_completions
+    max_images_per_request: 32
     reasoning:
       choices: []
       default: default
@@ -118,6 +120,7 @@ models:
     label: GPT-6 Astra
     provider: azure
     transport: responses
+    max_images_per_request: 32
     reasoning:
       choices: [low, medium, high, xhigh, max]
       default: medium
@@ -184,7 +187,7 @@ The system prompt (`src/cctv/config/prompt.py`) instructs the model to:
 
 - Fetch **all configured cameras** that match a named place (by name or GPS area) in **one** `get_camera_image` call (`cameras: [...]`), not a single random sample and not one tool call per camera.
 - For questions with **no location**, sample **one camera per configured location** when locations exist (otherwise fall back to GPS clustering).
-- Fetch every matching camera. One `get_camera_image` call accepts at most 16 frames. Prague has 21 cameras, so a city-wide fetch is truncated at that cap.
+- Fetch every matching camera. `get_camera_image` pages the requested camera list using the selected model's `max_images_per_request` (32 for the shipped models). A result with `next_offset` means the model should request the next page with the same camera list.
 - Describe **visible** conditions from camera frames first.
 - Use `get_weather` only when the Weather toggle is on, and clearly label measured/forecast data vs camera-observed conditions.
 - Use `web_search` for news/context when Internet search is on — **not** as a weather API.
@@ -199,7 +202,7 @@ Tools exposed to Azure depend on the current toggles (`cctv.tools.tool_schemas_f
 | Name | When enabled | Effect |
 | --- | --- | --- |
 | `list_cameras` | always | JSON list of **effectively enabled** cameras (id, name, GPS, source, source_type, sector_id, location_id, location_name) |
-| `get_camera_image` | always | Resolves YAML `source` for one or more **effectively enabled** cameras, fetches stills (in parallel), returns metadata + JPEG paths; disabled or unknown ids return a clear error per camera |
+| `get_camera_image` | always | Resolves YAML `source` for one or more **effectively enabled** cameras, fetches one model-sized page of stills (in parallel), and returns metadata + JPEG paths + `next_offset` when another page remains; disabled or unknown ids return a clear error per camera |
 | `submit_answer` | always | Ends the turn. Arguments are the visible markdown, the frames to show (with optional box, point, line, or polygon highlights), and up to three follow-up questions. A plain-text ending is not shown; the loop asks once more with this tool required |
 | `web_search` | `internet` | Up to 5 DuckDuckGo text results (title, URL, snippet) via `ddgs` |
 | `get_weather` | `weather` | Open-Meteo current conditions + 3-day forecast (coordinates or place name) |
@@ -222,7 +225,7 @@ These are free public services without uptime guarantees:
 
 External failures return a tool result (not a chat crash) so the model can explain that the source was unavailable.
 
-After `get_camera_image` succeeds, `chat_with_tools` appends a **frame-ref** user message (JPEG paths and camera ids, not base64). Each Azure POST expands only the **latest** frame-ref to vision parts (`detail: high`); older refs become a `Previously viewed: …` stub. The turn ends when the model calls `submit_answer`. `images` selects which fetched frames stay on the latest ref, in that order, so a follow-up with no new fetch can still see those stills. An empty list shows no frames. Each image may include annotations: `box` (two opposite corners), `point` (one point), `line` (2–8 points), or `polygon` (3–12 points). Coordinates are integers from 0 to 1000, with x and y normalized independently. Unknown cameras, duplicate frames, unknown types, and malformed geometry are dropped; a bad annotation does not reject the answer. At most eight annotations are kept per image. FastAPI sends each kept frame as `{ url, cameraId, annotations }` with a URL like `/api/images/...`. The GUI draws the annotations over the original JPEG. The stored transcript is a normal assistant message, not the tool call. Do not put large base64 blobs in stored transcripts. `get_camera_image` accepts `cameras: [id or name, ...]` (and `camera` for a single name). There is a hard cap of 16 images per call.
+After `get_camera_image` succeeds, `chat_with_tools` appends a **frame-ref** user message (JPEG paths and camera ids, not base64). Each Azure POST expands only the **latest** frame-ref to vision parts (`detail: high`), up to the selected model's `max_images_per_request`; older refs become a `Previously viewed: …` stub. Across paged calls, every fetched frame remains selectable by `submit_answer`. `images` selects which frames stay on the latest ref, in that order, so a follow-up with no new fetch can still see those stills. An empty list shows no frames. Each image may include annotations: `box` (two opposite corners), `point` (one point), `line` (2–8 points), or `polygon` (3–12 points). Coordinates are integers from 0 to 1000, with x and y normalized independently. Unknown cameras, duplicate frames, unknown types, and malformed geometry are dropped; a bad annotation does not reject the answer. Valid annotations are retained up to a 1,000-item platform guard per image. FastAPI sends each kept frame as `{ url, cameraId, annotations }` with a URL like `/api/images/...`. Thumbnails draw shapes without labels; the expanded view has an interactive legend. The stored transcript is a normal assistant message, not the tool call. Do not put large base64 blobs in stored transcripts. `get_camera_image` accepts `cameras: [id or name, ...]`, optional `offset` / `limit`, and `camera` for a single name.
 
 Each chat turn appends one JSON line to `logs/chat_turns.jsonl` under the data directory (`turn_id`, `conversation_id`, tool rounds/names, presented camera ids and annotation types, Azure `usage`, `duration_ms`). `turn_id` is also the Langfuse trace id when tracing is on.
 
@@ -288,6 +291,7 @@ The sidebar groups cameras into collapsible **sector accordions**, each containi
 - **Structural edits** (sector/location/camera names, assignments, add/remove) are local until **Save configuration**. The Save bar shows unsaved changes and the browser warns before leaving with a dirty catalog.
 - **Location removal** is blocked while cameras are assigned; **sector removal** is blocked while locations (or cameras) are assigned. The UI shows the reason and the API returns 400.
 - Accordion expand/collapse is UI-only and not persisted.
+- Below 960px wide, the Config panel moves into a right-side drawer opened from the chat header so camera frames retain a useful display width.
 
 ## Out of scope
 

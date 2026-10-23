@@ -11,7 +11,12 @@ from cctv.api.schemas import ChatMessage, ImageAnnotation, PresentedImage
 from cctv.api.store import Conversation, image_urls_for_paths
 from cctv.api.turn_log import append_turn_log, tool_names_from_messages
 from cctv.config.agent_yaml import load_agent_config
-from cctv.config.models import clamp_reasoning, clamp_verbosity, model_by_id
+from cctv.config.models import (
+    DEFAULT_MAX_IMAGES_PER_REQUEST,
+    clamp_reasoning,
+    clamp_verbosity,
+    model_by_id,
+)
 from cctv.config.prompt import build_system_prompt
 from cctv.observability.tracing import start_turn
 from cctv.tools.registry import tool_schemas_for_config
@@ -98,6 +103,11 @@ def run_chat_turn(
     selected_model = azure_config.model or ""
     option = model_by_id(agent_config.models, selected_model)
     transport = option.transport if option is not None else "chat_completions"
+    max_images = (
+        option.max_images_per_request
+        if option is not None
+        else DEFAULT_MAX_IMAGES_PER_REQUEST
+    )
     reasoning = clamp_reasoning(option, agent_config.reasoning.get(selected_model))
     verbosity = clamp_verbosity(option, agent_config.verbosity.get(selected_model))
 
@@ -129,6 +139,7 @@ def run_chat_turn(
             reasoning=reasoning,
             verbosity=verbosity,
             transport=transport,
+            max_images=max_images,
         )
         if result.get("success"):
             turn.update(output=_assistant_text(result.get("analysis", "")))
