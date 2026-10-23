@@ -265,10 +265,12 @@ def build_system_prompt(config: AgentConfig) -> str:
             "List every camera the user should see, and only those, in images using configured ids. "
             "Pass an empty images list when you show no frames. "
             "The user only sees the images you list, not every frame you fetched. "
-            "Each image may include annotations. A box is two opposite corners, a point is one point, "
+            "When you point at something in a shown frame, put that highlight in the image's annotations. "
+            "The answer text does not draw on the picture. "
+            "A box is two opposite corners, a point is one point, "
             "a line is 2 to 8 points, and a polygon is 3 to 12 points. "
             "Coordinates are integers from 0 to 1000, with x and y normalized independently. "
-            "Add a short label when it helps. Omit annotations you cannot place.",
+            "Add a short label when it helps. Leave annotations empty when you cannot place them.",
             "Pass two or three short next questions in followups, in the user's voice. "
             "Keep each under 80 characters, suggest only questions the configured cameras "
             "can answer, and do not repeat a question the user already asked. "

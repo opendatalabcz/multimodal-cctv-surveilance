@@ -41,9 +41,10 @@ SUBMIT_ANSWER_TOOL: dict[str, Any] = {
                             "annotations": {
                                 "type": "array",
                                 "description": (
-                                    "Highlights on this frame. Use an empty list when none fit. "
-                                    "Coordinates are integers from 0 to 1000, with x and y "
-                                    "normalized independently. Omit annotations you cannot place."
+                                    "Highlights drawn on this frame. The answer text does not "
+                                    "draw on the image. Leave this empty only when you cannot "
+                                    "place a highlight. Coordinates are integers from 0 to 1000, "
+                                    "with x and y normalized independently."
                                 ),
                                 "items": {
                                     "type": "object",

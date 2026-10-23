@@ -556,8 +556,10 @@ def _fetched_images_message(frames: list[FetchedFrame]) -> dict[str, Any]:
             "text": (
                 "Here are the fetched frames for analysis, in this order. "
                 "When you finish, list the frames to show in submit_answer images. "
-                "Annotation coordinates run from 0 to 1000 on each axis. "
-                "Omit annotations you cannot place.\n"
+                "Draw highlights only by filling annotations. "
+                "Text in the answer does not mark the picture. "
+                "Coordinates run from 0 to 1000 on each axis. "
+                "Leave annotations empty only when you cannot place them.\n"
                 + "\n".join(labels)
             ),
         },

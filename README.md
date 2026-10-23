@@ -36,7 +36,7 @@ A Prague camera id is `{location_id}_{portal id}` and its name is that portal id
 - The header selects the model. The catalog default is GPT-5.6 Luna. GPT-4o and GPT-6 Astra are also listed. Luna and Astra can set reasoning effort and verbosity; GPT-4o cannot.
 - `list_cameras` and `get_camera_image` are always available. Image results are paged using the selected model's `max_images_per_request` (32 for the shipped models), with `next_offset` when another page remains.
 - Optional tools follow three independent toggles: `internet` (DuckDuckGo), `weather` (Open-Meteo), and `maps` (OpenStreetMap Nominatim). They apply on the next message.
-- A turn ends only when the model calls `submit_answer` with the visible markdown, the frames to show (optional highlights included), and up to three follow-up questions. Valid highlights are not limited to eight; a 1,000-annotation platform guard protects the response.
+- A turn ends only when the model calls `submit_answer` with the visible markdown, the frames to show, and up to three follow-up questions. Highlights are drawn from each frame's annotations, not from the answer text. Valid highlights are not limited to eight; a 1,000-annotation platform guard protects the response.
 - Conversations live in memory and reset when the API stops. Each turn also appends a line to `logs/chat_turns.jsonl`. Langfuse tracing is off unless `LANGFUSE_ENABLED` and both Langfuse keys are set.
 
 External services are public demo APIs without an uptime guarantee.
