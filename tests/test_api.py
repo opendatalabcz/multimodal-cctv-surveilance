@@ -16,9 +16,7 @@ from cctv.config.models import AgentConfig, CameraConfig, LocationConfig, Sector
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("CCTV_DATA_DIR", str(tmp_path))
     config_path = tmp_path / "agent.yaml"
-    overlay_path = tmp_path / "agent.local.yaml"
     monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: config_path)
-    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay_path)
     monkeypatch.setattr("cctv.api.chat.load_agent_config", lambda: AgentConfig(
         cameras=[
             CameraConfig(
@@ -35,9 +33,7 @@ def client(tmp_path, monkeypatch):
 
 def test_get_and_put_config(client, tmp_path, monkeypatch) -> None:
     config_path = tmp_path / "agent.yaml"
-    overlay_path = tmp_path / "agent.local.yaml"
     monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: config_path)
-    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay_path)
 
     payload = {
         "locations": [],
@@ -102,10 +98,10 @@ def test_put_config_keeps_server_model_catalog(client, tmp_path, monkeypatch) ->
     body = put_response.json()
     assert body["model"] == "gpt-4o"
     assert body["models"] == catalog
-    overlay = (tmp_path / "agent.local.yaml").read_text(encoding="utf-8")
-    assert "model: gpt-4o" in overlay
-    assert "models:" not in overlay
-    assert "evil" not in config_path.read_text(encoding="utf-8")
+    saved_agent = config_path.read_text(encoding="utf-8")
+    assert "model: gpt-4o" in saved_agent
+    assert "evil" not in saved_agent
+    assert "cameras:" not in saved_agent
 
     empty_models = client.put(
         "/api/config",
@@ -195,11 +191,11 @@ def test_put_config_keeps_per_model_reasoning_and_verbosity(client, tmp_path, mo
     assert kept["model"] == "gpt-5.6-luna"
     assert kept["reasoning"]["gpt-6-astra"] == "max"
     assert kept["verbosity"]["gpt-5.6-luna"] == "low"
-    overlay = (tmp_path / "agent.local.yaml").read_text(encoding="utf-8")
-    assert "gpt-5.6-luna: high" in overlay
-    assert "gpt-6-astra: max" in overlay
-    assert "gpt-5.6-luna: low" in overlay
-    assert "gpt-6-astra: high" in overlay
+    saved_agent = (tmp_path / "agent.yaml").read_text(encoding="utf-8")
+    assert "gpt-5.6-luna: high" in saved_agent
+    assert "gpt-6-astra: max" in saved_agent
+    assert "gpt-5.6-luna: low" in saved_agent
+    assert "gpt-6-astra: high" in saved_agent
 
 
 def test_analyze_camera_endpoint_returns_saved_metadata(client) -> None:
@@ -312,9 +308,7 @@ def test_serve_image_under_data_root(client, tmp_path) -> None:
 
 def test_put_config_rejects_sector_deletion_with_cameras(client, tmp_path, monkeypatch) -> None:
     config_path = tmp_path / "agent.yaml"
-    overlay_path = tmp_path / "agent.local.yaml"
     monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: config_path)
-    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay_path)
     save_agent_config(
         AgentConfig(
             sectors=[

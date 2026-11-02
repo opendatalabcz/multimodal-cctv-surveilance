@@ -103,6 +103,10 @@ locations:
   name: River
   sector_id: namibia
   enabled: true
+- id: bb2cec49-29ea-4c94-b7d8-f9c2110e022f
+  name: Malostranská
+  sector_id: prague
+  enabled: true
 cameras:
 - id: charles_bridge_101200
   name: '101200'
@@ -110,153 +114,402 @@ cameras:
   sector_id: prague
   location_id: charles_bridge
   enabled: true
+  analysis:
+    description: Panoramic view of a historic city riverfront, with a pedestrian bridge
+      and surrounding old-town architecture.
+    scene_tags:
+    - panorama
+    - bridge
+    - pedestrian
+    - waterfront
+    source_fingerprint: 0ff7423dff465a42
+    analyzed_at: '2026-09-22T15:24:13.584047+02:00'
+    preview_path: camera_images/previews/charles_bridge.jpg
 - id: charles_bridge_101201
   name: '101201'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/101201/image
   sector_id: prague
   location_id: charles_bridge
   enabled: true
+  analysis:
+    description: Elevated panorama overlooks a historic waterfront, bridge, rooftops,
+      skyline, and steady pedestrian traffic across the bridge.
+    scene_tags:
+    - panorama
+    - bridge
+    - waterfront
+    - pedestrian
+    source_fingerprint: 9a3ff80acd9661b3
+    analyzed_at: '2026-09-22T15:24:18.170510+02:00'
+    preview_path: camera_images/previews/charles_bridge_101201.jpg
 - id: holesovicky_500066
   name: '500066'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500066/image
   sector_id: prague
   location_id: holesovicky
   enabled: true
+  analysis:
+    description: Elevated view of a multilane divided highway interchange carrying
+      steady traffic through an urban area.
+    scene_tags:
+    - highway
+    - intersection
+    source_fingerprint: 3e2680e55f350c2a
+    analyzed_at: '2026-09-22T15:24:21.216160+02:00'
+    preview_path: camera_images/previews/holesovicky_500066.jpg
 - id: holesovicky_500067
   name: '500067'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500067/image
   sector_id: prague
   location_id: holesovicky
   enabled: true
+  analysis:
+    description: Elevated view of a divided urban roadway with heavy vehicle traffic,
+      merging lanes, and congestion in both directions.
+    scene_tags:
+    - road
+    - highway
+    source_fingerprint: 3ba4a6c3b687c77c
+    analyzed_at: '2026-09-22T15:24:25.847291+02:00'
+    preview_path: camera_images/previews/holesovicky_500067.jpg
 - id: budejovicka_500002
   name: '500002'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500002/image
   sector_id: prague
   location_id: budejovicka
   enabled: true
+  analysis:
+    description: Elevated view of a divided urban road and signalized intersection,
+      useful for monitoring vehicle traffic, turns, and crosswalks.
+    scene_tags:
+    - road
+    - intersection
+    source_fingerprint: 39010e84edf27578
+    analyzed_at: '2026-09-22T15:24:28.478859+02:00'
+    preview_path: camera_images/previews/budejovicka_500002.jpg
 - id: nuselak_404032
   name: '404032'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/404032/image
   sector_id: prague
   location_id: nuselak
   enabled: true
+  analysis:
+    description: No camera view is available; the image only shows a camera-unavailable
+      notice.
+    scene_tags: []
+    source_fingerprint: 1985e06c2298b659
+    analyzed_at: '2026-09-22T15:24:34.247464+02:00'
+    preview_path: camera_images/previews/nuselak_404032.jpg
 - id: nuselak_404033
   name: '404033'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/404033/image
   sector_id: prague
   location_id: nuselak
   enabled: true
+  analysis:
+    description: Elevated view of a multi-lane bridge carrying dense vehicle traffic
+      through a wooded urban area.
+    scene_tags:
+    - bridge
+    - road
+    source_fingerprint: 54a8968bf3d9e218
+    analyzed_at: '2026-09-22T15:24:31.632540+02:00'
+    preview_path: camera_images/previews/nuselak_404033.jpg
 - id: barandak_500473
   name: '500473'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500473/image
   sector_id: prague
   location_id: barandak
   enabled: true
+  analysis:
+    description: Elevated view of a busy multilane highway interchange with merging
+      traffic, ramps, and surrounding urban buildings.
+    scene_tags:
+    - highway
+    - intersection
+    source_fingerprint: a86968115a15bbef
+    analyzed_at: '2026-09-22T15:24:37.291963+02:00'
+    preview_path: camera_images/previews/barandak_500473.jpg
 - id: barandak_500475
   name: '500475'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500475/image
   sector_id: prague
   location_id: barandak
   enabled: true
+  analysis:
+    description: Elevated view of a divided multi-lane highway with steady vehicle
+      traffic and parallel ramps through an urban landscape.
+    scene_tags:
+    - highway
+    - road
+    source_fingerprint: 96fa2bd3f20480cd
+    analyzed_at: '2026-09-22T15:24:40.425443+02:00'
+    preview_path: camera_images/previews/barandak_500475.jpg
 - id: hybernska_101048
   name: '101048'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/101048/image
   sector_id: prague
   location_id: hybernska
   enabled: true
+  analysis:
+    description: Elevated view of a narrow urban road with parked and moving vehicles,
+      sidewalks, pedestrians, and ongoing streetside construction.
+    scene_tags:
+    - road
+    - pedestrian
+    source_fingerprint: c98faa2b290cc103
+    analyzed_at: '2026-09-22T15:24:49.260653+02:00'
+    preview_path: camera_images/previews/hybernska.jpg
 - id: belocerekevska_410034
   name: '410034'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/410034/image
   sector_id: prague
   location_id: belocerekevska
   enabled: true
+  analysis:
+    description: Urban street beside a bus parking and loading area, useful for observing
+      vehicle traffic, buses, parking, and pedestrians.
+    scene_tags:
+    - road
+    - parking
+    - pedestrian
+    source_fingerprint: 4e7e3e95dde432a4
+    analyzed_at: '2026-09-24T12:49:58.639110+02:00'
+    preview_path: camera_images/previews/belocerekevska_510034.jpg
 - id: jecna_202020
   name: '202020'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/202020/image
   sector_id: prague
   location_id: jecna
   enabled: true
+  analysis:
+    description: Wide urban boulevard and intersection with multiple vehicle lanes,
+      crosswalks, sidewalks, and surrounding city buildings.
+    scene_tags:
+    - road
+    - intersection
+    - pedestrian
+    source_fingerprint: bb864f9474607255
+    analyzed_at: '2026-09-22T15:24:52.447894+02:00'
+    preview_path: camera_images/previews/jecna.jpg
 - id: marianske_namesti_101164
   name: '101164'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/101164/image
   sector_id: prague
   location_id: marianske_namesti
   enabled: true
+  analysis:
+    description: Elevated view of a cobbled public square with pedestrian activity,
+      surrounding historic buildings, and a small adjacent street.
+    scene_tags:
+    - public-square
+    - pedestrian
+    - road
+    source_fingerprint: 7eaaaf4bb0c15b12
+    analyzed_at: '2026-09-22T15:24:56.893541+02:00'
+    preview_path: camera_images/previews/marianske_namesti.jpg
 - id: argentinska_107009
   name: '107009'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/107009/image
   sector_id: prague
   location_id: argentinska
   enabled: true
+  analysis:
+    description: Elevated view of a signalized urban intersection with multilane roads,
+      crosswalks, bus and bicycle lanes, and adjacent parking.
+    scene_tags:
+    - road
+    - intersection
+    - parking
+    - pedestrian
+    source_fingerprint: 054bde762fc03778
+    analyzed_at: '2026-09-24T13:21:13.888590+02:00'
+    preview_path: camera_images/previews/54d661db-1030-4c3d-b5f6-a53602171832.jpg
 - id: argentinska_107033
   name: '107033'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/107033/image
   sector_id: prague
   location_id: argentinska
   enabled: true
+  analysis:
+    description: Elevated view of a multilane urban roadway beneath an overpass, useful
+      for monitoring vehicle traffic and lane flow.
+    scene_tags:
+    - road
+    - highway
+    source_fingerprint: b16ccecbea008c3c
+    analyzed_at: '2026-09-24T13:21:16.802024+02:00'
+    preview_path: camera_images/previews/715186f5-cc57-458f-9f4b-fa6b7bbc80fe.jpg
 - id: argentinska_500065
   name: '500065'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500065/image
   sector_id: prague
   location_id: argentinska
   enabled: true
+  analysis:
+    description: View of a multilane urban road with traffic, lane markings, sidewalks,
+      and surrounding commercial buildings, useful for monitoring vehicle flow.
+    scene_tags:
+    - road
+    source_fingerprint: 9f5a6bcef281bf75
+    analyzed_at: '2026-09-24T13:21:09.888882+02:00'
+    preview_path: camera_images/previews/0b321ee7-8391-4296-a7a6-8efde3a11527.jpg
 - id: strahovsky_tunel_500232
   name: '500232'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500232/image
   sector_id: prague
   location_id: strahovsky_tunel
   enabled: true
+  analysis:
+    description: Elevated view of a multi-lane urban tunnel roadway, useful for monitoring
+      vehicle traffic and road conditions.
+    scene_tags:
+    - road
+    - highway
+    source_fingerprint: 0d272de2d411db92
+    analyzed_at: '2026-09-24T14:29:11.842956+02:00'
+    preview_path: camera_images/previews/0349bfae-3191-4b4d-815f-ff1fac876e6e.jpg
 - id: strahovsky_tunel_500263
   name: '500263'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500263/image
   sector_id: prague
   location_id: strahovsky_tunel
   enabled: true
+  analysis:
+    description: A fixed view down a covered urban roadway with lane markings, barriers,
+      and a sidewalk, useful for monitoring passing vehicles.
+    scene_tags:
+    - road
+    source_fingerprint: 8149af140aadfe77
+    analyzed_at: '2026-09-24T14:29:09.205864+02:00'
+    preview_path: camera_images/previews/5369555a-5b55-427e-b3e4-2ae17fdb161f.jpg
 - id: tunel_mrazovka_500336
   name: '500336'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500336/image
   sector_id: prague
   location_id: tunel_mrazovka
   enabled: true
+  analysis:
+    description: A multi-lane road curves through a lit tunnel, useful for observing
+      vehicle traffic and lane conditions.
+    scene_tags:
+    - road
+    - highway
+    source_fingerprint: faae7bf4182660e6
+    analyzed_at: '2026-09-24T14:29:16.637827+02:00'
+    preview_path: camera_images/previews/f9a1e0cd-e65e-4db7-9a22-e15cc0348caa.jpg
 - id: tunel_mrazovka_500372
   name: '500372'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500372/image
   sector_id: prague
   location_id: tunel_mrazovka
   enabled: true
+  analysis:
+    description: Fixed view of a multi-lane roadway carrying vehicles through a tunnel.
+    scene_tags:
+    - road
+    source_fingerprint: d273cdf0f3afe48a
+    analyzed_at: '2026-09-24T14:29:13.954407+02:00'
+    preview_path: camera_images/previews/f3481899-ce23-4726-a74b-22df99d735c8.jpg
 - id: namesti_kinskych_500508
   name: '500508'
   source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/500508/image
   sector_id: prague
   location_id: namesti_kinskych
   enabled: true
+  analysis:
+    description: Elevated view of an urban road intersection with crosswalks, parked
+      cars, overhead transit wires, and sidewalks for observing traffic and pedestrians.
+    scene_tags:
+    - road
+    - intersection
+    - parking
+    source_fingerprint: 6bbf0070a1d827d7
+    analyzed_at: '2026-09-24T14:31:49.912702+02:00'
+    preview_path: camera_images/previews/da490759-e272-4e76-893d-4388db48d909.jpg
 - id: tokachi_obihiro_live
   name: Live
   source: https://www.youtube.com/watch?v=IDXRscHtp2s
   sector_id: japan
   location_id: tokachi_obihiro
   enabled: true
+  analysis:
+    description: Static nighttime view of an airport apron and adjacent service structures,
+      useful for monitoring aircraft or ground-vehicle activity.
+    scene_tags:
+    - airport
+    source_fingerprint: 00988c3d6b9ab5e9
+    analyzed_at: '2026-09-24T13:26:41.488002+02:00'
+    preview_path: camera_images/previews/tokachi_obihiro.jpg
 - id: tokyo_airport_live
   name: Live
   source: https://www.youtube.com/watch?v=3w4zEyFamuA
   sector_id: japan
   location_id: tokyo_airport
   enabled: true
+  analysis:
+    description: Wide nighttime view of an airport apron with parked passenger aircraft,
+      gates, service vehicles, and ground operations.
+    scene_tags:
+    - airport
+    source_fingerprint: f8f70a008663adfe
+    analyzed_at: '2026-09-24T13:32:20.104574+02:00'
+    preview_path: camera_images/previews/84870bee-00f4-49db-b568-f6cd31dfaca6.jpg
 - id: desert_live
   name: Live
   source: https://www.youtube.com/watch?v=AeMUdOPFcXI
   sector_id: namibia
   location_id: desert
   enabled: true
+  analysis:
+    description: Wide view of a wildlife watering hole in Etosha National Park, useful
+      for observing elephants and other animals gathering.
+    scene_tags:
+    - panorama
+    source_fingerprint: da03615e3f5323d7
+    analyzed_at: '2026-09-24T13:28:19.432418+02:00'
+    preview_path: camera_images/previews/0874562c-11af-4dc2-ab4a-01aa725167b5.jpg
 - id: small_pond_live
   name: Live
   source: https://www.youtube.com/watch?v=ydYDqZQpim8
   sector_id: namibia
   location_id: small_pond
   enabled: true
+  analysis:
+    description: Wide view of a Namib Desert watering hole and surrounding open terrain,
+      useful for observing wildlife visits and changing conditions.
+    scene_tags:
+    - panorama
+    source_fingerprint: 5c675ff2aa53d1e1
+    analyzed_at: '2026-09-24T13:30:09.676091+02:00'
+    preview_path: camera_images/previews/bf1ceeb0-55f7-4aa3-9c21-a919cd603887.jpg
 - id: river_live
   name: Live
   source: https://www.youtube.com/watch?v=qwvk5hbEJnY
   sector_id: namibia
   location_id: river
   enabled: true
+  analysis:
+    description: A fixed view across a wildlife watering hole, useful for observing
+      elephants gathering and drinking at the water's edge.
+    scene_tags: []
+    source_fingerprint: 0f3eb7cdc18694cb
+    analyzed_at: '2026-09-24T13:30:50.806872+02:00'
+    preview_path: camera_images/previews/7e288bcc-d015-4eaf-a868-94c9d0106e2f.jpg
+- id: 28ff6c75-34c8-4cf2-a456-007a6e13b96e
+  name: ''
+  source: https://bezpecnost.praha.eu/Intens.CrisisPortalInfrastructureApp/cameras/101046/image
+  sector_id: prague
+  location_id: bb2cec49-29ea-4c94-b7d8-f9c2110e022f
+  enabled: true
+  analysis:
+    description: Urban road with tram tracks, pedestrian crossings, sidewalks and
+      an intersection, useful for observing road, tram and foot traffic.
+    scene_tags:
+    - road
+    - intersection
+    - rail
+    - pedestrian
+    source_fingerprint: fefafbe4555c9aa1
+    analyzed_at: '2026-10-19T17:30:01.532916+02:00'
+    preview_path: camera_images/previews/28ff6c75-34c8-4cf2-a456-007a6e13b96e.jpg

@@ -17,9 +17,7 @@ from cctv.tools.registry import default_tool_schemas, execute_tool
 
 def _write_config(tmp_path: Path, monkeypatch) -> Path:
     path = tmp_path / "agent.yaml"
-    overlay = tmp_path / "agent.local.yaml"
     monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: path)
-    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay)
     config = AgentConfig(
         cameras=[
             CameraConfig(
@@ -173,9 +171,7 @@ def test_get_camera_image_pages_at_the_model_limit(tmp_path, monkeypatch) -> Non
         for index in range(DEFAULT_MAX_IMAGES_PER_REQUEST + 3)
     ]
     path = tmp_path / "agent.yaml"
-    overlay = tmp_path / "agent.local.yaml"
     monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: path)
-    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay)
     save_agent_config(AgentConfig(cameras=cameras), path)
 
     def fake_get(source: str):
@@ -210,9 +206,7 @@ def test_get_camera_image_clamps_requested_page_size(tmp_path, monkeypatch) -> N
         for index in range(4)
     ]
     path = tmp_path / "agent.yaml"
-    overlay = tmp_path / "agent.local.yaml"
     monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: path)
-    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay)
     save_agent_config(AgentConfig(cameras=cameras), path)
 
     with patch(

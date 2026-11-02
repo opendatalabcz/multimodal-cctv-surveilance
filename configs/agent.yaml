@@ -59,4 +59,4 @@ models:
     - high
     default: medium
     locked: false
-model: gpt-5.6-luna
+model: gpt-4o

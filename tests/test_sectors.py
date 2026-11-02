@@ -4,12 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from cctv.config.agent_yaml import (
-    load_agent_config,
-    load_overlay,
-    overlay_from_diff,
-    save_agent_config,
-)
+from cctv.config.agent_yaml import load_agent_config, save_agent_config
 from cctv.config.effective import (
     UNASSIGNED_SECTOR_ID,
     effective_cameras,
@@ -62,9 +57,7 @@ def _sector(sector_id: str, name: str, *, enabled: bool = True) -> SectorConfig:
 
 def _patch_paths(tmp_path: Path, monkeypatch) -> None:
     base_path = tmp_path / "agent.yaml"
-    overlay_path = tmp_path / "agent.local.yaml"
     monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: base_path)
-    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay_path)
 
 
 def test_legacy_config_migrates_to_unassigned(tmp_path) -> None:
@@ -115,7 +108,7 @@ def test_effective_camera_and_combinations() -> None:
     assert [camera.id for camera in effective_cameras(config)] == ["a"]
 
 
-def test_overlay_sector_round_trip(tmp_path, monkeypatch) -> None:
+def test_save_sector_round_trip(tmp_path, monkeypatch) -> None:
     _patch_paths(tmp_path, monkeypatch)
     base = AgentConfig(
         sectors=[_sector("prague", "Prague")],
@@ -139,15 +132,14 @@ def test_overlay_sector_round_trip(tmp_path, monkeypatch) -> None:
     )
     save_agent_config(updated)
 
-    overlay = load_overlay()
-    assert overlay.tools is not None
-    assert overlay.tools.internet is True
-    assert {sector.id for sector in overlay.sectors} == {"prague", "airport"}
-    assert {camera.id for camera in overlay.cameras} == {"bridge", "gate"}
-
     merged = load_agent_config()
     assert merged.tools.internet is True
+    assert {sector.id for sector in merged.sectors if sector.id != UNASSIGNED_SECTOR_ID} == {
+        "prague",
+        "airport",
+    }
     assert merged.sectors[0].enabled is False
+    assert {camera.id for camera in merged.cameras} == {"bridge", "gate"}
     assert merged.cameras[0].enabled is False
     assert merged.cameras[1].sector_id == "airport"
 
@@ -181,19 +173,6 @@ def test_block_sector_deletion_with_assigned_cameras(tmp_path, monkeypatch) -> N
                 ],
             )
         )
-
-
-def test_overlay_from_diff_tracks_sector_removals_only_when_empty() -> None:
-    base = AgentConfig(
-        sectors=[_sector("prague", "Prague"), _sector("airport", "Airport")],
-        cameras=[_cam("gate", "Gate", sector_id="airport")],
-    )
-    current = AgentConfig(
-        sectors=[_sector("airport", "Airport")],
-        cameras=[_cam("gate", "Gate", sector_id="airport")],
-    )
-    overlay = overlay_from_diff(base, current)
-    assert overlay.remove_sector_ids == ["prague"]
 
 
 def test_list_cameras_only_effective(tmp_path, monkeypatch) -> None:

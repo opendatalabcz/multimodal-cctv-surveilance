@@ -22,18 +22,14 @@ Revisit Deep Agents only if you need long research traces, parallel subagents, o
 | `src/cctv/fetch/` | Stills from Prague ids, image URLs, and YouTube live |
 | `src/cctv/observability/` | Optional Langfuse tracing |
 | `src/cctv/utils/` | Azure env config and filesystem paths |
-| `configs/cameras.yaml` | Committed sector, location, and camera catalog |
-| `configs/cameras.local.yaml` | Gitignored camera overlay: edits, additions, removals |
-| `configs/agent.yaml` | Committed model catalog and default tool flags |
-| `configs/agent.local.yaml` | Gitignored agent overlay: tool toggles, model, reasoning, verbosity |
+| `configs/cameras.yaml` | Sector, location, and camera catalog, including scene analysis |
+| `configs/agent.yaml` | Model catalog, selected model, reasoning, verbosity, and tool flags |
 
 ```mermaid
 flowchart LR
   configPanel[Config panel]
   cameraYaml[cameras.yaml catalog]
-  cameraLocal[cameras.local.yaml overlay]
   agentYaml[agent.yaml settings]
-  agentLocal[agent.local.yaml overlay]
   chatUI[Chat UI]
   fastApi[FastAPI run_chat_turn]
   chatLoop[chat_with_tools]
@@ -43,10 +39,8 @@ flowchart LR
   jpeg[JPEG on disk]
   vlm[VLM + UI image URLs]
 
-  configPanel --> cameraLocal
-  configPanel --> agentLocal
-  cameraLocal --> cameraYaml
-  agentLocal --> agentYaml
+  configPanel --> cameraYaml
+  configPanel --> agentYaml
   chatUI --> fastApi
   fastApi --> chatLoop
   chatLoop --> tools
@@ -59,9 +53,9 @@ flowchart LR
 
 ## Config (`cameras.yaml` + `agent.yaml`)
 
-`configs/cameras.yaml` is the committed camera catalog. `configs/agent.yaml` is the committed model catalog and default tool flags. `GET/PUT /api/config` merges each file with its gitignored overlay, `configs/cameras.local.yaml` and `configs/agent.local.yaml`. The Config panel writes overlays only: camera edits go to the camera overlay, and tool toggles, model, reasoning, and verbosity go to the agent overlay. Updating a committed file still applies unless the overlay overrides the same value.
+`configs/cameras.yaml` is the camera catalog, including scene analysis. `configs/agent.yaml` is the model catalog, the selected model, and the tool flags. `GET/PUT /api/config` reads and writes those files. The Config panel saves camera edits to the camera file, and tool toggles, model, reasoning, and verbosity to the agent file.
 
-The example below is the merged shape. Sectors, locations, and cameras live in the camera file. Tools and models live in the agent file.
+The example below is the loaded shape. Sectors, locations, and cameras live in the camera file. Tools and models live in the agent file.
 
 ```yaml
 sectors:
@@ -129,10 +123,10 @@ models:
       choices: [low, medium, high]
       default: medium
       locked: false
-model: gpt-5.6-luna
+model: gpt-4o
 ```
 
-The chat header selects `model` and, when the model allows it, `reasoning` and `verbosity`. Each model keeps its own values. The model catalog stays in `configs/agent.yaml`. The agent overlay stores `model` only when the choice differs from the catalog default, and a reasoning or verbosity entry only when it differs from that model's own default. `PUT /api/config` ignores a client `models` list and rejects an unknown model id or a value that model does not allow. If `AZURE_OPENAI_MODEL` names a deployment missing from the file, that deployment is appended so it stays selectable. A legacy Luna `default` reasoning value is clamped to its explicit catalog default, `medium`.
+The chat header selects `model` and, when the model allows it, `reasoning` and `verbosity`. Each model keeps its own values. The model catalog, the selected model, and any reasoning or verbosity value that differs from that model's catalog default are stored in `configs/agent.yaml`. `PUT /api/config` ignores a client `models` list and rejects an unknown model id or a value that model does not allow. If `AZURE_OPENAI_MODEL` names a deployment missing from the file, that deployment is appended so it stays selectable. A legacy Luna `default` reasoning value is clamped to its explicit catalog default, `medium`.
 
 Luna and Astra use the Responses API (`/openai/v1/responses`) for tool-enabled chat because Azure rejects function tools combined with explicit reasoning on Chat Completions. Their effort is sent as `reasoning.effort`; non-medium verbosity is sent as `text.verbosity`. Each response asks for `reasoning.encrypted_content`. Those reasoning items are stored only on the in-memory Azure transcript and replayed before the matching function calls, so the model can continue the thought without writing it into the visible answer. Luna supports `none`, `low`, `medium`, `high`, `xhigh`, and `max`; Astra supports the same list except `none`. GPT-4o stays on Chat Completions with no reasoning or verbosity control, and those fields are omitted. Camera metadata analysis sends no tools and neither setting, so it stays on Chat Completions for every model. Each assistant reply stores the deployment id, and the UI shows its catalog label. The welcome message is unlabeled. `provider` is `azure` for every shipped option; an unknown provider is rejected and does not call Azure. A later open-source model needs its own client.
 
@@ -145,10 +139,10 @@ Committed catalog counts:
 | Level | Count | Notes |
 | --- | --- | --- |
 | Sectors | 3 | Prague, Japan, Namibia (+ implicit Unassigned for legacy) |
-| Locations | 18 | 13 Prague + 2 Japan + 3 Namibia |
-| Cameras | 26 | 21 Prague portal stills + 5 YouTube livestreams |
+| Locations | 19 | 14 Prague + 2 Japan + 3 Namibia |
+| Cameras | 27 | 22 Prague portal stills + 5 YouTube livestreams |
 
-Prague locations: Charles Bridge (2), Holešovičky (2), Budějovická (1), Nuselský most (2), Barrandovský most (2), Hybernská (1), Bělocerkevská (`410034`), Ječná (1), Mariánské náměstí (1), Argentinská (3), Strahovský tunel (2), Tunel Mrázovka (2), Náměstí Kinských (1). Japan is Tokachi-Obihiro (`IDXRscHtp2s`) and Tokyo Airport (`3w4zEyFamuA`). Namibia is three watering-hole livestreams: Desert (`AeMUdOPFcXI`), Small Pond (`ydYDqZQpim8`), and River (`qwvk5hbEJnY`).
+Prague locations: Charles Bridge (2), Holešovičky (2), Budějovická (1), Nuselský most (2), Barrandovský most (2), Hybernská (1), Bělocerkevská (`410034`), Ječná (1), Mariánské náměstí (1), Argentinská (3), Strahovský tunel (2), Tunel Mrázovka (2), Náměstí Kinských (1), Malostranská (`101046`). Japan is Tokachi-Obihiro (`IDXRscHtp2s`) and Tokyo Airport (`3w4zEyFamuA`). Namibia is three watering-hole livestreams: Desert (`AeMUdOPFcXI`), Small Pond (`ydYDqZQpim8`), and River (`qwvk5hbEJnY`).
 
 A Prague camera id is `{location_id}_{portal id}` and its name is that portal id. A livestream id ends in `_live`.
 
@@ -172,12 +166,11 @@ flowchart LR
 - Disabled entries stay in YAML; child switches keep their saved state when a parent is off.
 - They are excluded from `list_cameras`, the system prompt, and successful `get_camera_image` fetches.
 - Legacy configs without `locations` or `location_id` load under an implicit **Unassigned** location under the camera’s sector (or global Unassigned).
-- The overlay merges sectors, locations, and cameras by id: changed entries, `remove_*_ids`, and optional `tools`.
 - Saving rejects removing a **location** while any camera still references it, or removing a **sector** while any location (or camera) still references it (HTTP 400 from `PUT /api/config`).
 
-Legacy overlays may still contain `google_maps`; it is loaded as `maps`. Turning `internet` on alone does **not** enable weather.
+A legacy `google_maps` tool flag is loaded as `maps`. Turning `internet` on alone does **not** enable weather.
 
-`GET` returns the merged config. Tool toggles take effect on the **next chat message** without restarting the API.
+`GET` returns the loaded config. Tool toggles take effect on the **next chat message** without restarting the API.
 
 If a place is missing, the agent should tell the user to add it in the Config panel (name, location GPS, source). It must not invent URLs.
 
@@ -193,7 +186,7 @@ The system prompt (`src/cctv/config/prompt.py`) instructs the model to:
 - Use `web_search` for news/context when Internet search is on — **not** as a weather API.
 - Never claim Internet, weather, or map capabilities when those toggles are off.
 
-`run_chat_turn` reloads merged config before every user message and passes `max_tool_rounds=16` so a generous camera batch plus optional external calls can complete.
+`run_chat_turn` reloads config before every user message and passes `max_tool_rounds=16` so a generous camera batch plus optional external calls can complete.
 
 ## Model-facing tools
 

@@ -224,22 +224,3 @@ class AgentConfig(BaseModel):
     def _migrate_setting_maps(cls, data: object) -> object:
         return migrate_setting_maps(data)
 
-
-class AgentOverlay(BaseModel):
-    """Local deltas on top of the committed catalog."""
-
-    sectors: list[SectorConfig] = Field(default_factory=list)
-    remove_sector_ids: list[str] = Field(default_factory=list)
-    locations: list[LocationConfig] = Field(default_factory=list)
-    remove_location_ids: list[str] = Field(default_factory=list)
-    cameras: list[CameraConfig] = Field(default_factory=list)
-    remove_camera_ids: list[str] = Field(default_factory=list)
-    tools: ToolsConfig | None = None
-    model: str | None = None
-    reasoning: dict[str, str] = Field(default_factory=dict)
-    verbosity: dict[str, str] = Field(default_factory=dict)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _migrate_setting_maps(cls, data: object) -> object:
-        return migrate_setting_maps(data)

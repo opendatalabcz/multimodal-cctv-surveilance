@@ -4,13 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from cctv.config.agent_yaml import (
-    load_agent_config,
-    load_base_config,
-    load_overlay,
-    overlay_from_diff,
-    save_agent_config,
-)
+from cctv.config.agent_yaml import load_agent_config, load_base_config, save_agent_config
 from cctv.config.effective import (
     UNASSIGNED_LOCATION_ID,
     UNASSIGNED_SECTOR_ID,
@@ -68,9 +62,7 @@ def _cam(
 
 def _patch_paths(tmp_path: Path, monkeypatch) -> None:
     base_path = tmp_path / "agent.yaml"
-    overlay_path = tmp_path / "agent.local.yaml"
     monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: base_path)
-    monkeypatch.setattr("cctv.config.agent_yaml.agent_overlay_path", lambda: overlay_path)
 
 
 def test_legacy_camera_without_location_gets_unassigned_under_sector() -> None:
@@ -119,7 +111,7 @@ def test_sector_off_hides_cameras_even_when_location_and_camera_on() -> None:
     assert is_camera_effective(config, config.cameras[0]) is False
 
 
-def test_overlay_location_round_trip(tmp_path, monkeypatch) -> None:
+def test_save_location_round_trip(tmp_path, monkeypatch) -> None:
     _patch_paths(tmp_path, monkeypatch)
     base = AgentConfig(
         sectors=[_sector("prague", "Prague")],
@@ -143,14 +135,10 @@ def test_overlay_location_round_trip(tmp_path, monkeypatch) -> None:
     )
     save_agent_config(updated)
 
-    overlay = load_overlay()
-    assert overlay.tools is not None
-    assert overlay.tools.internet is True
-    assert {location.id for location in overlay.locations} == {"bridge", "square"}
-    assert {camera.id for camera in overlay.cameras} == {"cam", "gate"}
-
     merged = load_agent_config()
     assert merged.tools.internet is True
+    assert {location.id for location in merged.locations} >= {"bridge", "square"}
+    assert {camera.id for camera in merged.cameras} == {"cam", "gate"}
     assert merged.sectors[0].enabled is False
     assert merged.locations[0].enabled is False
     assert merged.cameras[1].location_id == "square"
@@ -206,21 +194,6 @@ def test_block_sector_deletion_with_assigned_locations(tmp_path, monkeypatch) ->
         )
 
 
-def test_overlay_from_diff_tracks_location_removals() -> None:
-    base = AgentConfig(
-        sectors=[_sector("prague", "Prague")],
-        locations=[_location("bridge", "Bridge"), _location("square", "Square")],
-        cameras=[_cam("cam", "Cam", location_id="square")],
-    )
-    current = AgentConfig(
-        sectors=[_sector("prague", "Prague")],
-        locations=[_location("square", "Square")],
-        cameras=[_cam("cam", "Cam", location_id="square")],
-    )
-    overlay = overlay_from_diff(base, current)
-    assert overlay.remove_location_ids == ["bridge"]
-
-
 def test_committed_catalog_counts_and_entries() -> None:
     config = load_base_config()
     prague_locations = [
@@ -237,9 +210,11 @@ def test_committed_catalog_counts_and_entries() -> None:
         location for location in config.locations if location.sector_id == "namibia"
     ]
 
-    assert len(config.cameras) == 26
-    assert len(prague_cameras) == 21
-    assert len(prague_locations) == 13
+    assert len(config.cameras) == 27
+    assert len(prague_cameras) == 22
+    assert len(prague_locations) == 14
+    assert any(location.name == "Malostranská" for location in prague_locations)
+    assert any(camera.analysis is not None for camera in config.cameras)
     assert len(japan_locations) == 2
     assert len(japan_cameras) == 2
     assert len(namibia_locations) == 3
