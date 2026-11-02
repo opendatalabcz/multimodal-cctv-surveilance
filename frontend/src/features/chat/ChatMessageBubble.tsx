@@ -149,6 +149,10 @@ function AnnotatedFrame({
   activeAnnotation?: number | null
   onActiveAnnotation?: (index: number | null) => void
 }) {
+  const [hoveredAnnotation, setHoveredAnnotation] = useState<number | null>(null)
+  const active = thumbnail ? hoveredAnnotation : activeAnnotation
+  const setActive = thumbnail ? setHoveredAnnotation : onActiveAnnotation
+
   return (
     <Box
       sx={{
@@ -171,11 +175,11 @@ function AnnotatedFrame({
           height: 'auto',
         }}
       />
-      {image.annotations.length > 0 && (
+      {image.annotations.length > 0 && setActive && (
         <AnnotationOverlay
           annotations={image.annotations}
-          activeAnnotation={activeAnnotation}
-          onActiveAnnotation={thumbnail ? undefined : onActiveAnnotation}
+          activeAnnotation={active}
+          onActiveAnnotation={setActive}
         />
       )}
     </Box>
@@ -189,24 +193,38 @@ function AnnotationOverlay({
 }: {
   annotations: ImageAnnotation[]
   activeAnnotation: number | null
-  onActiveAnnotation?: (index: number | null) => void
+  onActiveAnnotation: (index: number | null) => void
 }) {
+  const paintOrder = annotations.map((_, index) => index)
+  if (activeAnnotation !== null) {
+    const activeIndex = paintOrder.indexOf(activeAnnotation)
+    if (activeIndex !== -1) {
+      paintOrder.splice(activeIndex, 1)
+      paintOrder.push(activeAnnotation)
+    }
+  }
+
   return (
-    <Box sx={{ position: 'absolute', inset: 0, pointerEvents: onActiveAnnotation ? 'auto' : 'none' }}>
+    <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
       <Box
         component="svg"
         viewBox="0 0 1000 1000"
         preserveAspectRatio="none"
-        sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+        sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
       >
         {annotations.map((annotation, index) => (
-          <Geometry
-            key={`${annotation.type}-${index}`}
+          <HitTarget
+            key={`hit-${annotation.type}-${index}`}
             annotation={annotation}
-            active={activeAnnotation === null || activeAnnotation === index}
-            interactive={Boolean(onActiveAnnotation)}
-            onMouseEnter={() => onActiveAnnotation?.(index)}
-            onMouseLeave={() => onActiveAnnotation?.(null)}
+            onMouseEnter={() => onActiveAnnotation(index)}
+            onMouseLeave={() => onActiveAnnotation(null)}
+          />
+        ))}
+        {paintOrder.map((index) => (
+          <Geometry
+            key={`mark-${annotations[index].type}-${index}`}
+            annotation={annotations[index]}
+            active={activeAnnotation === index}
           />
         ))}
       </Box>
@@ -214,28 +232,36 @@ function AnnotationOverlay({
   )
 }
 
-function Geometry({
+function HitTarget({
   annotation,
-  active,
-  interactive,
   onMouseEnter,
   onMouseLeave,
 }: {
   annotation: ImageAnnotation
-  active: boolean
-  interactive: boolean
   onMouseEnter: () => void
   onMouseLeave: () => void
 }) {
-  const events = {
-    onMouseEnter,
-    onMouseLeave,
-    style: {
-      cursor: interactive ? 'pointer' : 'default',
-      opacity: active ? 1 : 0.25,
-      pointerEvents: interactive ? ('visiblePainted' as const) : ('none' as const),
-    },
+  const box = hitBounds(annotation.points)
+  if (!box) {
+    return null
   }
+  return (
+    <rect
+      x={box.x}
+      y={box.y}
+      width={box.width}
+      height={box.height}
+      fill="transparent"
+      stroke="none"
+      pointerEvents="fill"
+      cursor="pointer"
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    />
+  )
+}
+
+function Geometry({ annotation, active }: { annotation: ImageAnnotation; active: boolean }) {
   if (annotation.type === 'box' && annotation.points.length === 2) {
     const [first, second] = annotation.points
     const x = Math.min(first[0], second[0])
@@ -243,7 +269,7 @@ function Geometry({
     const width = Math.abs(second[0] - first[0])
     const height = Math.abs(second[1] - first[1])
     return (
-      <g {...events}>
+      <g pointerEvents="none">
         <rect x={x} y={y} width={width} height={height} {...haloStroke(active)} />
         <rect x={x} y={y} width={width} height={height} {...markStroke(active)} />
       </g>
@@ -252,7 +278,7 @@ function Geometry({
   if (annotation.type === 'line' && annotation.points.length >= 2) {
     const points = pointList(annotation.points)
     return (
-      <g {...events}>
+      <g pointerEvents="none">
         <polyline points={points} {...haloStroke(active)} />
         <polyline points={points} {...markStroke(active)} />
       </g>
@@ -261,7 +287,7 @@ function Geometry({
   if (annotation.type === 'polygon' && annotation.points.length >= 3) {
     const points = pointList(annotation.points)
     return (
-      <g {...events}>
+      <g pointerEvents="none">
         <polygon points={points} {...haloStroke(active)} />
         <polygon points={points} {...markStroke(active)} />
       </g>
@@ -270,7 +296,7 @@ function Geometry({
   if (annotation.type === 'point' && annotation.points[0]) {
     const [x, y] = annotation.points[0]
     return (
-      <g {...events}>
+      <g pointerEvents="none">
         <circle cx={x} cy={y} r={8} {...haloStroke(active)} />
         <circle cx={x} cy={y} r={6} {...markStroke(active)} />
       </g>
@@ -354,11 +380,41 @@ function pointList(points: number[][]): string {
   return points.map((point) => `${point[0]},${point[1]}`).join(' ')
 }
 
+function hitBounds(points: number[][]): { x: number; y: number; width: number; height: number } | null {
+  if (points.length === 0) {
+    return null
+  }
+  let minX = points[0][0]
+  let minY = points[0][1]
+  let maxX = minX
+  let maxY = minY
+  for (const [x, y] of points) {
+    minX = Math.min(minX, x)
+    minY = Math.min(minY, y)
+    maxX = Math.max(maxX, x)
+    maxY = Math.max(maxY, y)
+  }
+  let x = minX
+  let y = minY
+  let width = maxX - minX
+  let height = maxY - minY
+  if (width === 0) {
+    x -= 8
+    width = 16
+  }
+  if (height === 0) {
+    y -= 8
+    height = 16
+  }
+  return { x, y, width, height }
+}
+
 function haloStroke(active: boolean) {
   return {
     stroke: HALO,
-    strokeWidth: active ? 7 : 5,
+    strokeWidth: active ? 7 : 2,
     fill: 'none',
+    pointerEvents: 'none' as const,
     vectorEffect: 'non-scaling-stroke' as const,
     strokeLinejoin: 'round' as const,
     strokeLinecap: 'round' as const,
@@ -369,7 +425,8 @@ function markStroke(active: boolean) {
   return {
     fill: 'none',
     stroke: MARK,
-    strokeWidth: active ? 3 : 2,
+    strokeWidth: active ? 3 : 1,
+    pointerEvents: 'none' as const,
     vectorEffect: 'non-scaling-stroke' as const,
     strokeLinejoin: 'round' as const,
     strokeLinecap: 'round' as const,
