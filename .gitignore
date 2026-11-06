@@ -185,6 +185,8 @@ $RECYCLE.BIN/
 
 camera_images/
 logs/
+outputs/
+raw_videos/
 
 # Frontend (Vite)
 node_modules/
