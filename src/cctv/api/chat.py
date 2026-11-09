@@ -20,7 +20,7 @@ from cctv.config.models import (
 from cctv.config.prompt import build_system_prompt
 from cctv.observability.tracing import start_turn
 from cctv.tools.registry import tool_schemas_for_config
-from cctv.utils.azure import AzureOpenAIConfig, resolve_azure_config
+from cctv.utils.azure import GROQ_MAX_COMPLETION_TOKENS, AzureOpenAIConfig, resolve_chat_config
 
 MAX_TOOL_ROUNDS = 16
 
@@ -93,7 +93,7 @@ def run_chat_turn(
         azure_config = config
     else:
         try:
-            azure_config = resolve_azure_config(agent_config)
+            azure_config = resolve_chat_config(agent_config)
         except ValueError as exc:
             return conversation, {"success": False, "error": str(exc)}
 
@@ -129,11 +129,13 @@ def run_chat_turn(
             ],
         },
     ) as turn:
+        groq_turn = option is not None and option.provider == "groq"
         result = chat_with_tools(
             conversation.azure_messages,
             config=azure_config,
             system_prompt=system_prompt,
             tools=active_tools,
+            max_tokens=GROQ_MAX_COMPLETION_TOKENS if groq_turn else 1500,
             max_tool_rounds=MAX_TOOL_ROUNDS,
             on_progress=on_progress,
             reasoning=reasoning,

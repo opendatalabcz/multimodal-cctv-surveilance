@@ -142,7 +142,7 @@ def test_parallel_tool_calls_answer_every_id_before_images() -> None:
             "image_path": f"/tmp/{camera}.jpg",
         }
 
-    def fake_image_part(path):
+    def fake_image_part(path, **_kwargs):
         return {"type": "image_url", "image_url": {"url": str(path)}}
 
     with (
@@ -221,7 +221,7 @@ def test_batch_camera_tool_injects_all_image_paths() -> None:
             "image_paths": [f"/tmp/{camera}.jpg" for camera in cameras],
         }
 
-    def fake_image_part(path):
+    def fake_image_part(path, **_kwargs):
         return {"type": "image_url", "image_url": {"url": str(path)}}
 
     with (
@@ -304,7 +304,7 @@ def test_on_progress_emits_fetching_then_analyzing() -> None:
             ],
         }
 
-    def fake_image_part(path):
+    def fake_image_part(path, **_kwargs):
         return {"type": "image_url", "image_url": {"url": str(path)}}
 
     with (
@@ -385,7 +385,7 @@ def test_on_progress_emits_fetching_then_analyzing() -> None:
             ],
         }
 
-    def fake_image_part(path):
+    def fake_image_part(path, **_kwargs):
         return {"type": "image_url", "image_url": {"url": str(path)}}
 
     with (
@@ -458,7 +458,7 @@ def test_empty_images_list_hides_all_fetched_images() -> None:
             "image_labels": [{"path": f"/tmp/{camera}.jpg", "camera_id": camera}],
         }
 
-    def fake_image_part(path):
+    def fake_image_part(path, **_kwargs):
         return {"type": "image_url", "image_url": {"url": str(path)}}
 
     with (
@@ -574,7 +574,7 @@ def test_presented_annotations_drop_invalid_geometry() -> None:
         patch("cctv.analysis.azure_vision.execute_tool", side_effect=fake_execute),
         patch(
             "cctv.analysis.azure_vision._vision_image_part",
-            side_effect=lambda path: {"type": "image_url", "image_url": {"url": str(path)}},
+            side_effect=lambda path, **_kwargs: {"type": "image_url", "image_url": {"url": str(path)}},
         ),
     ):
         result = chat_with_tools(
@@ -663,7 +663,7 @@ def test_stored_history_keeps_frame_refs_not_base64() -> None:
             "image_labels": [{"path": f"/tmp/{camera}.jpg", "camera_id": camera}],
         }
 
-    def fake_image_part(path):
+    def fake_image_part(path, **_kwargs):
         return {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{path}"}}
 
     with (
@@ -743,7 +743,7 @@ def test_follow_up_without_fetch_reattaches_presented_frames() -> None:
             ],
         }
 
-    def fake_image_part(path):
+    def fake_image_part(path, **_kwargs):
         return {"type": "image_url", "image_url": {"url": str(path)}}
 
     with (
@@ -827,7 +827,7 @@ def test_second_fetch_stubs_previous_frames() -> None:
             "image_labels": [{"path": f"/tmp/{camera}.jpg", "camera_id": camera}],
         }
 
-    def fake_image_part(path):
+    def fake_image_part(path, **_kwargs):
         return {"type": "image_url", "image_url": {"url": str(path)}}
 
     with (
@@ -881,6 +881,58 @@ def test_chat_completions_omit_default_reasoning_and_verbosity() -> None:
     assert "verbosity" not in default_payload
     assert "verbosity" not in medium_verbosity
     assert low_verbosity["verbosity"] == "low"
+
+
+def test_groq_payload_uses_qwen_sampling_and_omits_image_detail(tmp_path) -> None:
+    from PIL import Image
+
+    image = tmp_path / "frame.jpg"
+    Image.new("RGB", (4, 4), (1, 2, 3)).save(image, format="JPEG")
+    config = AzureOpenAIConfig(
+        api_key="groq-key",
+        endpoint="https://api.groq.com/openai/v1",
+        model="qwen/qwen3.8-27b",
+        auth="bearer",
+        provider="groq",
+    )
+    payload = _chat_completion_payload(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "look"},
+                    {
+                        "type": "cctv_frames",
+                        "frames": [{"path": str(image), "camera_id": "cam"}],
+                    },
+                ],
+            }
+        ],
+        config,
+        reasoning="none",
+        verbosity="medium",
+    )
+    assert payload["reasoning_effort"] == "none"
+    assert payload["reasoning_format"] == "hidden"
+    assert payload["temperature"] == 0.7
+    assert payload["top_p"] == 0.8
+    assert payload["presence_penalty"] == 1.5
+    assert "verbosity" not in payload
+    image_part = next(
+        part for part in payload["messages"][0]["content"] if part["type"] == "image_url"
+    )
+    assert "detail" not in image_part["image_url"]
+    assert image_part["image_url"]["url"].startswith("data:image/jpeg;base64,")
+
+    thinking = _chat_completion_payload(
+        [{"role": "user", "content": "hi"}],
+        config,
+        reasoning="medium",
+    )
+    assert thinking["reasoning_effort"] == "medium"
+    assert thinking["temperature"] == 1.0
+    assert thinking["top_p"] == 0.95
+    assert "presence_penalty" not in thinking
 
 
 def test_luna_responses_payload_normalizes_legacy_default_and_supports_none() -> None:
@@ -1173,7 +1225,7 @@ def test_submit_answer_alongside_a_camera_fetch_waits() -> None:
         patch("cctv.analysis.azure_vision.execute_tool", side_effect=fake_execute),
         patch(
             "cctv.analysis.azure_vision._vision_image_part",
-            side_effect=lambda path: {"type": "image_url", "image_url": {"url": str(path)}},
+            side_effect=lambda path, **_kwargs: {"type": "image_url", "image_url": {"url": str(path)}},
         ),
     ):
         result = chat_with_tools(

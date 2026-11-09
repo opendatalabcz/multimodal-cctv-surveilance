@@ -123,12 +123,25 @@ models:
       choices: [low, medium, high]
       default: medium
       locked: false
+  - id: qwen/qwen3.8-27b
+    label: Qwen 3.8 27B
+    provider: groq
+    transport: chat_completions
+    max_images_per_request: 1
+    reasoning:
+      choices: [none, low, medium, high]
+      default: none
+      locked: false
+    verbosity:
+      choices: []
+      default: medium
+      locked: true
 model: gpt-4o
 ```
 
 The chat header selects `model` and, when the model allows it, `reasoning` and `verbosity`. Each model keeps its own values. The model catalog, the selected model, and any reasoning or verbosity value that differs from that model's catalog default are stored in `configs/agent.yaml`. `PUT /api/config` ignores a client `models` list and rejects an unknown model id or a value that model does not allow. If `AZURE_OPENAI_MODEL` names a deployment missing from the file, that deployment is appended so it stays selectable. A legacy Luna `default` reasoning value is clamped to its explicit catalog default, `medium`.
 
-Luna and Astra use the Responses API (`/openai/v1/responses`) for tool-enabled chat because Azure rejects function tools combined with explicit reasoning on Chat Completions. Their effort is sent as `reasoning.effort`; non-medium verbosity is sent as `text.verbosity`. Each response asks for `reasoning.encrypted_content`. Those reasoning items are stored only on the in-memory Azure transcript and replayed before the matching function calls, so the model can continue the thought without writing it into the visible answer. Luna supports `none`, `low`, `medium`, `high`, `xhigh`, and `max`; Astra supports the same list except `none`. GPT-4o stays on Chat Completions with no reasoning or verbosity control, and those fields are omitted. Camera metadata analysis sends no tools and neither setting, so it stays on Chat Completions for every model. Each assistant reply stores the deployment id, and the UI shows its catalog label. The welcome message is unlabeled. `provider` is `azure` for every shipped option; an unknown provider is rejected and does not call Azure. A later open-source model needs its own client.
+Luna and Astra use the Responses API (`/openai/v1/responses`) for tool-enabled chat because Azure rejects function tools combined with explicit reasoning on Chat Completions. Their effort is sent as `reasoning.effort`; non-medium verbosity is sent as `text.verbosity`. Each response asks for `reasoning.encrypted_content`. Those reasoning items are stored only on the in-memory Azure transcript and replayed before the matching function calls, so the model can continue the thought without writing it into the visible answer. Luna supports `none`, `low`, `medium`, `high`, `xhigh`, and `max`; Astra supports the same list except `none`. GPT-4o stays on Chat Completions with no reasoning or verbosity control, and those fields are omitted. Qwen 3.8 27B uses the same chat-completions loop against Groq (`https://api.groq.com/openai/v1`, `Authorization: Bearer` from `GROQ_API_KEY`). Its page size is 1 image so a free-tier request stays inside 8,000 tokens per minute. Instruct mode (`reasoning_effort=none`) is the default and sends Groq's instruct sampling; `low`, `medium`, and `high` send thinking-mode sampling. `reasoning_format` is `hidden`. Camera metadata analysis sends no tools. For Qwen it still sends `reasoning_effort=none`. For Azure it sends neither reasoning nor verbosity. Each assistant reply stores the deployment id, and the UI shows its catalog label. The welcome message is unlabeled. An unknown provider is rejected and does not call Azure.
 
 ### Catalog hierarchy
 
@@ -180,7 +193,7 @@ The system prompt (`src/cctv/config/prompt.py`) instructs the model to:
 
 - Fetch **all configured cameras** that match a named place (by name or GPS area) in **one** `get_camera_image` call (`cameras: [...]`), not a single random sample and not one tool call per camera.
 - For questions with **no location**, sample **one camera per configured location** when locations exist (otherwise fall back to GPS clustering).
-- Fetch every matching camera. `get_camera_image` pages the requested camera list using the selected model's `max_images_per_request` (32 for the shipped models). A result with `next_offset` means the model should request the next page with the same camera list.
+- Fetch every matching camera. `get_camera_image` pages the requested camera list using the selected model's `max_images_per_request` (32 for the Azure models, 1 for Qwen 3.8 27B). A result with `next_offset` means the model should request the next page with the same camera list.
 - Describe **visible** conditions from camera frames first.
 - Use `get_weather` only when the Weather toggle is on, and clearly label measured/forecast data vs camera-observed conditions.
 - Use `web_search` for news/context when Internet search is on — **not** as a weather API.
@@ -218,7 +231,7 @@ These are free public services without uptime guarantees:
 
 External failures return a tool result (not a chat crash) so the model can explain that the source was unavailable.
 
-After `get_camera_image` succeeds, `chat_with_tools` appends a **frame-ref** user message (JPEG paths and camera ids, not base64). Each Azure POST expands only the **latest** frame-ref to vision parts (`detail: high`), up to the selected model's `max_images_per_request`; older refs become a `Previously viewed: …` stub. Across paged calls, every fetched frame remains selectable by `submit_answer`. `images` selects which frames stay on the latest ref, in that order, so a follow-up with no new fetch can still see those stills. An empty list shows no frames. Highlights are drawn only from each image's annotations, not from the answer text. Shapes are: `box` (two opposite corners), `point` (one point), `line` (2–8 points), or `polygon` (3–12 points). Coordinates are integers from 0 to 1000, with x and y normalized independently. Unknown cameras, duplicate frames, unknown types, and malformed geometry are dropped; a bad annotation does not reject the answer. Valid annotations are retained up to a 1,000-item platform guard per image. FastAPI sends each kept frame as `{ url, cameraId, annotations }` with a URL like `/api/images/...`. Resting marks are thin outlines on the thumbnail and in the expanded view. Hovering the interior of a shape's box, or its legend row, thickens that outline; the others stay thin. Thumbnails have no labels. The stored transcript is a normal assistant message, not the tool call. Do not put large base64 blobs in stored transcripts. `get_camera_image` accepts `cameras: [id or name, ...]`, optional `offset` / `limit`, and `camera` for a single name.
+After `get_camera_image` succeeds, `chat_with_tools` appends a **frame-ref** user message (JPEG paths and camera ids, not base64). Each model POST expands only the **latest** frame-ref to vision parts (Azure sends `detail: high`; Groq omits `detail`), up to the selected model's `max_images_per_request`; older refs become a `Previously viewed: …` stub. Across paged calls, every fetched frame remains selectable by `submit_answer`. `images` selects which frames stay on the latest ref, in that order, so a follow-up with no new fetch can still see those stills. An empty list shows no frames. Highlights are drawn only from each image's annotations, not from the answer text. Shapes are: `box` (two opposite corners), `point` (one point), `line` (2–8 points), or `polygon` (3–12 points). Coordinates are integers from 0 to 1000, with x and y normalized independently. Unknown cameras, duplicate frames, unknown types, and malformed geometry are dropped; a bad annotation does not reject the answer. Valid annotations are retained up to a 1,000-item platform guard per image. FastAPI sends each kept frame as `{ url, cameraId, annotations }` with a URL like `/api/images/...`. Resting marks are thin outlines on the thumbnail and in the expanded view. Hovering the interior of a shape's box, or its legend row, thickens that outline; the others stay thin. Thumbnails have no labels. The stored transcript is a normal assistant message, not the tool call. Do not put large base64 blobs in stored transcripts. `get_camera_image` accepts `cameras: [id or name, ...]`, optional `offset` / `limit`, and `camera` for a single name.
 
 Each chat turn appends one JSON line to `logs/chat_turns.jsonl` under the data directory (`turn_id`, `conversation_id`, tool rounds/names, presented camera ids and annotation types, Azure `usage`, `duration_ms`). `turn_id` is also the Langfuse trace id when tracing is on.
 

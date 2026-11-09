@@ -59,4 +59,21 @@ models:
     - high
     default: medium
     locked: false
-model: gpt-4o
+- id: qwen/qwen3.8-27b
+  label: Qwen 3.8 27B
+  provider: groq
+  transport: chat_completions
+  max_images_per_request: 1
+  reasoning:
+    choices:
+    - none
+    - low
+    - medium
+    - high
+    default: none
+    locked: false
+  verbosity:
+    choices: []
+    default: medium
+    locked: true
+model: qwen/qwen3.8-27b

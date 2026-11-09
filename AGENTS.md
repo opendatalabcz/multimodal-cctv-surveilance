@@ -19,7 +19,7 @@ The UI proxies `/api` to port 8000.
 - Camera catalog, including scene analysis: [`configs/cameras.yaml`](configs/cameras.yaml).
 - Agent settings (models, selected model, tool flags): [`configs/agent.yaml`](configs/agent.yaml).
 - The Config panel writes those two files.
-- Azure OpenAI and other secrets stay in the environment / FastAPI. Never put keys in the frontend.
+- Azure OpenAI and Groq (`GROQ_API_KEY`, for Qwen 3.8 27B) stay in the environment / FastAPI. Never put keys in the frontend.
 
 ## Runtime
 

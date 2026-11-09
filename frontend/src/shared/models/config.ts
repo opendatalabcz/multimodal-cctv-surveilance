@@ -96,6 +96,7 @@ export interface AppConfig {
 
 const REASONING_LABELS: Record<string, string> = {
   default: 'Default',
+  none: 'Off',
   low: 'Low',
   medium: 'Medium',
   high: 'High',

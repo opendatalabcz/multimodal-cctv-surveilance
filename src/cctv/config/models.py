@@ -77,9 +77,9 @@ DEFAULT_MAX_IMAGES_PER_REQUEST = 32
 class ModelOption(BaseModel):
     """One deployment the chat UI can select.
 
-    ``provider`` is ``azure`` for every shipped option. A later open-source
-    model would use another provider and its own client; the chat loop rejects
-    unknown providers instead of calling Azure.
+    ``provider`` is ``azure`` or ``groq``. Groq serves ``qwen/qwen3.8-27b``
+    through the same chat-completions loop. An unknown provider is rejected
+    and does not call Azure.
 
     ``transport`` is ``chat_completions`` or ``responses``. GPT-6 Astra tool
     calls require the Responses API.
@@ -142,6 +142,19 @@ def default_model_catalog() -> list[ModelOption]:
                 default="medium",
                 locked=False,
             ),
+        ),
+        ModelOption(
+            id="qwen/qwen3.8-27b",
+            label="Qwen 3.8 27B",
+            provider="groq",
+            transport="chat_completions",
+            max_images_per_request=1,
+            reasoning=ModelReasoning(
+                choices=["none", "low", "medium", "high"],
+                default="none",
+                locked=False,
+            ),
+            verbosity=ModelReasoning(choices=[], default="medium", locked=True),
         ),
     ]
 

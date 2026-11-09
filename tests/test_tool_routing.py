@@ -1,6 +1,6 @@
 import json
 from datetime import UTC, datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import cctv.tools  # noqa: F401
 from cctv.api.chat import run_chat_turn
@@ -11,6 +11,7 @@ from cctv.config.models import (
     CameraConfig,
     LocationConfig,
     ModelOption,
+    ModelReasoning,
     SectorConfig,
     ToolsConfig,
 )
@@ -20,7 +21,7 @@ from cctv.config.prompt import (
     build_welcome_suggestions,
 )
 from cctv.tools.registry import tool_names_for_config, tool_schemas_for_config
-from cctv.utils.azure import AzureOpenAIConfig, resolve_azure_config
+from cctv.utils.azure import AzureOpenAIConfig, resolve_azure_config, resolve_chat_config
 
 
 def _fake_config() -> AzureOpenAIConfig:
@@ -309,6 +310,92 @@ def test_run_chat_turn_does_not_call_azure_for_unsupported_provider() -> None:
     assert result["success"] is False
     assert "provider" in result["error"]
     assert updated.messages == []
+
+
+def _qwen_agent() -> AgentConfig:
+    return AgentConfig(
+        models=[
+            ModelOption(
+                id="qwen/qwen3.8-27b",
+                label="Qwen 3.8 27B",
+                provider="groq",
+                max_images_per_request=1,
+                reasoning=ModelReasoning(
+                    choices=["none", "low", "medium", "high"],
+                    default="none",
+                    locked=False,
+                ),
+            )
+        ],
+        model="qwen/qwen3.8-27b",
+    )
+
+
+def test_resolve_chat_config_requires_groq_key(monkeypatch) -> None:
+    monkeypatch.setenv("GROQ_API_KEY", "")
+    try:
+        resolve_chat_config(_qwen_agent())
+    except ValueError as exc:
+        assert "Groq" in str(exc)
+    else:
+        raise AssertionError("expected a missing Groq key to fail")
+
+
+def test_run_chat_turn_posts_qwen_to_groq(monkeypatch) -> None:
+    monkeypatch.setenv("GROQ_API_KEY", "groq-key")
+    conversation = Conversation(id="conv-groq")
+    seen: dict = {}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        seen["url"] = url
+        seen["headers"] = headers
+        seen["json"] = json
+        response = MagicMock()
+        response.ok = True
+        response.status_code = 200
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_submit",
+                                "type": "function",
+                                "function": {
+                                    "name": "submit_answer",
+                                    "arguments": '{"answer": "Quiet.", "images": [], "followups": []}',
+                                },
+                            }
+                        ],
+                    }
+                }
+            ],
+            "usage": {"total_tokens": 3},
+        }
+        return response
+
+    with (
+        patch("cctv.api.chat.load_agent_config", return_value=_qwen_agent()),
+        patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post),
+    ):
+        updated, result = run_chat_turn(conversation, "hello")
+
+    assert result["success"] is True, result.get("error")
+    assert seen["url"] == "https://api.groq.com/openai/v1/chat/completions"
+    assert seen["headers"]["Authorization"] == "Bearer groq-key"
+    assert "api-key" not in seen["headers"]
+    assert seen["json"]["model"] == "qwen/qwen3.8-27b"
+    assert seen["json"]["reasoning_effort"] == "none"
+    assert seen["json"]["reasoning_format"] == "hidden"
+    assert seen["json"]["temperature"] == 0.7
+    assert seen["json"]["top_p"] == 0.8
+    assert seen["json"]["presence_penalty"] == 1.5
+    assert seen["json"]["max_completion_tokens"] == 2048
+    assert "verbosity" not in seen["json"]
+    assert updated.messages[-1].model == "qwen/qwen3.8-27b"
 
 
 def _analysis(description: str, tags: list[str]) -> CameraAnalysis:

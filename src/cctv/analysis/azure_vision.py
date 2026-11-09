@@ -108,6 +108,31 @@ def _relative_to_data_root(path: str | Path) -> str:
         return str(path)
 
 
+def _provider_label(config: AzureOpenAIConfig) -> str:
+    return "Groq" if config.provider == "groq" else "Azure OpenAI"
+
+
+def _apply_groq_controls(payload: dict[str, Any], reasoning: str | None) -> None:
+    """Groq sampling for Qwen. Instruct mode is ``none``; other efforts think."""
+    effort = reasoning if reasoning and reasoning != "default" else "none"
+    payload["reasoning_effort"] = effort
+    payload["reasoning_format"] = "hidden"
+    if effort == "none":
+        payload["temperature"] = 0.7
+        payload["top_p"] = 0.8
+        payload["presence_penalty"] = 1.5
+        return
+    payload["temperature"] = 1.0
+    payload["top_p"] = 0.95
+
+
+def _image_url_part(data_url: str, *, detail: str | None) -> dict[str, Any]:
+    image_url: dict[str, Any] = {"url": data_url}
+    if detail:
+        image_url["detail"] = detail
+    return {"type": "image_url", "image_url": image_url}
+
+
 def analyze_images(
     image_paths: list[str | Path],
     prompt: str,
@@ -121,30 +146,25 @@ def analyze_images(
     """
     config = config or load_azure_openai_config()
     if not config.is_configured or not config.api_url:
-        return {"success": False, "error": "Azure OpenAI configuration missing"}
+        return {"success": False, "error": f"{_provider_label(config)} configuration missing"}
 
     try:
         encoded_images = [encode_image_to_base64(path) for path in image_paths]
     except Exception as exc:
         return {"success": False, "error": f"Failed to encode images: {exc}"}
 
+    detail = None if config.provider == "groq" else "high"
     content: list[dict] = [{"type": "text", "text": prompt}]
     for encoded in encoded_images:
-        content.append(
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/jpeg;base64,{encoded}",
-                    "detail": "high",
-                },
-            }
-        )
+        content.append(_image_url_part(f"data:image/jpeg;base64,{encoded}", detail=detail))
 
     payload: dict = {
         "model": config.model,
         "messages": [{"role": "user", "content": content}],
         "max_completion_tokens": max_tokens,
     }
+    if config.provider == "groq":
+        _apply_groq_controls(payload, "none")
     try:
         names = [Path(path).name for path in image_paths]
         print(f"Analyzing {len(image_paths)} image(s): {', '.join(names)}")
@@ -181,7 +201,7 @@ def analyze_images(
             "model": config.model,
         }
     except requests.exceptions.RequestException as exc:
-        return {"success": False, "error": f"Azure API request failed: {exc}"}
+        return {"success": False, "error": f"{_provider_label(config)} API request failed: {exc}"}
     except Exception as exc:
         return {"success": False, "error": f"Unexpected error: {exc}"}
 
@@ -197,15 +217,19 @@ def _chat_completion_payload(
     tool_choice: dict[str, Any] | None = None,
     max_images: int = DEFAULT_MAX_IMAGES_PER_REQUEST,
 ) -> dict[str, Any]:
+    detail = None if config.provider == "groq" else "high"
     payload: dict[str, Any] = {
         "model": config.model,
-        "messages": materialize_for_azure(messages, max_images=max_images),
+        "messages": materialize_for_azure(messages, max_images=max_images, image_detail=detail),
         "max_completion_tokens": max_tokens,
     }
-    if reasoning and reasoning != "default":
-        payload["reasoning_effort"] = reasoning
-    if verbosity and verbosity != "medium":
-        payload["verbosity"] = verbosity
+    if config.provider == "groq":
+        _apply_groq_controls(payload, reasoning)
+    else:
+        if reasoning and reasoning != "default":
+            payload["reasoning_effort"] = reasoning
+        if verbosity and verbosity != "medium":
+            payload["verbosity"] = verbosity
     if tools:
         payload["tools"] = tools
         payload["tool_choice"] = tool_choice or "auto"
@@ -219,10 +243,11 @@ def _post_json(
     *,
     timeout: int = 90,
 ) -> dict[str, Any]:
-    headers = {
-        "Content-Type": "application/json",
-        "api-key": config.api_key,
-    }
+    headers = {"Content-Type": "application/json"}
+    if config.auth == "bearer":
+        headers["Authorization"] = f"Bearer {config.api_key}"
+    else:
+        headers["api-key"] = config.api_key or ""
     response = requests.post(url, headers=headers, json=payload, timeout=timeout)
     _raise_for_azure_status(response)
     return response.json()
@@ -516,15 +541,9 @@ def _assistant_message_from_responses(result: dict[str, Any]) -> dict[str, Any]:
     return message
 
 
-def _vision_image_part(image_path: str | Path) -> dict[str, Any]:
+def _vision_image_part(image_path: str | Path, *, detail: str | None = "high") -> dict[str, Any]:
     encoded = encode_image_to_base64(image_path)
-    return {
-        "type": "image_url",
-        "image_url": {
-            "url": f"data:image/jpeg;base64,{encoded}",
-            "detail": "high",
-        },
-    }
+    return _image_url_part(f"data:image/jpeg;base64,{encoded}", detail=detail)
 
 
 def _frame_label(frame: FetchedFrame) -> str:
@@ -629,6 +648,7 @@ def _stub_user_message(frames: list[FetchedFrame]) -> dict[str, Any]:
 def _expand_visual_message(
     message: dict[str, Any],
     max_images: int = DEFAULT_MAX_IMAGES_PER_REQUEST,
+    image_detail: str | None = "high",
 ) -> dict[str, Any]:
     content = message.get("content")
     if not isinstance(content, list):
@@ -645,7 +665,7 @@ def _expand_visual_message(
     expanded = list(text_parts)
     for frame in frames[:max_images]:
         try:
-            expanded.append(_vision_image_part(frame.path))
+            expanded.append(_vision_image_part(frame.path, detail=image_detail))
         except OSError:
             continue
     return {**message, "content": expanded}
@@ -654,6 +674,7 @@ def _expand_visual_message(
 def materialize_for_azure(
     messages: list[dict[str, Any]],
     max_images: int = DEFAULT_MAX_IMAGES_PER_REQUEST,
+    image_detail: str | None = "high",
 ) -> list[dict[str, Any]]:
     """Expand only the latest frame-ref (or legacy vision) message for Azure."""
     visual_indices = [index for index, message in enumerate(messages) if _has_visual_payload(message)]
@@ -664,7 +685,9 @@ def materialize_for_azure(
             materialized.append(message)
             continue
         if index == latest:
-            materialized.append(_expand_visual_message(message, max_images=max_images))
+            materialized.append(
+                _expand_visual_message(message, max_images=max_images, image_detail=image_detail)
+            )
         else:
             materialized.append(_stub_user_message(_frames_from_message(message)))
     return materialized
@@ -845,9 +868,9 @@ def chat_with_tools(
     """
     config = config or load_azure_openai_config()
     if not config.is_configured or not config.api_url:
-        return {"success": False, "error": "Azure OpenAI configuration missing"}
+        return {"success": False, "error": f"{_provider_label(config)} configuration missing"}
     if transport == "responses" and not config.responses_url:
-        return {"success": False, "error": "Azure OpenAI configuration missing"}
+        return {"success": False, "error": f"{_provider_label(config)} configuration missing"}
 
     active_tools = tools if tools is not None else default_tool_schemas()
     history = [message for message in messages if message.get("role") != "system"]
@@ -1047,6 +1070,6 @@ def chat_with_tools(
 
         return {"success": False, "error": f"Exceeded max tool rounds ({max_tool_rounds})"}
     except requests.exceptions.RequestException as exc:
-        return {"success": False, "error": f"Azure API request failed: {exc}"}
+        return {"success": False, "error": f"{_provider_label(config)} API request failed: {exc}"}
     except Exception as exc:
         return {"success": False, "error": f"Unexpected error: {exc}"}
