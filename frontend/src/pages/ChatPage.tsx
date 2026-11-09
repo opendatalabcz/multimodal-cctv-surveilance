@@ -223,6 +223,7 @@ export function ChatPage() {
               onSend={sendMessage}
               onNewChat={() => void startNewConversation()}
               onOpenConfig={narrowLayout ? () => setConfigOpen(true) : undefined}
+              showAnnotations={config?.tools.annotations ?? false}
             />
           </Box>
           {!narrowLayout && (

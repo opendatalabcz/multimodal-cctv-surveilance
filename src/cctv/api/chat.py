@@ -140,6 +140,7 @@ def run_chat_turn(
             verbosity=verbosity,
             transport=transport,
             max_images=max_images,
+            annotations=agent_config.tools.annotations,
         )
         if result.get("success"):
             turn.update(output=_assistant_text(result.get("analysis", "")))

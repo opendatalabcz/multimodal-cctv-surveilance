@@ -67,6 +67,7 @@ interface ToolsConfig {
   internet: boolean
   weather: boolean
   maps: boolean
+  annotations: boolean
 }
 
 export interface ModelReasoning {

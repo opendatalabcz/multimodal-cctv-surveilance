@@ -75,6 +75,7 @@ interface ChatPanelProps {
   onSend: (content: string) => void
   onNewChat?: () => void
   onOpenConfig?: () => void
+  showAnnotations?: boolean
 }
 
 export function ChatPanel({
@@ -94,6 +95,7 @@ export function ChatPanel({
   onSend,
   onNewChat,
   onOpenConfig,
+  showAnnotations = false,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -183,6 +185,7 @@ export function ChatPanel({
             key={`${message.role}-${index}`}
             message={message}
             modelLabel={message.role === 'assistant' ? modelLabel(message.model, models) : null}
+            showAnnotations={showAnnotations}
           />
         ))}
         {suggestions.length > 0 && !isSending && (

@@ -196,6 +196,7 @@ class ToolsConfig(BaseModel):
     internet: bool = False
     weather: bool = False
     maps: bool = False
+    annotations: bool = False
 
     @model_validator(mode="before")
     @classmethod

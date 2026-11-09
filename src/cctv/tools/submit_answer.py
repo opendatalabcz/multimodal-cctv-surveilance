@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from cctv.config.prompt import annotation_guidance
+
 SUBMIT_ANSWER = "submit_answer"
 
 SUBMIT_ANSWER_TOOL: dict[str, Any] = {
@@ -40,12 +42,7 @@ SUBMIT_ANSWER_TOOL: dict[str, Any] = {
                             },
                             "annotations": {
                                 "type": "array",
-                                "description": (
-                                    "Highlights drawn on this frame. The answer text does not "
-                                    "draw on the image. Leave this empty only when you cannot "
-                                    "place a highlight. Coordinates are integers from 0 to 1000, "
-                                    "with x and y normalized independently."
-                                ),
+                                "description": annotation_guidance(True),
                                 "items": {
                                     "type": "object",
                                     "properties": {

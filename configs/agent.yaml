@@ -2,6 +2,7 @@ tools:
   internet: false
   weather: false
   maps: false
+  annotations: true
 models:
 - id: gpt-5.6-luna
   label: GPT-5.6 Luna
@@ -59,4 +60,4 @@ models:
     - high
     default: medium
     locked: false
-model: gpt-4o
+model: gpt-6-astra

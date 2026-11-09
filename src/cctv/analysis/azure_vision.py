@@ -18,6 +18,7 @@ from cctv.analysis.presentation import (
     select_presented_images,
 )
 from cctv.config.models import DEFAULT_MAX_IMAGES_PER_REQUEST
+from cctv.config.prompt import annotation_guidance
 from cctv.observability.tracing import (
     capture_images_enabled,
     exported_image,
@@ -542,7 +543,11 @@ def _frames_payload(frames: list[FetchedFrame]) -> list[dict[str, Any]]:
     ]
 
 
-def _fetched_images_message(frames: list[FetchedFrame]) -> dict[str, Any]:
+def _fetched_images_message(
+    frames: list[FetchedFrame],
+    *,
+    annotations: bool = False,
+) -> dict[str, Any]:
     labels: list[str] = []
     for index, frame in enumerate(frames, start=1):
         camera_id = _frame_label(frame)
@@ -556,10 +561,7 @@ def _fetched_images_message(frames: list[FetchedFrame]) -> dict[str, Any]:
             "text": (
                 "Here are the fetched frames for analysis, in this order. "
                 "When you finish, list the frames to show in submit_answer images. "
-                "Draw highlights only by filling annotations. "
-                "Text in the answer does not mark the picture. "
-                "Coordinates run from 0 to 1000 on each axis. "
-                "Leave annotations empty only when you cannot place them.\n"
+                f"{annotation_guidance(annotations)}\n"
                 + "\n".join(labels)
             ),
         },
@@ -673,6 +675,8 @@ def materialize_for_azure(
 def _compact_frame_refs_for_storage(
     messages: list[dict[str, Any]],
     kept_frames: list[FetchedFrame],
+    *,
+    annotations: bool = False,
 ) -> list[dict[str, Any]]:
     visual_indices = [index for index, message in enumerate(messages) if _has_visual_payload(message)]
     latest = visual_indices[-1] if visual_indices else None
@@ -683,7 +687,7 @@ def _compact_frame_refs_for_storage(
             continue
         frames = _frames_from_message(message)
         if index == latest and kept_frames:
-            compacted.append(_fetched_images_message(kept_frames))
+            compacted.append(_fetched_images_message(kept_frames, annotations=annotations))
         else:
             compacted.append(_stub_user_message(frames))
     return compacted
@@ -782,6 +786,7 @@ def _finalize_submission(
     followups: list[str],
     tool_rounds: int,
     config: AzureOpenAIConfig,
+    annotations: bool = False,
 ) -> dict[str, Any]:
     presented = select_presented_images(fetched_frames, images)
     display_paths = [item.frame.path for item in presented]
@@ -791,6 +796,7 @@ def _finalize_submission(
         stored = _compact_frame_refs_for_storage(
             stored,
             _kept_frames(fetched_frames, display_paths),
+            annotations=annotations,
         )
     return {
         "success": True,
@@ -829,6 +835,7 @@ def chat_with_tools(
     verbosity: str | None = None,
     transport: str = "chat_completions",
     max_images: int = DEFAULT_MAX_IMAGES_PER_REQUEST,
+    annotations: bool = False,
 ) -> dict[str, Any]:
     """Run a multi-turn Azure vision chat with function calling.
 
@@ -959,6 +966,7 @@ def chat_with_tools(
                     followups=followups,
                     tool_rounds=tool_rounds,
                     config=config,
+                    annotations=annotations,
                 )
             if force_submit:
                 return {"success": False, "error": _NO_SUBMISSION}
@@ -1034,7 +1042,9 @@ def chat_with_tools(
             # Azure rejects the request unless every tool_call_id is answered by an
             # uninterrupted run of tool messages, so images follow the whole batch.
             if round_frames:
-                conversation.append(_fetched_images_message(round_frames))
+                conversation.append(
+                    _fetched_images_message(round_frames, annotations=annotations)
+                )
                 count = len(round_frames)
                 analyzing = (
                     "Analyzing the camera frame…"

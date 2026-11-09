@@ -3,6 +3,8 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 import cctv.tools  # noqa: F401
+from cctv.analysis.azure_vision import _fetched_images_message
+from cctv.analysis.presentation import FetchedFrame
 from cctv.api.chat import run_chat_turn
 from cctv.api.store import Conversation
 from cctv.config.models import (
@@ -15,11 +17,13 @@ from cctv.config.models import (
     ToolsConfig,
 )
 from cctv.config.prompt import (
+    annotation_guidance,
     build_system_prompt,
     build_welcome_message,
     build_welcome_suggestions,
 )
 from cctv.tools.registry import tool_names_for_config, tool_schemas_for_config
+from cctv.tools.submit_answer import SUBMIT_ANSWER_TOOL
 from cctv.utils.azure import AzureOpenAIConfig, resolve_azure_config
 
 
@@ -84,7 +88,7 @@ def test_prompt_camera_first_and_forecast_qualification() -> None:
     assert "Do not use web_search as a weather API" in prompt
     assert "submit_answer" in prompt
     assert "The user only sees the images you list" in prompt
-    assert "The answer text does not draw on the picture" in prompt
+    assert "Leave annotations empty on every image" in prompt
     assert "```cite" not in prompt
     assert "weather (get_weather): enabled" in prompt
     assert "internet search (web_search): enabled" in prompt
@@ -95,6 +99,39 @@ def test_prompt_disabled_capabilities() -> None:
     assert "Do not claim you searched the web" in prompt
     assert "Do not quote measured forecasts" in prompt
     assert "Do not claim map or geocoding" in prompt
+
+
+def _annotation_description(tools: ToolsConfig) -> str:
+    schemas = tool_schemas_for_config(tools)
+    submit = next(item for item in schemas if item["function"]["name"] == "submit_answer")
+    return submit["function"]["parameters"]["properties"]["images"]["items"]["properties"][
+        "annotations"
+    ]["description"]
+
+
+def test_annotation_guidance_follows_toggle() -> None:
+    off_prompt = build_system_prompt(AgentConfig(tools=ToolsConfig(annotations=False)))
+    on_prompt = build_system_prompt(AgentConfig(tools=ToolsConfig(annotations=True)))
+    assert "Leave annotations empty on every image" in off_prompt
+    assert "Do not draw highlights" in off_prompt
+    assert "Add a box" not in off_prompt
+    assert "only when you are sure" in on_prompt
+    assert "Do not guess a region" in on_prompt
+    assert "A box is two opposite corners" in on_prompt
+
+    assert _annotation_description(ToolsConfig(annotations=False)) == annotation_guidance(False)
+    assert _annotation_description(ToolsConfig(annotations=True)) == annotation_guidance(True)
+    registered = SUBMIT_ANSWER_TOOL["function"]["parameters"]["properties"]["images"]["items"][
+        "properties"
+    ]["annotations"]["description"]
+    assert registered == annotation_guidance(True)
+
+    frame = FetchedFrame(path="/tmp/cam.jpg", camera_id="cam")
+    off_text = _fetched_images_message([frame], annotations=False)["content"][0]["text"]
+    on_text = _fetched_images_message([frame], annotations=True)["content"][0]["text"]
+    assert annotation_guidance(False) in off_text
+    assert "Add a box" not in off_text
+    assert annotation_guidance(True) in on_text
 
 
 def test_prompt_routes_by_camera_scene_metadata() -> None:
@@ -152,6 +189,36 @@ def test_run_chat_turn_reloads_tools_between_messages() -> None:
         "web_search",
         "get_weather",
     ]
+
+
+def test_run_chat_turn_passes_annotation_flag() -> None:
+    conversation = Conversation(id="conv-annotations")
+    captured: list[bool] = []
+
+    def fake_chat(messages, *, config=None, system_prompt=None, tools=None, **kwargs):
+        captured.append(kwargs.get("annotations"))
+        submit = next(item for item in tools or [] if item["function"]["name"] == "submit_answer")
+        description = submit["function"]["parameters"]["properties"]["images"]["items"]["properties"][
+            "annotations"
+        ]["description"]
+        assert description == annotation_guidance(True)
+        return {
+            "success": True,
+            "analysis": "ok",
+            "messages": list(messages) + [{"role": "assistant", "content": "ok"}],
+            "image_paths": [],
+        }
+
+    with (
+        patch(
+            "cctv.api.chat.load_agent_config",
+            return_value=AgentConfig(tools=ToolsConfig(annotations=True)),
+        ),
+        patch("cctv.api.chat.chat_with_tools", side_effect=fake_chat),
+    ):
+        run_chat_turn(conversation, "show the bridge", config=_fake_config())
+
+    assert captured == [True]
 
 
 def test_run_chat_turn_passes_max_tool_rounds() -> None:

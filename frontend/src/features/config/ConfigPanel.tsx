@@ -251,6 +251,16 @@ export function ConfigPanel({
                   }
                   label="Map access"
                 />
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={config.tools.annotations}
+                      onChange={(_, checked) => onToggleTool('annotations', checked)}
+                      disabled={isSaving}
+                    />
+                  }
+                  label="Image annotations"
+                />
               </AccordionDetails>
             </Accordion>
           </>

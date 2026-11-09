@@ -7,12 +7,15 @@ model-facing set is ``list_cameras``, ``get_camera_image``, and ``submit_answer`
 
 from __future__ import annotations
 
+import copy
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from cctv.config.models import ToolsConfig
+from cctv.config.prompt import annotation_guidance
+from cctv.tools.submit_answer import SUBMIT_ANSWER
 
 ToolExecutor = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -56,7 +59,20 @@ def tool_schemas(names: tuple[str, ...] | list[str] | None = None) -> list[dict[
 
 
 def tool_schemas_for_config(tools: ToolsConfig) -> list[dict[str, Any]]:
-    return tool_schemas(tool_names_for_config(tools))
+    selected = tool_schemas(tool_names_for_config(tools))
+    return [_schema_for_config(schema, tools) for schema in selected]
+
+
+def _schema_for_config(schema: dict[str, Any], tools: ToolsConfig) -> dict[str, Any]:
+    function = schema.get("function") or {}
+    if function.get("name") != SUBMIT_ANSWER:
+        return schema
+    copied = copy.deepcopy(schema)
+    annotations = copied["function"]["parameters"]["properties"]["images"]["items"]["properties"][
+        "annotations"
+    ]
+    annotations["description"] = annotation_guidance(tools.annotations)
+    return copied
 
 
 def default_tool_schemas() -> list[dict[str, Any]]:

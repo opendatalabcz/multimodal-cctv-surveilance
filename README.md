@@ -33,8 +33,8 @@ A Prague camera id is `{location_id}_{portal id}` and its name is that portal id
 
 - The header selects the model. `configs/agent.yaml` selects GPT-4o. GPT-5.6 Luna and GPT-6 Astra are also listed. Luna and Astra can set reasoning effort and verbosity; GPT-4o cannot.
 - `list_cameras` and `get_camera_image` are always available. Image results are paged using the selected model's `max_images_per_request` (32 for the shipped models), with `next_offset` when another page remains.
-- Optional tools follow three independent toggles: `internet` (DuckDuckGo), `weather` (Open-Meteo), and `maps` (OpenStreetMap Nominatim). They apply on the next message.
-- A turn ends only when the model calls `submit_answer` with the visible markdown, the frames to show, and up to three follow-up questions. Highlights are drawn from each frame's annotations, not from the answer text. Valid highlights are not limited to eight; a 1,000-annotation platform guard protects the response.
+- Optional tools follow three independent toggles: `internet` (DuckDuckGo), `weather` (Open-Meteo), and `maps` (OpenStreetMap Nominatim). A fourth toggle, `annotations`, is off by default. Toggles apply on the next message.
+- A turn ends only when the model calls `submit_answer` with the visible markdown, the frames to show, and up to three follow-up questions. With `annotations` on, the model adds a box, point, line, or polygon only when it is sure of the object and its place; the answer text does not draw on the picture. With the toggle off, the model is told to leave annotations empty and the UI hides marks already stored on a turn. Turning it back on shows those stored marks. Valid highlights are not limited to eight; a 1,000-annotation platform guard protects the response.
 - Conversations live in memory and reset when the API stops. Each turn also appends a line to `logs/chat_turns.jsonl`. Langfuse tracing is off unless `LANGFUSE_ENABLED` and both Langfuse keys are set.
 
 External services are public demo APIs without an uptime guarantee.

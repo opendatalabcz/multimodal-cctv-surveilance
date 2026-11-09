@@ -23,6 +23,19 @@ from cctv.config.models import (
 )
 
 
+def annotation_guidance(enabled: bool) -> str:
+    """Policy shared by the system prompt, the frame message, and submit_answer."""
+    if enabled:
+        return (
+            "Add a box, point, line, or polygon only when you are sure of both what "
+            "the object is and where it sits in the frame. If you are unsure, leave "
+            "annotations empty. Do not guess a region. The answer text does not draw "
+            "on the picture. Coordinates are integers from 0 to 1000, with x and y "
+            "normalized independently."
+        )
+    return "Leave annotations empty on every image. Do not draw highlights."
+
+
 def _capability_lines(config: AgentConfig) -> list[str]:
     tools = config.tools
     lines = [
@@ -264,13 +277,18 @@ def build_system_prompt(config: AgentConfig) -> str:
             "Put only the visible markdown in answer. Do not mention submit_answer there.",
             "List every camera the user should see, and only those, in images using configured ids. "
             "Pass an empty images list when you show no frames. "
-            "The user only sees the images you list, not every frame you fetched. "
-            "When you point at something in a shown frame, put that highlight in the image's annotations. "
-            "The answer text does not draw on the picture. "
+            "The user only sees the images you list, not every frame you fetched. ",
+            annotation_guidance(config.tools.annotations),
+        ]
+    )
+    if config.tools.annotations:
+        lines.append(
             "A box is two opposite corners, a point is one point, "
             "a line is 2 to 8 points, and a polygon is 3 to 12 points. "
-            "Coordinates are integers from 0 to 1000, with x and y normalized independently. "
-            "Add a short label when it helps. Leave annotations empty when you cannot place them.",
+            "Add a short label when it helps."
+        )
+    lines.extend(
+        [
             "Pass two or three short next questions in followups, in the user's voice. "
             "Keep each under 80 characters, suggest only questions the configured cameras "
             "can answer, and do not repeat a question the user already asked. "

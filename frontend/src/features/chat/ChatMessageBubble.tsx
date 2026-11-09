@@ -12,16 +12,23 @@ import { AssistantMarkdown } from './AssistantMarkdown'
 interface ChatMessageBubbleProps {
   message: Message
   modelLabel?: string | null
+  showAnnotations?: boolean
 }
 
 const MARK = '#fff4cc'
 const HALO = '#111827'
 
-export function ChatMessageBubble({ message, modelLabel }: ChatMessageBubbleProps) {
+export function ChatMessageBubble({
+  message,
+  modelLabel,
+  showAnnotations = false,
+}: ChatMessageBubbleProps) {
   const isUser = message.role === 'user'
   const [expandedUrl, setExpandedUrl] = useState<string | null>(null)
   const [activeAnnotation, setActiveAnnotation] = useState<number | null>(null)
-  const images = message.images ?? []
+  const images = (message.images ?? []).map((image) =>
+    showAnnotations ? image : { ...image, annotations: [] },
+  )
   const expanded = images.find((image) => image.url === expandedUrl) ?? null
   const closeExpanded = () => {
     setExpandedUrl(null)
