@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from dataclasses import replace
 from typing import Any
 
 from pydantic import ValidationError
@@ -85,12 +86,24 @@ def run_chat_turn(
     *,
     config: AzureOpenAIConfig | None = None,
     on_progress: ProgressCallback | None = None,
+    model: str | None = None,
+    verbosity: str | None = None,
 ) -> tuple[Conversation, dict[str, Any]]:
+    """Run one user message.
+
+    ``model`` and ``verbosity`` override the saved selection for this call only.
+    They are not written to ``configs/agent.yaml``. Reasoning stays on the value
+    saved for the model that actually runs.
+    """
     agent_config = load_agent_config()
+    if model is not None and model_by_id(agent_config.models, model) is None:
+        return conversation, {"success": False, "error": f"Unknown model: {model}"}
+    if model is not None:
+        agent_config = agent_config.model_copy(update={"model": model})
     system_prompt = build_system_prompt(agent_config)
     active_tools = tool_schemas_for_config(agent_config.tools)
     if config is not None:
-        azure_config = config
+        azure_config = replace(config, model=agent_config.model) if model is not None else config
     else:
         try:
             azure_config = resolve_azure_config(agent_config)
@@ -109,7 +122,8 @@ def run_chat_turn(
         else DEFAULT_MAX_IMAGES_PER_REQUEST
     )
     reasoning = clamp_reasoning(option, agent_config.reasoning.get(selected_model))
-    verbosity = clamp_verbosity(option, agent_config.verbosity.get(selected_model))
+    requested_verbosity = verbosity if verbosity is not None else agent_config.verbosity.get(selected_model)
+    verbosity_setting = clamp_verbosity(option, requested_verbosity)
 
     started = time.perf_counter()
     turn_id = uuid.uuid4().hex
@@ -121,7 +135,7 @@ def run_chat_turn(
             "model": selected_model,
             "transport": transport,
             "reasoning": reasoning,
-            "verbosity": verbosity,
+            "verbosity": verbosity_setting,
             "tools": [
                 tool["function"]["name"]
                 for tool in active_tools
@@ -137,7 +151,7 @@ def run_chat_turn(
             max_tool_rounds=MAX_TOOL_ROUNDS,
             on_progress=on_progress,
             reasoning=reasoning,
-            verbosity=verbosity,
+            verbosity=verbosity_setting,
             transport=transport,
             max_images=max_images,
             annotations=agent_config.tools.annotations,

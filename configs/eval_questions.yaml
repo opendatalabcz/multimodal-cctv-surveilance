@@ -1,0 +1,12 @@
+# Application-evaluation questions. One fresh chat per question, model, and verbosity.
+questions:
+  - id: charles-bridge-walk
+    text: Would you recommend a walk on the Charles Bridge right now?
+  - id: d1-traffic
+    text: What is the traffic like when coming from D1 to the center of Prague?
+  - id: prague-incidents
+    text: Are there any crashes or traffic violations visible on the Prague roads?
+  - id: japan-airports
+    text: Describe the situation at the Japanese airports.
+  - id: namibia-animals
+    text: Which animals can be seen in the deserts of Namibia? Point out rare animals if any are visible.

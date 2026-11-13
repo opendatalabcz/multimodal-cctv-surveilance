@@ -187,7 +187,7 @@ The system prompt (`src/cctv/config/prompt.py`) instructs the model to:
 - Use `web_search` for news/context when Internet search is on — **not** as a weather API.
 - Never claim Internet, weather, or map capabilities when those toggles are off.
 
-`run_chat_turn` reloads config before every user message and passes `max_tool_rounds=16` so a generous camera batch plus optional external calls can complete.
+`run_chat_turn` reloads config before every user message and passes `max_tool_rounds=16` so a generous camera batch plus optional external calls can complete. Optional `model` and `verbosity` arguments apply to that call only and are not written to `configs/agent.yaml`. `cctv-eval` uses them to ask each question in `configs/eval_questions.yaml` once per catalog model and verbosity.
 
 ## Model-facing tools
 
@@ -265,6 +265,8 @@ make up
 ```
 
 `make up` starts the API on port 8000 and the UI on http://localhost:5173. Vite proxies `/api` to the API. `make api` and `make ui` start one process. Set Azure OpenAI env vars for the API process.
+
+`make eval` runs `cctv-eval`. It does not need the API process. It does need Azure credentials and reachable cameras. `--screenshot` is the exception: it opens the UI, so `make up` has to be running, and it asks the question a second time in the browser. The UI saves the selected model and verbosity for that turn; the runner puts `configs/agent.yaml` back afterward.
 
 ## Tests
 

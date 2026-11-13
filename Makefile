@@ -1,4 +1,4 @@
-.PHONY: help install_dev api ui up run test
+.PHONY: help install_dev api ui up run test eval
 
 FRONTEND := frontend
 
@@ -8,6 +8,7 @@ help:
 	@echo "api          Start FastAPI only"
 	@echo "ui           Start Vite only"
 	@echo "test         Run pytest (mocked HTTP)"
+	@echo "eval         Ask each eval question per model and verbosity"
 
 install_dev:
 	uv sync --group dev
@@ -26,3 +27,6 @@ run: up
 
 test:
 	uv run pytest
+
+eval:
+	uv run cctv-eval

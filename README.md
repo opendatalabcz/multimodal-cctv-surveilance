@@ -26,6 +26,7 @@ A Prague camera id is `{location_id}_{portal id}` and its name is that portal id
 | --- | --- |
 | `configs/cameras.yaml` | Sectors, locations, cameras, and scene analysis |
 | `configs/agent.yaml` | Model catalog, selected model, reasoning, verbosity, and tool toggles |
+| `configs/eval_questions.yaml` | Questions asked by `make eval` |
 
 `GET/PUT /api/config` reads and writes those files. The Config panel saves camera edits to `cameras.yaml`, and model, reasoning, verbosity, and tool toggles to `agent.yaml`. Secrets stay in the environment.
 
@@ -49,6 +50,22 @@ make up
 `make install_dev` installs the Python package (including pytest) and the frontend dependencies. `make up` starts the API on port 8000 and the UI on port 5173. The UI proxies `/api` to the API.
 
 `make api` and `make ui` start one process. `make help` lists every target.
+
+## Evaluation
+
+```bash
+make eval
+```
+
+`make eval` asks each question in `configs/eval_questions.yaml` once per catalog model and verbosity, each in a fresh chat, and writes `outputs/end_to_end_eval/`. A model with unlocked verbosity gets a folder per level (`low`, `medium`, `high`). GPT-4o has verbosity locked, so its question folders sit directly under the model. A folder that already contains `result.json` is skipped. The API does not need to be running. Azure credentials and reachable cameras do. The command does not change `configs/agent.yaml`.
+
+```bash
+uv run cctv-eval --model gpt-4o --question charles-bridge-walk
+uv run cctv-eval --verbosity low --force
+uv run cctv-eval --screenshot
+```
+
+`--screenshot` also saves `screenshot.png` from the UI. That needs `make up` and a one-time `uv run playwright install chromium`. The browser asks the question again, and the header's model and verbosity selects save `configs/agent.yaml` for that turn. The runner restores the file afterward. If the browser step fails, the answer files stay and the error is recorded in `result.json`.
 
 ## Tests
 

@@ -361,6 +361,47 @@ def test_run_chat_turn_routes_luna_reasoning_and_tools_to_responses() -> None:
     }
 
 
+def test_run_chat_turn_overrides_model_and_verbosity_for_one_call() -> None:
+    conversation = Conversation(id="conv-override")
+    seen: dict = {}
+
+    def fake_chat(messages, *, config=None, **kwargs):
+        seen["model"] = config.model
+        seen["reasoning"] = kwargs["reasoning"]
+        seen["verbosity"] = kwargs["verbosity"]
+        return {
+            "success": True,
+            "analysis": "ok",
+            "model": config.model,
+            "messages": list(messages) + [{"role": "assistant", "content": "ok"}],
+            "image_paths": [],
+        }
+
+    agent = AgentConfig(
+        model="gpt-4o",
+        reasoning={"gpt-5.6-luna": "high", "gpt-4o": "default"},
+        verbosity={"gpt-5.6-luna": "high", "gpt-4o": "medium"},
+    )
+    azure = AzureOpenAIConfig(api_key="key", endpoint="https://example.test", model="gpt-4o")
+    with (
+        patch("cctv.api.chat.load_agent_config", return_value=agent),
+        patch("cctv.api.chat.chat_with_tools", side_effect=fake_chat),
+        patch("cctv.config.agent_yaml.save_agent_config") as save_config,
+    ):
+        _, result = run_chat_turn(
+            conversation,
+            "hello",
+            config=azure,
+            model="gpt-5.6-luna",
+            verbosity="low",
+        )
+
+    save_config.assert_not_called()
+    assert result["success"] is True
+    assert seen == {"model": "gpt-5.6-luna", "reasoning": "high", "verbosity": "low"}
+    assert agent.model == "gpt-4o"
+
+
 def test_run_chat_turn_does_not_call_azure_for_unsupported_provider() -> None:
     conversation = Conversation(id="conv-qwen")
     agent = AgentConfig(

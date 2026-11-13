@@ -19,10 +19,12 @@ dependencies = [
 
 [project.scripts]
 cctv-api = "cctv.api.cli:main"
+cctv-eval = "cctv.eval.cli:main"
 
 [dependency-groups]
 dev = [
     "httpx",
+    "playwright",
     "pytest",
 ]
 
