@@ -32,6 +32,7 @@ class EvalCase:
     verbosity: str | None
     question_id: str
     question: str
+    expected_cameras: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -78,6 +79,7 @@ def build_cases(
                         verbosity=level,
                         question_id=item.id,
                         question=item.text,
+                        expected_cameras=item.expected_cameras,
                     )
                 )
     return cases
@@ -168,11 +170,25 @@ def _run_case(
         "success": bool(result.get("success")),
         "error": result.get("error"),
         "duration_ms": duration_ms,
+        # usage and model_calls cover every model call in the turn, not only the last one.
         "usage": result.get("usage") or {},
+        "model_calls": result.get("model_calls"),
         "tool_rounds": result.get("tool_rounds"),
         "tool_names": tool_names_from_messages(result.get("messages") or []),
+        "requested_camera_ids": list(result.get("requested_camera_ids") or []),
+        "fetched_camera_ids": list(result.get("fetched_camera_ids") or []),
         "followups": list(result.get("followups") or []),
         "images": _copy_presented_images(result.get("images") or [], destination),
+        "shown_camera_ids": list(
+            dict.fromkeys(
+                str(item["camera_id"])
+                for item in result.get("images") or []
+                if isinstance(item, dict) and item.get("camera_id")
+            )
+        ),
+        "expected_camera_ids": (
+            list(case.expected_cameras) if case.expected_cameras is not None else None
+        ),
         "timestamp": result.get("timestamp"),
         "screenshot": None,
         "screenshot_error": None,

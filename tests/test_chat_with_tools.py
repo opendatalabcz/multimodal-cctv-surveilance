@@ -1495,6 +1495,85 @@ def test_a_failed_forced_submit_does_not_show_the_draft() -> None:
     assert "messages" not in result
 
 
+def test_usage_and_camera_ids_cover_every_model_call() -> None:
+    responses = [
+        {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_cams",
+                                "type": "function",
+                                "function": {
+                                    "name": "get_camera_image",
+                                    "arguments": json_mod.dumps({"cameras": ["cam_a", "cam_b"]}),
+                                },
+                            }
+                        ],
+                    }
+                }
+            ],
+            "usage": {
+                "input_tokens": 100,
+                "input_tokens_details": {"cached_tokens": 60},
+                "output_tokens": 10,
+                "total_tokens": 110,
+            },
+        },
+        {
+            "choices": [{"message": _submit_message("Both clear.", ["cam_a"])}],
+            "usage": {
+                "input_tokens": 40,
+                "input_tokens_details": {"cached_tokens": 0},
+                "output_tokens": 5,
+                "total_tokens": 45,
+            },
+        },
+    ]
+    posted: list[dict] = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        posted.append(json)
+        response = MagicMock()
+        response.json.return_value = responses[len(posted) - 1]
+        return response
+
+    def fake_execute(name, arguments):
+        cameras = arguments["cameras"]
+        return {
+            "tool_content": '{"success": true}',
+            "image_paths": [f"/tmp/{camera}.jpg" for camera in cameras],
+            "image_labels": [
+                {"path": f"/tmp/{camera}.jpg", "camera_id": camera} for camera in cameras
+            ],
+        }
+
+    def fake_image_part(path):
+        return {"type": "image_url", "image_url": {"url": str(path)}}
+
+    with (
+        patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post),
+        patch("cctv.analysis.azure_vision.execute_tool", side_effect=fake_execute),
+        patch("cctv.analysis.azure_vision._vision_image_part", side_effect=fake_image_part),
+    ):
+        result = chat_with_tools([{"role": "user", "content": "Compare both."}], config=_fake_config())
+
+    assert result["success"] is True
+    assert result["model_calls"] == 2
+    assert result["usage"] == {
+        "input_tokens": 140,
+        "input_tokens_details": {"cached_tokens": 60},
+        "output_tokens": 15,
+        "total_tokens": 155,
+    }
+    assert result["requested_camera_ids"] == ["cam_a", "cam_b"]
+    assert result["fetched_camera_ids"] == ["cam_a", "cam_b"]
+    assert result["image_count"] == 1
+
+
 def test_chat_with_tools_missing_config() -> None:
     config = AzureOpenAIConfig(api_key=None, endpoint=None, model=None)
     result = chat_with_tools([{"role": "user", "content": "Hello"}], config=config)

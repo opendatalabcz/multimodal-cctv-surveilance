@@ -253,7 +253,7 @@ The chat loop already dispatches by name and injects any `image_path` / `image_p
 - `POST /api/conversations/{id}/messages/stream` with `{ "content": "..." }` — SSE `status` / `done` / `error` events. Does not stream tokens.
 - `GET /api/images/{relative-path}` — JPEG under the data directory only
 
-Conversations are in memory and reset when the API process stops. The UI stores the conversation id in `sessionStorage` and resumes via `GET /api/conversations/{id}` (New chat creates a fresh id). Each successful or failed chat turn appends a line to `logs/chat_turns.jsonl` under the data directory. While a turn is running, the chat bubble shows tool-progress text (fetching cameras, analyzing frames, weather/search) from the stream endpoint.
+Conversations are in memory and reset when the API process stops. The UI stores the conversation id in `sessionStorage` and resumes via `GET /api/conversations/{id}` (New chat creates a fresh id). Each successful or failed chat turn appends a line to `logs/chat_turns.jsonl` under the data directory. `tokens` is summed over every model call in the turn, not just the last one. `chat_with_tools` also returns `model_calls`, `fetched_camera_ids`, and `requested_camera_ids` for a successful turn. While a turn is running, the chat bubble shows tool-progress text (fetching cameras, analyzing frames, weather/search) from the stream endpoint.
 
 ## Run
 

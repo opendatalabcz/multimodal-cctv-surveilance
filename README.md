@@ -67,6 +67,17 @@ uv run cctv-eval --screenshot
 
 `--screenshot` also saves `screenshot.png` from the UI. That needs `make up` and a one-time `uv run playwright install chromium`. The browser asks the question again, and the header's model and verbosity selects save `configs/agent.yaml` for that turn. The runner restores the file afterward. If the browser step fails, the answer files stay and the error is recorded in `result.json`.
 
+### Grading
+
+```bash
+make eval-report
+```
+
+`make eval-report` makes no model calls. It rewrites `outputs/end_to_end_eval/grading.csv` from every `result.json`, with one row per answer. Token counts and `model_calls` cover the whole turn. `selection_precision` and `selection_recall` compare the cameras the answer showed with `expected_cameras` in `configs/eval_questions.yaml`; they stay blank until a question has that list. Fill in `correctness_1_to_5`, `clarity_1_to_5`, and `notes` by hand. Regenerating the sheet keeps those three columns.
+
+- **Correctness (1–5):** 5 means every claim matches the frames the answer showed, and nothing it says is missing from the question's scope. 1 means it describes something the frames do not show.
+- **Clarity (1–5):** 5 means a reader can act on the answer without re-reading it. 1 means it is hard to follow or repeats itself.
+
 ## Tests
 
 ```bash

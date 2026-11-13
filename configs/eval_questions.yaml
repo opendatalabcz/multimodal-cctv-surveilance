@@ -1,12 +1,21 @@
 # Application-evaluation questions. One fresh chat per question, model, and verbosity.
+#
+# expected_cameras lists the camera ids a good answer should draw on. It drives
+# selection_precision and selection_recall in the grading sheet. Leave it out
+# until the set is decided.
 questions:
   - id: charles-bridge-walk
     text: Would you recommend a walk on the Charles Bridge right now?
+    expected_cameras: [charles_bridge_101200, charles_bridge_101201]
   - id: d1-traffic
     text: What is the traffic like when coming from D1 to the center of Prague?
+    # expected_cameras: [] # TODO: choose the cameras that see the D1 approach
   - id: prague-incidents
     text: Are there any crashes or traffic violations visible on the Prague roads?
+    # expected_cameras: [] # TODO: a broad question; decide which cameras count
   - id: japan-airports
     text: Describe the situation at the Japanese airports.
+    expected_cameras: [tokachi_obihiro_live, tokyo_airport_live]
   - id: namibia-animals
     text: Which animals can be seen in the deserts of Namibia? Point out rare animals if any are visible.
+    expected_cameras: [desert_live]

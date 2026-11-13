@@ -3,7 +3,8 @@ from __future__ import annotations
 import argparse
 import sys
 
-from cctv.eval.runner import run_eval
+from cctv.eval.report import write_grading_sheet
+from cctv.eval.runner import default_output_dir, run_eval
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -19,7 +20,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Also save a UI screenshot. Needs make up, and asks the question again in the browser.",
     )
+    parser.add_argument(
+        "--report",
+        action="store_true",
+        help="Only rewrite outputs/end_to_end_eval/grading.csv from existing results. No model calls.",
+    )
     args = parser.parse_args(argv)
+    if args.report:
+        path, rows, skipped = write_grading_sheet(default_output_dir())
+        print(f"{path}: {rows} rows" + (f", {skipped} unreadable skipped" if skipped else ""))
+        return 0
     try:
         summary = run_eval(
             model=args.model,

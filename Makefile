@@ -1,4 +1,4 @@
-.PHONY: help install_dev api ui up run test eval
+.PHONY: help install_dev api ui up run test eval eval-report
 
 FRONTEND := frontend
 
@@ -9,6 +9,7 @@ help:
 	@echo "ui           Start Vite only"
 	@echo "test         Run pytest (mocked HTTP)"
 	@echo "eval         Ask each eval question per model and verbosity"
+	@echo "eval-report  Rewrite outputs/end_to_end_eval/grading.csv (no model calls)"
 
 install_dev:
 	uv sync --group dev
@@ -30,3 +31,6 @@ test:
 
 eval:
 	uv run cctv-eval
+
+eval-report:
+	uv run cctv-eval --report

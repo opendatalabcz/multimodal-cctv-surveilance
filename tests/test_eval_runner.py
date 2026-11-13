@@ -125,6 +125,32 @@ def test_run_writes_answer_images_and_skips_existing(tmp_path, monkeypatch) -> N
     assert calls["n"] == 1
 
 
+def test_result_records_turn_totals_and_camera_sets(tmp_path, monkeypatch) -> None:
+    def whole_turn(conversation, content, **kwargs):
+        updated, result = _ok_turn(conversation, content)
+        result["model_calls"] = 3
+        result["fetched_camera_ids"] = ["charles_bridge_101200", "charles_bridge_101201"]
+        result["requested_camera_ids"] = ["charles_bridge_101200", "charles_bridge_101201"]
+        return updated, result
+
+    monkeypatch.setattr("cctv.eval.runner.run_chat_turn", whole_turn)
+    output = tmp_path / "out"
+    question = _question()
+    run_eval(
+        output_dir=output,
+        model="gpt-4o",
+        question=question.id,
+        config=AgentConfig(),
+        questions=[question],
+    )
+    payload = json.loads((output / "gpt-4o" / "charles-bridge-walk" / "result.json").read_text())
+    assert payload["model_calls"] == 3
+    assert payload["fetched_camera_ids"] == ["charles_bridge_101200", "charles_bridge_101201"]
+    assert payload["requested_camera_ids"] == ["charles_bridge_101200", "charles_bridge_101201"]
+    assert payload["shown_camera_ids"] == ["charles_bridge_101200"]
+    assert payload["expected_camera_ids"] == ["charles_bridge_101200", "charles_bridge_101201"]
+
+
 def test_force_replaces_an_existing_answer(tmp_path, monkeypatch) -> None:
     def changed(conversation, content, **kwargs):
         updated, result = _ok_turn(conversation, content)

@@ -603,6 +603,22 @@ def _frames_from_message(message: dict[str, Any]) -> list[FetchedFrame]:
     return frames
 
 
+def _add_usage(total: dict[str, Any], usage: Any) -> None:
+    """Sum token counts, including nested detail maps, across model calls."""
+    if not isinstance(usage, dict):
+        return
+    for key, value in usage.items():
+        if isinstance(value, dict):
+            _add_usage(total.setdefault(key, {}), value)
+        elif isinstance(value, int | float) and not isinstance(value, bool):
+            total[key] = total.get(key, 0) + value
+
+
+def _requested_cameras(args: dict[str, Any]) -> list[str]:
+    """Camera ids or names a get_camera_image call asked for, before any check."""
+    return _string_list(args.get("cameras")) + _string_list(args.get("camera"))
+
+
 def _stored_frames(messages: list[dict[str, Any]]) -> list[FetchedFrame]:
     """Frame-refs still attached to the transcript, oldest first."""
     frames: list[FetchedFrame] = []
@@ -875,6 +891,9 @@ def chat_with_tools(
         conversation.append({"role": "system", "content": system_prompt})
     conversation.extend(history)
     fetched_frames: list[FetchedFrame] = []
+    requested_cameras: list[str] = []
+    usage_total: dict[str, Any] = {}
+    model_calls = 0
     tool_rounds = 0
     force_submit = False
     rejected_prose: dict[str, Any] | None = None
@@ -941,6 +960,8 @@ def chat_with_tools(
                 )
                 message = result["choices"][0]["message"]
             tool_calls = message.get("tool_calls") or []
+            _add_usage(usage_total, result.get("usage"))
+            model_calls += 1
 
             if not tool_calls:
                 if force_submit or tool_rounds >= max_tool_rounds:
@@ -969,7 +990,7 @@ def chat_with_tools(
                 answer, images, followups = submission
                 if rejected_prose is not None:
                     conversation = [item for item in conversation if item is not rejected_prose]
-                return _finalize_submission(
+                final = _finalize_submission(
                     answer,
                     result,
                     messages=conversation,
@@ -980,6 +1001,14 @@ def chat_with_tools(
                     config=config,
                     annotations=annotations,
                 )
+                # The finalizer only sees the last response; report the whole turn.
+                final["usage"] = usage_total
+                final["model_calls"] = model_calls
+                final["fetched_camera_ids"] = _string_list(
+                    [frame.camera_id for frame in fetched_frames]
+                )
+                final["requested_camera_ids"] = _string_list(requested_cameras)
+                return final
             if force_submit:
                 return {"success": False, "error": _NO_SUBMISSION}
 
@@ -988,6 +1017,8 @@ def chat_with_tools(
             for tool_call in tool_calls:
                 name = _tool_call_name(tool_call)
                 args = _tool_call_arguments(tool_call)
+                if name == "get_camera_image":
+                    requested_cameras.extend(_requested_cameras(args))
                 if name == SUBMIT_ANSWER:
                     conversation.append(_tool_error_message(tool_call, wait_for_tools_error()))
                     continue
