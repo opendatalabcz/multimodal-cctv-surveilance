@@ -9,13 +9,35 @@ questions:
     expected_cameras: [charles_bridge_101200, charles_bridge_101201]
   - id: d1-traffic
     text: What is the traffic like when coming from D1 to the center of Prague?
-    # expected_cameras: [] # TODO: choose the cameras that see the D1 approach
+    expected_cameras: [budejovicka_500002, nuselak_404032, nuselak_404033, jecna_202020]
   - id: prague-incidents
     text: Are there any crashes or traffic violations visible on the Prague roads?
-    # expected_cameras: [] # TODO: a broad question; decide which cameras count
+    # Prague cameras that see a road. Charles Bridge and Mariánské náměstí are left out.
+    expected_cameras:
+      [
+        holesovicky_500066,
+        holesovicky_500067,
+        budejovicka_500002,
+        nuselak_404032,
+        nuselak_404033,
+        barandak_500473,
+        barandak_500475,
+        hybernska_101048,
+        belocerekevska_410034,
+        jecna_202020,
+        argentinska_107009,
+        argentinska_107033,
+        argentinska_500065,
+        strahovsky_tunel_500232,
+        strahovsky_tunel_500263,
+        tunel_mrazovka_500336,
+        tunel_mrazovka_500372,
+        namesti_kinskych_500508,
+        28ff6c75-34c8-4cf2-a456-007a6e13b96e,
+      ]
   - id: japan-airports
     text: Describe the situation at the Japanese airports.
     expected_cameras: [tokachi_obihiro_live, tokyo_airport_live]
   - id: namibia-animals
     text: Which animals can be seen in the deserts of Namibia? Point out rare animals if any are visible.
-    expected_cameras: [desert_live]
+    expected_cameras: [desert_live, small_pond_live, river_live]

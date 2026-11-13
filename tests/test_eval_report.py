@@ -38,8 +38,8 @@ def _rows(path: Path) -> list[dict[str, str]]:
 
 
 def test_sheet_has_selection_metrics_and_token_columns(tmp_path: Path) -> None:
-    _write_result(tmp_path, "gpt-5.6-luna", "low", "charles-bridge-walk")
-    _write_result(tmp_path, "gpt-4o", None, "charles-bridge-walk", expected_camera_ids=None)
+    _write_result(tmp_path, "gpt-5.6-luna", "low", "walk")
+    _write_result(tmp_path, "gpt-4o", None, "walk", expected_camera_ids=None)
 
     target, count, skipped = write_grading_sheet(tmp_path)
 
@@ -51,7 +51,7 @@ def test_sheet_has_selection_metrics_and_token_columns(tmp_path: Path) -> None:
     assert luna["verbosity"] == "low"
     assert luna["total_tokens"] == "12"
     assert luna["fetched_camera_ids"] == "a;b;c"
-    assert luna["answer_path"] == "gpt-5.6-luna/low/charles-bridge-walk"
+    assert luna["answer_path"] == "gpt-5.6-luna/low/walk"
     # shown {a, c} against expected {a, b}: one hit out of two shown, one out of two expected.
     assert luna["selection_precision"] == "0.5"
     assert luna["selection_recall"] == "0.5"
@@ -62,7 +62,7 @@ def test_sheet_has_selection_metrics_and_token_columns(tmp_path: Path) -> None:
 
 
 def test_regenerating_keeps_manual_scores(tmp_path: Path) -> None:
-    _write_result(tmp_path, "gpt-4o", None, "japan-airports")
+    _write_result(tmp_path, "gpt-4o", None, "airports")
     target, _, _ = write_grading_sheet(tmp_path)
     rows = _rows(target)
     rows[0]["correctness_1_to_5"] = "4"
@@ -73,21 +73,39 @@ def test_regenerating_keeps_manual_scores(tmp_path: Path) -> None:
         writer.writeheader()
         writer.writerows(rows)
 
-    _write_result(tmp_path, "gpt-4o", None, "namibia-animals")
+    _write_result(tmp_path, "gpt-4o", None, "animals")
     write_grading_sheet(tmp_path)
 
     by_question = {row["question_id"]: row for row in _rows(target)}
-    kept = by_question["japan-airports"]
+    kept = by_question["airports"]
     assert {column: kept[column] for column in MANUAL_COLUMNS} == {
         "correctness_1_to_5": "4",
         "clarity_1_to_5": "5",
         "notes": "Missed the second airport.",
     }
-    assert by_question["namibia-animals"]["correctness_1_to_5"] == ""
+    assert by_question["animals"]["correctness_1_to_5"] == ""
+
+
+def test_question_file_overrides_a_stale_expected_set(tmp_path: Path) -> None:
+    _write_result(
+        tmp_path,
+        "gpt-4o",
+        None,
+        "namibia-animals",
+        expected_camera_ids=["desert_live"],
+        shown_camera_ids=["desert_live"],
+    )
+
+    write_grading_sheet(tmp_path)
+
+    row = _rows(tmp_path / "grading.csv")[0]
+    assert row["expected_camera_ids"] == "desert_live;small_pond_live;river_live"
+    assert row["selection_precision"] == "1.0"
+    assert row["selection_recall"] == "0.33"
 
 
 def test_unreadable_result_is_skipped(tmp_path: Path) -> None:
-    _write_result(tmp_path, "gpt-4o", None, "d1-traffic")
+    _write_result(tmp_path, "gpt-4o", None, "traffic")
     broken = tmp_path / "gpt-4o" / "prague-incidents"
     broken.mkdir(parents=True)
     (broken / "result.json").write_text("{not json", encoding="utf-8")
@@ -134,5 +152,35 @@ def test_shipped_questions_have_the_known_expected_sets() -> None:
         "charles_bridge_101201",
     )
     assert by_id["japan-airports"].expected_cameras == ("tokachi_obihiro_live", "tokyo_airport_live")
-    assert by_id["d1-traffic"].expected_cameras is None
-    assert by_id["prague-incidents"].expected_cameras is None
+    assert by_id["namibia-animals"].expected_cameras == (
+        "desert_live",
+        "small_pond_live",
+        "river_live",
+    )
+    assert by_id["d1-traffic"].expected_cameras == (
+        "budejovicka_500002",
+        "nuselak_404032",
+        "nuselak_404033",
+        "jecna_202020",
+    )
+    assert by_id["prague-incidents"].expected_cameras == (
+        "holesovicky_500066",
+        "holesovicky_500067",
+        "budejovicka_500002",
+        "nuselak_404032",
+        "nuselak_404033",
+        "barandak_500473",
+        "barandak_500475",
+        "hybernska_101048",
+        "belocerekevska_410034",
+        "jecna_202020",
+        "argentinska_107009",
+        "argentinska_107033",
+        "argentinska_500065",
+        "strahovsky_tunel_500232",
+        "strahovsky_tunel_500263",
+        "tunel_mrazovka_500336",
+        "tunel_mrazovka_500372",
+        "namesti_kinskych_500508",
+        "28ff6c75-34c8-4cf2-a456-007a6e13b96e",
+    )
