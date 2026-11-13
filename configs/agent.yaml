@@ -60,4 +60,4 @@ models:
     - high
     default: medium
     locked: false
-model: gpt-4o
+model: gpt-6-astra

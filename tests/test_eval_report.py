@@ -52,11 +52,16 @@ def test_sheet_has_selection_metrics_and_token_columns(tmp_path: Path) -> None:
     assert luna["total_tokens"] == "12"
     assert luna["fetched_camera_ids"] == "a;b;c"
     assert luna["answer_path"] == "gpt-5.6-luna/low/walk"
+    # fetched {a, b, c} against expected {a, b}: both expected were checked, one extra fetched.
+    assert luna["retrieval_precision"] == "0.67"
+    assert luna["retrieval_recall"] == "1.0"
     # shown {a, c} against expected {a, b}: one hit out of two shown, one out of two expected.
     assert luna["selection_precision"] == "0.5"
     assert luna["selection_recall"] == "0.5"
     locked = rows["gpt-4o"]
     assert locked["verbosity"] == ""
+    assert locked["retrieval_precision"] == ""
+    assert locked["retrieval_recall"] == ""
     assert locked["selection_precision"] == ""
     assert locked["selection_recall"] == ""
 

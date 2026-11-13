@@ -73,7 +73,7 @@ uv run cctv-eval --screenshot
 make eval-report
 ```
 
-`make eval-report` makes no model calls. It rewrites `outputs/end_to_end_eval/grading.csv` from every `result.json`, with one row per answer. Token counts and `model_calls` cover the whole turn. `selection_precision` and `selection_recall` compare the cameras the answer showed with `expected_cameras` in `configs/eval_questions.yaml`. Rewriting the sheet reads that file again, so changing a list updates the scores without another model run. A question with no list stays blank. Fill in `correctness_1_to_5`, `clarity_1_to_5`, and `notes` by hand. Regenerating the sheet keeps those three columns.
+`make eval-report` makes no model calls. It rewrites `outputs/end_to_end_eval/grading.csv` from every `result.json`, with one row per answer. Token counts and `model_calls` cover the whole turn. `retrieval_precision` and `retrieval_recall` compare the cameras the model fetched during the turn with `expected_cameras` in `configs/eval_questions.yaml`. `selection_precision` and `selection_recall` do the same for the cameras the answer showed. Rewriting the sheet reads that file again, so changing a list updates the scores without another model run. A question with no list stays blank. Fill in `correctness_1_to_5`, `clarity_1_to_5`, and `notes` by hand. Regenerating the sheet keeps those three columns.
 
 - **Correctness (1–5):** 5 means every claim matches the frames the answer showed, and nothing it says is missing from the question's scope. 1 means it describes something the frames do not show.
 - **Clarity (1–5):** 5 means a reader can act on the answer without re-reading it. 1 means it is hard to follow or repeats itself.

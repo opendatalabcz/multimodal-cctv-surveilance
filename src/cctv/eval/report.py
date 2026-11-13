@@ -29,6 +29,8 @@ COLUMNS = [
     "fetched_camera_ids",
     "shown_camera_ids",
     "expected_camera_ids",
+    "retrieval_precision",
+    "retrieval_recall",
     "selection_precision",
     "selection_recall",
     *MANUAL_COLUMNS,
@@ -92,15 +94,11 @@ def _row(
 ) -> dict[str, Any]:
     usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
     shown = _ids(data.get("shown_camera_ids"))
+    fetched = _ids(data.get("fetched_camera_ids"))
     question_id = str(data.get("question_id") or "")
     expected = expected_by_id.get(question_id, data.get("expected_camera_ids"))
-    precision: float | str = ""
-    recall: float | str = ""
-    if expected:
-        expected_ids = _ids(expected)
-        hits = len(set(shown) & set(expected_ids))
-        precision = round(hits / len(shown), 2) if shown else 0.0
-        recall = round(hits / len(expected_ids), 2)
+    retrieval_precision, retrieval_recall = _precision_recall(fetched, expected)
+    selection_precision, selection_recall = _precision_recall(shown, expected)
     screenshot = data.get("screenshot")
     return {
         "model": data.get("model") or "",
@@ -116,11 +114,26 @@ def _row(
         "fetched_camera_ids": ";".join(_ids(data.get("fetched_camera_ids"))),
         "shown_camera_ids": ";".join(shown),
         "expected_camera_ids": ";".join(_ids(expected)),
-        "selection_precision": precision,
-        "selection_recall": recall,
+        "retrieval_precision": retrieval_precision,
+        "retrieval_recall": retrieval_recall,
+        "selection_precision": selection_precision,
+        "selection_recall": selection_recall,
         "answer_path": relative_folder.as_posix(),
         "screenshot": f"{relative_folder.as_posix()}/{screenshot}" if screenshot else "",
     }
+
+
+def _precision_recall(picked: list[str], expected: Any) -> tuple[float | str, float | str]:
+    """Share of ``picked`` that is expected, and share of expected that was picked.
+
+    Blank when the question has no expected set yet.
+    """
+    expected_ids = _ids(expected)
+    if not expected_ids:
+        return "", ""
+    hits = len(set(picked) & set(expected_ids))
+    precision = round(hits / len(set(picked)), 2) if picked else 0.0
+    return precision, round(hits / len(set(expected_ids)), 2)
 
 
 def _ids(value: Any) -> list[str]:
