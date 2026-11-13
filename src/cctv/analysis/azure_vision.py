@@ -603,6 +603,14 @@ def _frames_from_message(message: dict[str, Any]) -> list[FetchedFrame]:
     return frames
 
 
+def _stored_frames(messages: list[dict[str, Any]]) -> list[FetchedFrame]:
+    """Frame-refs still attached to the transcript, oldest first."""
+    frames: list[FetchedFrame] = []
+    for message in messages:
+        frames.extend(_frames_from_message(message))
+    return frames
+
+
 def _has_visual_payload(message: dict[str, Any]) -> bool:
     content = message.get("content")
     if not isinstance(content, list):
@@ -788,7 +796,11 @@ def _finalize_submission(
     config: AzureOpenAIConfig,
     annotations: bool = False,
 ) -> dict[str, Any]:
-    presented = select_presented_images(fetched_frames, images)
+    # This turn's fetches come last so a fresh still wins over the one already on screen.
+    presented = select_presented_images(
+        [*_stored_frames(messages), *fetched_frames],
+        images,
+    )
     display_paths = [item.frame.path for item in presented]
     message = {"role": "assistant", "content": answer}
     stored = list(messages)

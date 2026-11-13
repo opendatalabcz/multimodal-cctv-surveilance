@@ -858,6 +858,191 @@ def test_second_fetch_stubs_previous_frames() -> None:
     assert image_batches == [["/tmp/cam_c.jpg"]]
 
 
+def _submit_payload(answer: str, images: list[dict]) -> dict:
+    return {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call_submit",
+                "type": "function",
+                "function": {
+                    "name": "submit_answer",
+                    "arguments": json_mod.dumps(
+                        {"answer": answer, "images": images, "followups": []}
+                    ),
+                },
+            }
+        ],
+    }
+
+
+def test_follow_up_shows_annotations_on_a_frame_already_shown() -> None:
+    """A later turn can mark the still already on screen without fetching again."""
+    round_index = {"n": 0}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        round_index["n"] += 1
+        n = round_index["n"]
+        response = MagicMock()
+        if n == 1:
+            response.json.return_value = {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "call_cam_a",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "get_camera_image",
+                                        "arguments": json_mod.dumps({"camera": "cam_a"}),
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                ],
+                "usage": {},
+            }
+        elif n == 2:
+            response.json.return_value = {
+                "choices": [{"message": _submit_message("Yellow cars.", ["cam_a"])}],
+                "usage": {},
+            }
+        else:
+            response.json.return_value = {
+                "choices": [
+                    {
+                        "message": _submit_payload(
+                            "I marked the bus.",
+                            [
+                                {
+                                    "camera_id": "cam_a",
+                                    "annotations": [
+                                        {
+                                            "type": "box",
+                                            "label": "Bus",
+                                            "points": [[770, 580], [999, 999]],
+                                        }
+                                    ],
+                                },
+                                {"camera_id": "cam_missing", "annotations": []},
+                            ],
+                        )
+                    }
+                ],
+                "usage": {},
+            }
+        return response
+
+    def fake_execute(name, arguments):
+        camera = arguments["camera"]
+        return {
+            "tool_content": '{"success": true}',
+            "image_paths": [f"/tmp/{camera}.jpg"],
+            "image_labels": [{"path": f"/tmp/{camera}.jpg", "camera_id": camera}],
+        }
+
+    with (
+        patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post),
+        patch("cctv.analysis.azure_vision.execute_tool", side_effect=fake_execute),
+        patch(
+            "cctv.analysis.azure_vision._vision_image_part",
+            side_effect=lambda path: {"type": "image_url", "image_url": {"url": str(path)}},
+        ),
+    ):
+        first = chat_with_tools(
+            [{"role": "user", "content": "Show the yellow cars."}],
+            config=_fake_config(),
+        )
+        history = list(first["messages"])
+        history.append({"role": "user", "content": "Mark the bus."})
+        second = chat_with_tools(history, config=_fake_config())
+
+    assert second["success"] is True
+    assert second["tool_rounds"] == 0
+    assert second["image_count"] == 1
+    assert second["images"][0]["camera_id"] == "cam_a"
+    assert second["images"][0]["path"].endswith("cam_a.jpg")
+    assert second["images"][0]["annotations"] == [
+        {"type": "box", "label": "Bus", "points": [[770, 580], [999, 999]]}
+    ]
+
+
+def test_fresh_fetch_wins_over_the_still_already_shown() -> None:
+    round_index = {"n": 0}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        round_index["n"] += 1
+        n = round_index["n"]
+        response = MagicMock()
+        if n in {1, 3}:
+            camera = "cam_a"
+            response.json.return_value = {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": f"call_{n}",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "get_camera_image",
+                                        "arguments": json_mod.dumps({"camera": camera}),
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                ],
+                "usage": {},
+            }
+        elif n == 2:
+            response.json.return_value = {
+                "choices": [{"message": _submit_message("First still.", ["cam_a"])}],
+                "usage": {},
+            }
+        else:
+            response.json.return_value = {
+                "choices": [{"message": _submit_message("Fresh still.", ["cam_a"])}],
+                "usage": {},
+            }
+        return response
+
+    def fake_execute(name, arguments):
+        camera = arguments["camera"]
+        path = "/tmp/cam_a.jpg" if round_index["n"] <= 2 else "/tmp/cam_a_fresh.jpg"
+        return {
+            "tool_content": '{"success": true}',
+            "image_paths": [path],
+            "image_labels": [{"path": path, "camera_id": camera}],
+        }
+
+    with (
+        patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post),
+        patch("cctv.analysis.azure_vision.execute_tool", side_effect=fake_execute),
+        patch(
+            "cctv.analysis.azure_vision._vision_image_part",
+            side_effect=lambda path: {"type": "image_url", "image_url": {"url": str(path)}},
+        ),
+    ):
+        first = chat_with_tools(
+            [{"role": "user", "content": "Show cam_a"}],
+            config=_fake_config(),
+        )
+        history = list(first["messages"])
+        history.append({"role": "user", "content": "Fetch it again."})
+        second = chat_with_tools(history, config=_fake_config())
+
+    assert second["image_count"] == 1
+    assert second["images"][0]["path"].endswith("cam_a_fresh.jpg")
+
+
 def test_chat_completions_omit_default_reasoning_and_verbosity() -> None:
     config = AzureOpenAIConfig(api_key="k", endpoint="https://example.test", model="gpt-4o")
     default_payload = _chat_completion_payload(

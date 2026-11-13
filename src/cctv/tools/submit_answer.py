@@ -30,15 +30,18 @@ SUBMIT_ANSWER_TOOL: dict[str, Any] = {
                     "type": "array",
                     "description": (
                         "Frames to show, in display order. Use an empty list when "
-                        "the answer shows no frames. Only include cameras fetched "
-                        "in this turn."
+                        "the answer shows no frames. Include a camera fetched in "
+                        "this turn, or one still attached from the latest shown stills."
                     ),
                     "items": {
                         "type": "object",
                         "properties": {
                             "camera_id": {
                                 "type": "string",
-                                "description": "Configured id of a frame fetched in this turn.",
+                                "description": (
+                                    "Configured id of a frame fetched in this turn, "
+                                    "or of a still already on screen."
+                                ),
                             },
                             "annotations": {
                                 "type": "array",

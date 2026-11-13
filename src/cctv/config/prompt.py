@@ -277,7 +277,8 @@ def build_system_prompt(config: AgentConfig) -> str:
             "Put only the visible markdown in answer. Do not mention submit_answer there.",
             "List every camera the user should see, and only those, in images using configured ids. "
             "Pass an empty images list when you show no frames. "
-            "The user only sees the images you list, not every frame you fetched. ",
+            "The user only sees the images you list, not every frame you fetched. "
+            "You may list a frame still attached from the latest shown stills without fetching it again. ",
             annotation_guidance(config.tools.annotations),
         ]
     )

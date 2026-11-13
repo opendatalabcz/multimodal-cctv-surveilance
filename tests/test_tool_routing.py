@@ -88,6 +88,7 @@ def test_prompt_camera_first_and_forecast_qualification() -> None:
     assert "Do not use web_search as a weather API" in prompt
     assert "submit_answer" in prompt
     assert "The user only sees the images you list" in prompt
+    assert "still attached from the latest shown stills" in prompt
     assert "Leave annotations empty on every image" in prompt
     assert "```cite" not in prompt
     assert "weather (get_weather): enabled" in prompt
