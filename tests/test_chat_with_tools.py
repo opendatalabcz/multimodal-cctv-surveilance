@@ -1579,3 +1579,97 @@ def test_chat_with_tools_missing_config() -> None:
     result = chat_with_tools([{"role": "user", "content": "Hello"}], config=config)
     assert result["success"] is False
     assert "configuration missing" in result["error"]
+
+
+def _fetch_one_camera_message() -> dict:
+    return {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call_fetch",
+                "type": "function",
+                "function": {
+                    "name": "get_camera_image",
+                    "arguments": '{"cameras": ["cam_a"]}',
+                },
+            }
+        ],
+    }
+
+
+def _run_annotation_turn(submissions: list[list[dict]]) -> tuple[dict, list[dict]]:
+    """Fetch cam_a, then answer with each submission in turn. Returns the result and POST bodies."""
+    messages = [_fetch_one_camera_message()] + [
+        _submit_payload("Person in red.", images) for images in submissions
+    ]
+    responses = [{"choices": [{"message": message}], "usage": {}} for message in messages]
+    sent: list[dict] = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        sent.append(json)
+        response = MagicMock()
+        response.json.return_value = responses.pop(0)
+        return response
+
+    def fake_execute(name, arguments):
+        return {
+            "tool_content": '{"success": true}',
+            "image_paths": ["/tmp/cam_a.jpg"],
+            "image_labels": [{"path": "/tmp/cam_a.jpg", "camera_id": "cam_a"}],
+        }
+
+    with (
+        patch("cctv.analysis.azure_vision.requests.post", side_effect=fake_post),
+        patch("cctv.analysis.azure_vision.execute_tool", side_effect=fake_execute),
+        patch(
+            "cctv.analysis.azure_vision._vision_image_part",
+            side_effect=lambda path: {"type": "image_url", "image_url": {"url": str(path)}},
+        ),
+    ):
+        result = chat_with_tools(
+            [{"role": "user", "content": "Is anyone in red?"}],
+            config=_fake_config(),
+            annotations=True,
+        )
+    return result, sent
+
+
+_DECIMAL_BOX = [
+    {"camera_id": "cam_a", "annotations": [{"type": "box", "points": [[0.4, 0.5], [0.6, 0.7]]}]}
+]
+_GOOD_BOX = [
+    {"camera_id": "cam_a", "annotations": [{"type": "box", "points": [[400, 500], [600, 700]]}]}
+]
+
+
+def test_invalid_annotations_are_sent_back_once_then_shown() -> None:
+    result, sent = _run_annotation_turn([_DECIMAL_BOX, _GOOD_BOX])
+
+    assert result["success"] is True
+    assert result["annotation_retried"] is True
+    assert result["annotations_dropped"] == 0
+    assert result["images"][0]["annotations"] == [
+        {"type": "box", "points": [[400, 500], [600, 700]]}
+    ]
+    assert len(sent) == 3
+    errors = [m["content"] for m in sent[2]["messages"] if m.get("role") == "tool"]
+    assert any("cam_a annotation 1" in text and "whole numbers" in text for text in errors)
+
+
+def test_invalid_annotations_are_dropped_after_the_one_retry() -> None:
+    result, sent = _run_annotation_turn([_DECIMAL_BOX, _DECIMAL_BOX])
+
+    assert result["success"] is True
+    assert result["annotation_retried"] is True
+    assert result["annotations_dropped"] == 1
+    assert result["images"][0]["annotations"] == []
+    assert len(sent) == 3
+
+
+def test_valid_annotations_are_not_retried() -> None:
+    result, sent = _run_annotation_turn([_GOOD_BOX])
+
+    assert result["annotation_retried"] is False
+    assert result["annotations_dropped"] == 0
+    assert len(sent) == 2

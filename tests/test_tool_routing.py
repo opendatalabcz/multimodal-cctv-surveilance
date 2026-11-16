@@ -116,7 +116,9 @@ def test_annotation_guidance_follows_toggle() -> None:
     assert "Leave annotations empty on every image" in off_prompt
     assert "Do not draw highlights" in off_prompt
     assert "Add a box" not in off_prompt
-    assert "always add a box" in on_prompt
+    assert "about specific objects in any way" in on_prompt
+    assert "add a box, point, line, or polygon for each such object" in on_prompt
+    assert "Never use decimals or pixel values" in on_prompt
     assert "do not mark a frame to illustrate a general description" in on_prompt
     assert "do not guess a region" in on_prompt
     assert "A box is two opposite corners" in on_prompt

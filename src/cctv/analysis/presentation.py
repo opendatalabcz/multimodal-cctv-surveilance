@@ -153,28 +153,59 @@ def _annotations(value: Any) -> list[ImageAnnotation]:
     return kept
 
 
+def annotation_problems(images: Any) -> list[str]:
+    """Say why each submitted annotation would be dropped. Empty when all are usable."""
+    if not isinstance(images, list):
+        return []
+    problems: list[str] = []
+    for item in images:
+        if not isinstance(item, dict):
+            continue
+        raw = item.get("annotations")
+        if raw is None:
+            continue
+        camera = item.get("camera_id")
+        name = camera.strip() if isinstance(camera, str) and camera.strip() else "image"
+        if not isinstance(raw, list):
+            problems.append(f"{name}: annotations must be a list")
+            continue
+        for index, value in enumerate(raw, start=1):
+            _, problem = _check_annotation(value)
+            if problem:
+                problems.append(f"{name} annotation {index}: {problem}")
+    return problems
+
+
 def _annotation(value: Any) -> ImageAnnotation | None:
+    return _check_annotation(value)[0]
+
+
+def _check_annotation(value: Any) -> tuple[ImageAnnotation | None, str | None]:
     if not isinstance(value, dict):
-        return None
+        return None, "must be an object with type and points"
     kind = value.get("type")
     if not isinstance(kind, str) or kind not in _POINT_LIMITS:
-        return None
+        return None, f"type must be box, point, line, or polygon (got {kind!r})"
     raw_points = value.get("points")
     if not isinstance(raw_points, list):
-        return None
+        return None, "points must be a list of [x, y] pairs"
     points: list[tuple[int, int]] = []
-    for raw in raw_points:
+    for index, raw in enumerate(raw_points, start=1):
         point = _point(raw)
         if point is None:
-            return None
+            return None, (
+                f"point {index} must be [x, y] with whole numbers from 0 to {COORD_MAX} "
+                f"(got {repr(raw)[:60]})"
+            )
         points.append(point)
     low, high = _POINT_LIMITS[kind]
     if not low <= len(points) <= high:
-        return None
+        wanted = str(low) if low == high else f"{low} to {high}"
+        return None, f"a {kind} needs {wanted} points (got {len(points)})"
     label = _label(value.get("label"))
     if label is _BAD_LABEL:
-        return None
-    return ImageAnnotation(type=kind, points=tuple(points), label=label)
+        return None, f"label must be a string of at most {MAX_LABEL_CHARS} characters"
+    return ImageAnnotation(type=kind, points=tuple(points), label=label), None
 
 
 def _point(value: Any) -> tuple[int, int] | None:

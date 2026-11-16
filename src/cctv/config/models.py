@@ -77,9 +77,9 @@ DEFAULT_MAX_IMAGES_PER_REQUEST = 32
 class ModelOption(BaseModel):
     """One deployment the chat UI can select.
 
-    ``provider`` is ``azure`` for every shipped option. A later open-source
-    model would use another provider and its own client; the chat loop rejects
-    unknown providers instead of calling Azure.
+    ``provider`` is ``azure`` or ``openrouter``. Each provider has its own
+    client in ``cctv.utils``; the chat loop rejects unknown providers instead
+    of calling Azure.
 
     ``transport`` is ``chat_completions`` or ``responses``. GPT-6 Astra tool
     calls require the Responses API.

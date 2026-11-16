@@ -12,7 +12,7 @@ from cctv.analysis.azure_vision import analyze_images
 from cctv.config.agent_yaml import load_agent_config, save_agent_config
 from cctv.config.models import CameraAnalysis, CameraConfig, SceneTag
 from cctv.tools.get_image import execute_get_image
-from cctv.utils.azure import AzureOpenAIConfig, resolve_azure_config
+from cctv.utils.providers import ChatConfig, resolve_model_config
 from cctv.utils.paths import data_root, images_dir
 
 SCENE_TAG_VALUES = tuple(SceneTag.__args__)
@@ -33,7 +33,7 @@ def source_fingerprint(source: str) -> str:
 def analyze_camera_metadata(
     camera_id: str,
     *,
-    azure_config: AzureOpenAIConfig | None = None,
+    azure_config: ChatConfig | None = None,
 ) -> CameraConfig:
     config = load_agent_config()
     camera = next((item for item in config.cameras if item.id.lower() == camera_id.lower()), None)
@@ -52,7 +52,7 @@ def analyze_camera_metadata(
 
     if azure_config is None:
         try:
-            azure_config = resolve_azure_config(config)
+            azure_config = resolve_model_config(config)
         except ValueError as exc:
             raise RuntimeError(str(exc)) from exc
 

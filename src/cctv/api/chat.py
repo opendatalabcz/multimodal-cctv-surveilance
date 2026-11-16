@@ -21,7 +21,8 @@ from cctv.config.models import (
 from cctv.config.prompt import build_system_prompt
 from cctv.observability.tracing import start_turn
 from cctv.tools.registry import tool_schemas_for_config
-from cctv.utils.azure import AzureOpenAIConfig, resolve_azure_config
+from cctv.utils.azure import AzureOpenAIConfig
+from cctv.utils.providers import resolve_model_config
 
 MAX_TOOL_ROUNDS = 16
 
@@ -103,17 +104,17 @@ def run_chat_turn(
     system_prompt = build_system_prompt(agent_config)
     active_tools = tool_schemas_for_config(agent_config.tools)
     if config is not None:
-        azure_config = replace(config, model=agent_config.model) if model is not None else config
+        chat_config = replace(config, model=agent_config.model) if model is not None else config
     else:
         try:
-            azure_config = resolve_azure_config(agent_config)
+            chat_config = resolve_model_config(agent_config)
         except ValueError as exc:
             return conversation, {"success": False, "error": str(exc)}
 
     conversation.messages.append(ChatMessage(role="user", content=user_content))
     conversation.azure_messages.append({"role": "user", "content": user_content})
 
-    selected_model = azure_config.model or ""
+    selected_model = chat_config.model or ""
     option = model_by_id(agent_config.models, selected_model)
     transport = option.transport if option is not None else "chat_completions"
     max_images = (
@@ -145,7 +146,7 @@ def run_chat_turn(
     ) as turn:
         result = chat_with_tools(
             conversation.azure_messages,
-            config=azure_config,
+            config=chat_config,
             system_prompt=system_prompt,
             tools=active_tools,
             max_tool_rounds=MAX_TOOL_ROUNDS,
@@ -183,7 +184,7 @@ def run_chat_turn(
             role="assistant",
             content=assistant_content,
             images=_presented_images(result.get("images") or []),
-            model=result.get("model") or azure_config.model,
+            model=result.get("model") or chat_config.model,
         )
     )
     conversation.suggestions = list(result.get("followups") or [])
@@ -215,6 +216,8 @@ def _write_turn_log(
             "tool_names": tool_names_from_messages(result.get("messages") or conversation.azure_messages),
             "images": _logged_images(result.get("images") or []),
             "image_count": result.get("image_count"),
+            "annotation_retried": result.get("annotation_retried"),
+            "annotations_dropped": result.get("annotations_dropped"),
             "tokens": usage,
             "duration_ms": duration_ms,
             "model": result.get("model"),

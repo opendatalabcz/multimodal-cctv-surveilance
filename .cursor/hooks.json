@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeReadFile": [
+      {
+        "command": ".cursor/hooks/block-env.sh",
+        "matcher": "Read",
+        "failClosed": true
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": ".cursor/hooks/block-env.sh",
+        "failClosed": true
+      }
+    ]
+  }
+}

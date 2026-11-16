@@ -147,3 +147,28 @@ def test_frames_from_tool_result_falls_back_to_arguments() -> None:
         {"cameras": ["cam_a", "cam_b"]},
     )
     assert [frame.camera_id for frame in frames] == ["cam_a", "cam_b"]
+
+
+def test_annotation_problems_name_each_invalid_shape() -> None:
+    from cctv.analysis.presentation import annotation_problems
+
+    images = [
+        {
+            "camera_id": "cam_a",
+            "annotations": [
+                {"type": "box", "points": [[0.4, 0.5], [0.6, 0.7]]},
+                {"type": "arrow", "points": [[1, 1]]},
+                {"type": "box", "points": [[1, 1], [2, 2], [3, 3]]},
+                {"type": "point", "points": [[10, 10]]},
+            ],
+        }
+    ]
+
+    problems = annotation_problems(images)
+
+    assert len(problems) == 3
+    assert "cam_a annotation 1" in problems[0] and "whole numbers from 0 to 1000" in problems[0]
+    assert "arrow" in problems[1]
+    assert "a box needs 2 points (got 3)" in problems[2]
+    assert annotation_problems([{"camera_id": "cam_a", "annotations": []}]) == []
+    assert annotation_problems("not a list") == []

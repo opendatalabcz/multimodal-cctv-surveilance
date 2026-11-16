@@ -13,6 +13,7 @@ import requests
 import cctv.tools  # noqa: F401  — register default tools
 from cctv.analysis.presentation import (
     FetchedFrame,
+    annotation_problems,
     frames_from_tool_result,
     normalize_followups,
     select_presented_images,
@@ -32,11 +33,14 @@ from cctv.tools.registry import default_tool_schemas, execute_tool
 from cctv.tools.submit_answer import (
     SUBMIT_ANSWER,
     SUBMIT_ANSWER_TOOL,
+    annotation_error,
     empty_answer_error,
     wait_for_tools_error,
 )
 from cctv.utils.azure import AzureOpenAIConfig, load_azure_openai_config
+from cctv.utils.openrouter import OpenRouterConfig
 from cctv.utils.paths import data_root
+from cctv.utils.providers import ChatConfig
 
 CCTV_FRAMES_TYPE = "cctv_frames"
 ProgressCallback = Callable[[dict[str, Any]], None]
@@ -112,13 +116,13 @@ def _relative_to_data_root(path: str | Path) -> str:
 def analyze_images(
     image_paths: list[str | Path],
     prompt: str,
-    config: AzureOpenAIConfig | None = None,
+    config: ChatConfig | None = None,
     *,
     max_tokens: int = 1500,
 ) -> dict:
-    """Send one or more JPEG images plus a prompt to Azure OpenAI vision.
+    """Send one or more JPEG images plus a prompt to the selected vision model.
 
-    ``max_tokens`` is sent as ``max_completion_tokens``.
+    ``max_tokens`` is sent as ``max_completion_tokens`` (or ``max_tokens`` on OpenRouter).
     """
     config = config or load_azure_openai_config()
     if not config.is_configured or not config.api_url:
@@ -144,7 +148,7 @@ def analyze_images(
     payload: dict = {
         "model": config.model,
         "messages": [{"role": "user", "content": content}],
-        "max_completion_tokens": max_tokens,
+        **_token_limit_field(config, max_tokens),
     }
     try:
         names = [Path(path).name for path in image_paths]
@@ -187,9 +191,16 @@ def analyze_images(
         return {"success": False, "error": f"Unexpected error: {exc}"}
 
 
+def _token_limit_field(config: ChatConfig, max_tokens: int) -> dict[str, int]:
+    # Azure takes max_completion_tokens. OpenRouter's free endpoints take max_tokens only.
+    if isinstance(config, OpenRouterConfig):
+        return {"max_tokens": max_tokens}
+    return {"max_completion_tokens": max_tokens}
+
+
 def _chat_completion_payload(
     messages: list[dict[str, Any]],
-    config: AzureOpenAIConfig,
+    config: ChatConfig,
     *,
     tools: list[dict[str, Any]] | None = None,
     max_tokens: int = 1500,
@@ -201,7 +212,7 @@ def _chat_completion_payload(
     payload: dict[str, Any] = {
         "model": config.model,
         "messages": materialize_for_azure(messages, max_images=max_images),
-        "max_completion_tokens": max_tokens,
+        **_token_limit_field(config, max_tokens),
     }
     if reasoning and reasoning != "default":
         payload["reasoning_effort"] = reasoning
@@ -213,25 +224,30 @@ def _chat_completion_payload(
     return payload
 
 
+def _auth_headers(config: ChatConfig) -> dict[str, str | None]:
+    headers: dict[str, str | None] = {"Content-Type": "application/json"}
+    if isinstance(config, OpenRouterConfig):
+        headers["Authorization"] = f"Bearer {config.api_key}"
+    else:
+        headers["api-key"] = config.api_key
+    return headers
+
+
 def _post_json(
     url: str,
     payload: dict[str, Any],
-    config: AzureOpenAIConfig,
+    config: ChatConfig,
     *,
     timeout: int = 90,
 ) -> dict[str, Any]:
-    headers = {
-        "Content-Type": "application/json",
-        "api-key": config.api_key,
-    }
-    response = requests.post(url, headers=headers, json=payload, timeout=timeout)
+    response = requests.post(url, headers=_auth_headers(config), json=payload, timeout=timeout)
     _raise_for_azure_status(response)
     return response.json()
 
 
 def _post_chat_completion(
     payload: dict[str, Any],
-    config: AzureOpenAIConfig,
+    config: ChatConfig,
     *,
     timeout: int = 90,
 ) -> dict[str, Any]:
@@ -291,7 +307,7 @@ def _tool_succeeded(parsed: Any) -> bool:
 def _traced_post(
     url: str,
     payload: dict[str, Any],
-    config: AzureOpenAIConfig,
+    config: ChatConfig,
     *,
     timeout: int,
     name: str,
@@ -851,7 +867,7 @@ def _finalize_submission(
 
 def chat_with_tools(
     messages: list[dict[str, Any]],
-    config: AzureOpenAIConfig | None = None,
+    config: ChatConfig | None = None,
     *,
     system_prompt: str | None = None,
     tools: list[dict[str, Any]] | None = None,
@@ -897,6 +913,7 @@ def chat_with_tools(
     tool_rounds = 0
     force_submit = False
     rejected_prose: dict[str, Any] | None = None
+    annotation_retried = False
 
     try:
         while tool_rounds <= max_tool_rounds:
@@ -988,6 +1005,23 @@ def chat_with_tools(
                     tool_rounds += 1
                     continue
                 answer, images, followups = submission
+                problems = annotation_problems(images)
+                # An invalid mark would vanish while the answer still says it was drawn.
+                # Ask once, then show whatever is valid.
+                if (
+                    problems
+                    and annotations
+                    and not annotation_retried
+                    and tool_rounds < max_tool_rounds
+                ):
+                    annotation_retried = True
+                    conversation.append(message)
+                    conversation.extend(
+                        _tool_error_message(tool_call, annotation_error(problems))
+                        for tool_call in submit_calls
+                    )
+                    tool_rounds += 1
+                    continue
                 if rejected_prose is not None:
                     conversation = [item for item in conversation if item is not rejected_prose]
                 final = _finalize_submission(
@@ -1004,6 +1038,8 @@ def chat_with_tools(
                 # The finalizer only sees the last response; report the whole turn.
                 final["usage"] = usage_total
                 final["model_calls"] = model_calls
+                final["annotation_retried"] = annotation_retried
+                final["annotations_dropped"] = len(problems)
                 final["fetched_camera_ids"] = _string_list(
                     [frame.camera_id for frame in fetched_frames]
                 )

@@ -111,3 +111,15 @@ def empty_answer_error() -> str:
 
 def wait_for_tools_error() -> str:
     return submit_tool_error(_WAIT_FOR_TOOLS)
+
+
+def annotation_error(problems: list[str]) -> str:
+    listed = "; ".join(problems[:5])
+    more = f" (and {len(problems) - 5} more)" if len(problems) > 5 else ""
+    return submit_tool_error(
+        "Some annotations are invalid, so the answer was not shown. Call submit_answer again "
+        "with the same answer and fixed annotations, or an empty annotations list. "
+        "Coordinates are whole numbers from 0 to 1000 across the frame, x then y, with 0,0 at "
+        "the top left. Do not use decimals or pixel values. "
+        f"Problems: {listed}{more}"
+    )

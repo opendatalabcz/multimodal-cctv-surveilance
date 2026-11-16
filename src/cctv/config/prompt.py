@@ -27,13 +27,16 @@ def annotation_guidance(enabled: bool) -> str:
     """Policy shared by the system prompt, the frame message, and submit_answer."""
     if enabled:
         return (
-            "When the user asks to locate, find, point out, or show where something is, "
-            "and you are sure of both what it is and where it sits in the frame, always "
-            "add a box, point, line, or polygon for each such object. Otherwise leave "
-            "annotations empty: do not mark a frame to illustrate a general description, "
-            "and do not guess a region you are unsure of. The answer text does not draw "
-            "on the picture. Coordinates are integers from 0 to 1000, with x and y "
-            "normalized independently."
+            "When the user asks about specific objects in any way (where something is, "
+            "whether it is there, how many, what it looks like), add a box, point, line, "
+            "or polygon for each such object you can see and are sure of both what it is "
+            "and where it sits in the frame. Leave annotations empty when the question is "
+            "about the scene in general, when the object is not visible, or when you are "
+            "unsure: do not mark a frame to illustrate a general description, and do not "
+            "guess a region. The answer text does not draw on the picture. Coordinates are "
+            "whole numbers from 0 to 1000 across the frame (x to the right, y downward, "
+            "from the top left), with x and y normalized independently. Never use "
+            "decimals or pixel values."
         )
     return "Leave annotations empty on every image. Do not draw highlights."
 
