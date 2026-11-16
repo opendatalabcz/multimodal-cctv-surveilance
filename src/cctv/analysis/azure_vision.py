@@ -48,8 +48,6 @@ ProgressCallback = Callable[[dict[str, Any]], None]
 _TOOL_STATUS: dict[str, str] = {
     "web_search": "Searching the web…",
     "get_weather": "Looking up weather…",
-    "search_map": "Searching the map…",
-    "reverse_geocode": "Looking up that place…",
     "list_cameras": "Listing cameras…",
 }
 
@@ -186,7 +184,7 @@ def analyze_images(
             "model": config.model,
         }
     except requests.exceptions.RequestException as exc:
-        return {"success": False, "error": f"Azure API request failed: {exc}"}
+        return {"success": False, "error": f"Model API request failed: {exc}"}
     except Exception as exc:
         return {"success": False, "error": f"Unexpected error: {exc}"}
 
@@ -1136,6 +1134,6 @@ def chat_with_tools(
 
         return {"success": False, "error": f"Exceeded max tool rounds ({max_tool_rounds})"}
     except requests.exceptions.RequestException as exc:
-        return {"success": False, "error": f"Azure API request failed: {exc}"}
+        return {"success": False, "error": f"Model API request failed: {exc}"}
     except Exception as exc:
         return {"success": False, "error": f"Unexpected error: {exc}"}

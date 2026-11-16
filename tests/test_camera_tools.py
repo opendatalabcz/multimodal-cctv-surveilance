@@ -249,5 +249,6 @@ def test_system_prompt_named_tools(tmp_path, monkeypatch) -> None:
     assert "list_cameras" in prompt
     assert "charles_bridge" in prompt
     assert "internet search (web_search): disabled" in prompt
-    assert "map access (search_map, reverse_geocode): disabled" in prompt
+    assert "weather (get_weather): disabled" in prompt
+    assert "map access" not in prompt
     assert "101200" not in prompt

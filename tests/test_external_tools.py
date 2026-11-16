@@ -1,24 +1,10 @@
 import json
-import time
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 import cctv.tools  # noqa: F401
-from cctv.tools.maps import (
-    USER_AGENT,
-    execute_reverse_geocode,
-    execute_search_map,
-    reset_nominatim_state,
-)
 from cctv.tools.registry import execute_tool
 from cctv.tools.weather import execute_get_weather
 from cctv.tools.web_search import execute_web_search
-
-
-@pytest.fixture(autouse=True)
-def _reset_nominatim() -> None:
-    reset_nominatim_state()
 
 
 def test_web_search_normalizes_results() -> None:
@@ -160,63 +146,6 @@ def test_get_weather_service_failure() -> None:
     payload = json.loads(result["tool_content"])
     assert payload["success"] is False
     assert "503" in payload["error"]
-
-
-def test_search_map_uses_user_agent_and_normalizes() -> None:
-    captured: dict = {}
-
-    def fake_get_json(url, *, params=None, headers=None, timeout=10):
-        captured["headers"] = headers
-        return (
-            True,
-            [
-                {
-                    "display_name": "Charles Bridge, Prague",
-                    "lat": "50.0865",
-                    "lon": "14.4119",
-                    "type": "bridge",
-                    "class": "man_made",
-                }
-            ],
-            None,
-        )
-
-    with patch("cctv.tools.maps.get_json", side_effect=fake_get_json):
-        result = execute_search_map({"query": "Charles Bridge"})
-
-    payload = json.loads(result["tool_content"])
-    assert payload["success"] is True
-    assert payload["results"][0]["latitude"] == 50.0865
-    assert captured["headers"]["User-Agent"] == USER_AGENT
-
-
-def test_reverse_geocode_graceful_failure() -> None:
-    with patch("cctv.tools.maps.get_json", return_value=(False, None, "Request timed out")):
-        result = execute_reverse_geocode({"latitude": 50.0, "longitude": 14.0})
-
-    payload = json.loads(result["tool_content"])
-    assert payload["success"] is False
-    assert "timed out" in payload["error"]
-
-
-def test_nominatim_cache_and_rate_limit() -> None:
-    calls: list[float] = []
-
-    def fake_get_json(url, *, params=None, headers=None, timeout=10):
-        calls.append(time.monotonic())
-        return True, [{"display_name": "A", "lat": "1", "lon": "2"}], None
-
-    with patch("cctv.tools.maps.get_json", side_effect=fake_get_json):
-        first = execute_search_map({"query": "alpha"})
-        second = execute_search_map({"query": "alpha"})
-        third = execute_search_map({"query": "beta"})
-
-    assert json.loads(first["tool_content"])["success"] is True
-    assert json.loads(second["tool_content"])["success"] is True
-    assert json.loads(third["tool_content"])["success"] is True
-    assert len(calls) == 2
-    if len(calls) == 2:
-        assert calls[1] - calls[0] >= 0.99
 
 
 def test_execute_tool_dispatches_registered_web_search() -> None:

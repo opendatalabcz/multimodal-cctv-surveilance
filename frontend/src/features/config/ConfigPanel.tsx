@@ -244,16 +244,6 @@ export function ConfigPanel({
                 <FormControlLabel
                   control={
                     <Switch
-                      checked={config.tools.maps}
-                      onChange={(_, checked) => onToggleTool('maps', checked)}
-                      disabled={isSaving}
-                    />
-                  }
-                  label="Map access"
-                />
-                <FormControlLabel
-                  control={
-                    <Switch
                       checked={config.tools.annotations}
                       onChange={(_, checked) => onToggleTool('annotations', checked)}
                       disabled={isSaving}

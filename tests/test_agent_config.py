@@ -39,24 +39,24 @@ tools:
     assert config.cameras[0].name == "Test Camera"
     assert config.tools.internet is True
     assert config.tools.weather is False
-    assert config.tools.maps is False
 
 
-def test_legacy_google_maps_migrates_to_maps(tmp_path) -> None:
+def test_legacy_map_flags_are_ignored(tmp_path) -> None:
     config_path = tmp_path / "agent.yaml"
     config_path.write_text(
         """\
 tools:
   internet: true
   google_maps: true
+  maps: true
 """,
         encoding="utf-8",
     )
 
     config = load_agent_config(config_path)
-    assert config.tools.maps is True
-    assert config.tools.weather is False
     assert config.tools.internet is True
+    assert config.tools.weather is False
+    assert not hasattr(config.tools, "maps")
 
 
 def test_internet_on_does_not_enable_weather(tmp_path) -> None:
@@ -65,7 +65,6 @@ def test_internet_on_does_not_enable_weather(tmp_path) -> None:
     config = load_agent_config(config_path)
     assert config.tools.internet is True
     assert config.tools.weather is False
-    assert config.tools.maps is False
 
 
 def test_save_agent_config_round_trip(tmp_path) -> None:
@@ -80,7 +79,7 @@ def test_save_agent_config_round_trip(tmp_path) -> None:
                 source="https://example.test/cameras/101048/image",
             )
         ],
-        tools=ToolsConfig(internet=False, weather=False, maps=True),
+        tools=ToolsConfig(internet=True, weather=False),
     )
 
     save_agent_config(original, config_path)
@@ -89,7 +88,8 @@ def test_save_agent_config_round_trip(tmp_path) -> None:
     assert loaded.cameras[0].id == "hybernska"
     assert loaded.cameras[0].sector_id == UNASSIGNED_SECTOR_ID
     assert any(sector.id == UNASSIGNED_SECTOR_ID for sector in loaded.sectors)
-    assert loaded.tools.maps is True
+    assert loaded.tools.internet is True
+    assert loaded.tools.weather is False
 
 
 def test_load_missing_config_returns_defaults(tmp_path) -> None:
@@ -97,7 +97,6 @@ def test_load_missing_config_returns_defaults(tmp_path) -> None:
     assert config.cameras == []
     assert config.tools.internet is False
     assert config.tools.weather is False
-    assert config.tools.maps is False
 
 
 def test_save_writes_cameras_and_agent_files(tmp_path, monkeypatch) -> None:
@@ -106,7 +105,7 @@ def test_save_writes_cameras_and_agent_files(tmp_path, monkeypatch) -> None:
     save_agent_config(
         AgentConfig(
             cameras=[_cam("bridge", "Bridge")],
-            tools=ToolsConfig(internet=False, weather=False, maps=False),
+            tools=ToolsConfig(internet=False, weather=False),
         ),
         base_path,
     )
@@ -114,7 +113,7 @@ def test_save_writes_cameras_and_agent_files(tmp_path, monkeypatch) -> None:
     save_agent_config(
         AgentConfig(
             cameras=[_cam("bridge", "Bridge"), _cam("airport", "Airport", "https://youtu.be/x")],
-            tools=ToolsConfig(internet=True, weather=False, maps=False),
+            tools=ToolsConfig(internet=True, weather=False),
         )
     )
 
@@ -300,7 +299,7 @@ def test_split_files_load_cameras_and_agent_settings(tmp_path, monkeypatch) -> N
         encoding="utf-8",
     )
     base_path.write_text(
-        "tools:\n  internet: true\n  weather: false\n  maps: false\nmodel: gpt-4o\n",
+        "tools:\n  internet: true\n  weather: false\nmodel: gpt-4o\n",
         encoding="utf-8",
     )
 

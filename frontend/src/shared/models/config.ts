@@ -66,7 +66,6 @@ export interface Camera {
 interface ToolsConfig {
   internet: boolean
   weather: boolean
-  maps: boolean
   annotations: boolean
 }
 

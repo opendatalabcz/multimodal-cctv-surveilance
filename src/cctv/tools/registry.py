@@ -31,8 +31,6 @@ _BASE_NAMES: tuple[str, ...] = ("list_cameras", "get_camera_image", "submit_answ
 _OPTIONAL_BY_FLAG: tuple[tuple[str, str], ...] = (
     ("internet", "web_search"),
     ("weather", "get_weather"),
-    ("maps", "search_map"),
-    ("maps", "reverse_geocode"),
 )
 
 

@@ -51,28 +51,19 @@ def test_tool_names_weather_only() -> None:
     assert "web_search" not in names
 
 
-def test_tool_names_maps_only() -> None:
-    names = tool_names_for_config(ToolsConfig(maps=True))
-    assert "search_map" in names
-    assert "reverse_geocode" in names
-    assert "web_search" not in names
-
-
 def test_tool_names_all_enabled() -> None:
-    names = tool_names_for_config(ToolsConfig(internet=True, weather=True, maps=True))
+    names = tool_names_for_config(ToolsConfig(internet=True, weather=True))
     assert names == (
         "list_cameras",
         "get_camera_image",
         "submit_answer",
         "web_search",
         "get_weather",
-        "search_map",
-        "reverse_geocode",
     )
 
 
 def test_tool_schemas_reflect_toggle_combination() -> None:
-    schemas = tool_schemas_for_config(ToolsConfig(internet=True, weather=False, maps=False))
+    schemas = tool_schemas_for_config(ToolsConfig(internet=True, weather=False))
     names = [item["function"]["name"] for item in schemas]
     assert names == ["list_cameras", "get_camera_image", "submit_answer", "web_search"]
 
@@ -99,7 +90,7 @@ def test_prompt_disabled_capabilities() -> None:
     prompt = build_system_prompt(AgentConfig())
     assert "Do not claim you searched the web" in prompt
     assert "Do not quote measured forecasts" in prompt
-    assert "Do not claim map or geocoding" in prompt
+    assert "map access" not in prompt
 
 
 def _annotation_description(tools: ToolsConfig) -> str:
@@ -491,7 +482,7 @@ def test_welcome_suggestions_fall_back_when_cameras_are_unanalyzed() -> None:
                 sector_id="unassigned",
             )
         ],
-        tools=ToolsConfig(maps=True),
+        tools=ToolsConfig(),
     )
     # No sector, so the location carries the question; no analysis, so the topic is generic.
     assert build_welcome_suggestions(config) == [

@@ -82,7 +82,6 @@ cameras:
 tools:
   internet: false   # Internet search (web_search via DuckDuckGo)
   weather: false    # Open-Meteo measured/forecast data
-  maps: false       # OpenStreetMap Nominatim place search / reverse geocode
   annotations: false  # Draw model highlights on shown frames
 models:
   - id: gpt-5.6-luna
@@ -171,7 +170,7 @@ flowchart LR
 - Legacy configs without `locations` or `location_id` load under an implicit **Unassigned** location under the camera’s sector (or global Unassigned).
 - Saving rejects removing a **location** while any camera still references it, or removing a **sector** while any location (or camera) still references it (HTTP 400 from `PUT /api/config`).
 
-A legacy `google_maps` tool flag is loaded as `maps`. Turning `internet` on alone does **not** enable weather.
+Turning `internet` on alone does **not** enable weather. A leftover `maps` or `google_maps` flag in an older file is ignored.
 
 `GET` returns the loaded config. Tool toggles take effect on the **next chat message** without restarting the API.
 
@@ -187,7 +186,7 @@ The system prompt (`src/cctv/config/prompt.py`) instructs the model to:
 - Describe **visible** conditions from camera frames first.
 - Use `get_weather` only when the Weather toggle is on, and clearly label measured/forecast data vs camera-observed conditions.
 - Use `web_search` for news/context when Internet search is on — **not** as a weather API.
-- Never claim Internet, weather, or map capabilities when those toggles are off.
+- Never claim Internet or weather capabilities when those toggles are off.
 
 `run_chat_turn` reloads config before every user message and passes `max_tool_rounds=16` so a generous camera batch plus optional external calls can complete. Optional `model` and `verbosity` arguments apply to that call only and are not written to `configs/agent.yaml`. `cctv-eval` uses them to ask each question in `configs/eval_questions.yaml` once per catalog model and verbosity.
 
@@ -202,8 +201,6 @@ Tools exposed to Azure depend on the current toggles (`cctv.tools.tool_schemas_f
 | `submit_answer` | always | Ends the turn. Arguments are the visible markdown, the frames to show (with optional box, point, line, or polygon highlights when `annotations` is on), and up to three follow-up questions. A plain-text ending is not shown; the loop asks once more with this tool required |
 | `web_search` | `internet` | Up to 5 DuckDuckGo text results (title, URL, snippet) via `ddgs` |
 | `get_weather` | `weather` | Open-Meteo current conditions + 3-day forecast (coordinates or place name) |
-| `search_map` | `maps` | Nominatim place search (≤5 results) |
-| `reverse_geocode` | `maps` | Nominatim reverse lookup for coordinates |
 
 All executors are registered in `src/cctv/tools/__init__.py`. Only enabled schemas are sent to Azure; absence from the schema list is the capability gate.
 
@@ -217,7 +214,6 @@ These are free public services without uptime guarantees:
 | --- | --- | --- |
 | DuckDuckGo (`ddgs`) | `web_search.py` | Max 5 results; empty/rate-limited responses return a tool error |
 | Open-Meteo | `weather.py` | No API key; geocoding via Open-Meteo search API |
-| Nominatim | `maps.py` | Identifying User-Agent, in-memory cache (~1 h), serialized ≤1 req/s |
 
 External failures return a tool result (not a chat crash) so the model can explain that the source was unavailable.
 
@@ -249,7 +245,7 @@ The chat loop already dispatches by name and injects any `image_path` / `image_p
 
 ## HTTP API (chat)
 
-- `GET/PUT /api/config` — `sectors`, `locations`, `cameras`, `tools`: `{ "internet": bool, "weather": bool, "maps": bool }`
+- `GET/PUT /api/config` — `sectors`, `locations`, `cameras`, `tools`: `{ "internet": bool, "weather": bool, "annotations": bool }`
 - `POST /api/conversations`
 - `GET /api/conversations/{id}`
 - `POST /api/conversations/{id}/messages/stream` with `{ "content": "..." }` — SSE `status` / `done` / `error` events. Does not stream tokens.
@@ -296,4 +292,4 @@ The sidebar groups cameras into collapsible **sector accordions**, each containi
 - Deep Agents / LangGraph
 - Typed clarifying-question protocol
 - Auth, Docker, conversation persistence, streaming
-- Turn-by-turn routing / navigation (Nominatim is place context only)
+- Turn-by-turn routing / navigation

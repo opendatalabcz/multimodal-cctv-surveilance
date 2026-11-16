@@ -57,7 +57,7 @@ def test_get_and_put_config(client, tmp_path, monkeypatch) -> None:
     assert body["cameras"][0]["id"] == "bridge"
     assert body["cameras"][0]["sector_id"] == UNASSIGNED_SECTOR_ID
     assert any(sector["id"] == UNASSIGNED_SECTOR_ID for sector in body["sectors"])
-    assert body["tools"]["maps"] is True
+    assert "maps" not in body["tools"]
 
     get_response = client.get("/api/config")
     assert get_response.status_code == 200
@@ -89,7 +89,7 @@ def test_put_config_keeps_server_model_catalog(client, tmp_path, monkeypatch) ->
                     "enabled": True,
                 }
             ],
-            "tools": {"internet": False, "weather": False, "maps": False},
+            "tools": {"internet": False, "weather": False},
             "models": [{"id": "evil", "label": "Evil", "provider": "azure"}],
             "model": "gpt-4o",
         },
@@ -369,7 +369,7 @@ def test_put_config_rejects_sector_deletion_with_cameras(client, tmp_path, monke
                     "enabled": True,
                 },
             ],
-            "tools": {"internet": False, "weather": False, "maps": False},
+            "tools": {"internet": False, "weather": False},
         },
     )
     assert response.status_code == 400
@@ -545,7 +545,7 @@ def test_put_config_refreshes_idle_welcome(client) -> None:
                 "enabled": True,
             }
         ],
-        "tools": {"internet": False, "weather": True, "maps": False},
+        "tools": {"internet": False, "weather": True},
     }
     assert client.put("/api/config", json=payload).status_code == 200
     body = client.get(f"/api/conversations/{conversation_id}").json()
@@ -622,7 +622,7 @@ def test_put_config_does_not_rewrite_after_user_turn(client) -> None:
                 "enabled": True,
             }
         ],
-        "tools": {"internet": True, "weather": False, "maps": False},
+        "tools": {"internet": True, "weather": False},
     }
     assert client.put("/api/config", json=payload).status_code == 200
     body = client.get(f"/api/conversations/{conversation_id}").json()

@@ -23,7 +23,7 @@ from cctv.utils.paths import data_root
 
 logger = logging.getLogger("cctv.observability")
 
-_LOOKUP_TOOLS = frozenset({"list_cameras", "web_search", "search_map", "reverse_geocode"})
+_LOOKUP_TOOLS = frozenset({"list_cameras", "web_search"})
 
 _TRUE = frozenset({"1", "true", "yes", "on"})
 _CLIENT: Any = None

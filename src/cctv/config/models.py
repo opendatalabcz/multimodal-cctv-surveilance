@@ -195,19 +195,7 @@ def migrate_setting_maps(data: object) -> object:
 class ToolsConfig(BaseModel):
     internet: bool = False
     weather: bool = False
-    maps: bool = False
     annotations: bool = False
-
-    @model_validator(mode="before")
-    @classmethod
-    def _migrate_legacy_google_maps(cls, data: object) -> object:
-        if not isinstance(data, dict):
-            return data
-        if "google_maps" in data:
-            if "maps" not in data:
-                data["maps"] = data["google_maps"]
-            data.pop("google_maps", None)
-        return data
 
 
 class AgentConfig(BaseModel):

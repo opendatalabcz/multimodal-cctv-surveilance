@@ -47,7 +47,6 @@ def _capability_lines(config: AgentConfig) -> list[str]:
         "Enabled external tools (only call tools that appear in your tool list for this turn):",
         f"- internet search (web_search): {'enabled' if tools.internet else 'disabled'}",
         f"- weather (get_weather): {'enabled' if tools.weather else 'disabled'}",
-        f"- map access (search_map, reverse_geocode): {'enabled' if tools.maps else 'disabled'}",
     ]
     if not tools.internet:
         lines.append("Do not claim you searched the web when internet search is disabled.")
@@ -55,8 +54,6 @@ def _capability_lines(config: AgentConfig) -> list[str]:
         lines.append(
             "Do not quote measured forecasts or Open-Meteo data when weather is disabled."
         )
-    if not tools.maps:
-        lines.append("Do not claim map or geocoding lookups when map access is disabled.")
     return lines
 
 
@@ -228,7 +225,7 @@ def build_system_prompt(config: AgentConfig) -> str:
         "and that offset before answering.",
         "- If the user names a place with no matching configured camera, tell them to add it "
         "in the Config panel (name, optional GPS, source URL). "
-        "If map or weather toggles are on, you may use those tools for context instead.",
+        "If the weather toggle is on, you may use get_weather for that place.",
         "- Disabled sectors, locations, or cameras are hidden from list_cameras and cannot be fetched.",
         "",
         "Weather and traffic:",

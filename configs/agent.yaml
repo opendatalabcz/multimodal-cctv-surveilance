@@ -1,7 +1,6 @@
 tools:
   internet: false
   weather: false
-  maps: false
   annotations: true
 models:
 - id: gpt-5.6-luna
@@ -86,4 +85,17 @@ models:
     choices: []
     default: medium
     locked: true
-model: gpt-6-astra
+- id: google/gemma-4-31b-it
+  label: Gemma 4 31B (paid)
+  provider: openrouter
+  transport: chat_completions
+  max_images_per_request: 32
+  reasoning:
+    choices: []
+    default: default
+    locked: true
+  verbosity:
+    choices: []
+    default: medium
+    locked: true
+model: google/gemma-4-26b-a4b-it:free
