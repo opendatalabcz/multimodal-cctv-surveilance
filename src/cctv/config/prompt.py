@@ -27,9 +27,11 @@ def annotation_guidance(enabled: bool) -> str:
     """Policy shared by the system prompt, the frame message, and submit_answer."""
     if enabled:
         return (
-            "Add a box, point, line, or polygon only when you are sure of both what "
-            "the object is and where it sits in the frame. If you are unsure, leave "
-            "annotations empty. Do not guess a region. The answer text does not draw "
+            "When the user asks to locate, find, point out, or show where something is, "
+            "and you are sure of both what it is and where it sits in the frame, always "
+            "add a box, point, line, or polygon for each such object. Otherwise leave "
+            "annotations empty: do not mark a frame to illustrate a general description, "
+            "and do not guess a region you are unsure of. The answer text does not draw "
             "on the picture. Coordinates are integers from 0 to 1000, with x and y "
             "normalized independently."
         )
