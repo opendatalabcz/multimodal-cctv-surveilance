@@ -78,6 +78,7 @@ export interface ModelReasoning {
 export interface ModelOption {
   id: string
   label: string
+  enabled?: boolean
   max_images_per_request: number
   reasoning: ModelReasoning
   verbosity: ModelReasoning
@@ -113,6 +114,10 @@ export function controlForModel(
   key: 'reasoning' | 'verbosity',
 ): ModelReasoning | null {
   return models.find((item) => item.id === modelId)?.[key] ?? null
+}
+
+export function selectableModels(models: ModelOption[]): ModelOption[] {
+  return models.filter((item) => item.enabled !== false)
 }
 
 export function modelLabel(modelId: string | null | undefined, models: ModelOption[]): string | null {

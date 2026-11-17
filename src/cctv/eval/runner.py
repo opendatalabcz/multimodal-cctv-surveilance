@@ -54,12 +54,15 @@ def build_cases(
     verbosity: str | None = None,
     question: str | None = None,
 ) -> list[EvalCase]:
-    models = list(config.models)
     if model is not None:
-        selected = model_by_id(models, model)
+        selected = model_by_id(config.models, model)
         if selected is None:
             raise ValueError(f"Unknown model: {model}")
+        if not selected.enabled:
+            raise ValueError(f"Model is disabled: {model}")
         models = [selected]
+    else:
+        models = [item for item in config.models if item.enabled]
     selected_questions = list(questions)
     if question is not None:
         selected_questions = [item for item in questions if item.id == question]

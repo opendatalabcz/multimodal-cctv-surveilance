@@ -1,4 +1,6 @@
-from cctv.config.agent_yaml import load_agent_config, save_agent_config
+import pytest
+
+from cctv.config.agent_yaml import config_with_server_catalog, load_agent_config, save_agent_config
 from cctv.config.effective import UNASSIGNED_SECTOR_ID
 from cctv.config.models import (
     AgentConfig,
@@ -253,6 +255,32 @@ def test_save_stores_non_default_settings_per_model(tmp_path, monkeypatch) -> No
     assert kept.model == "gpt-5.6-luna"
     assert kept.reasoning["gpt-6-astra"] == "max"
     assert kept.verbosity["gpt-5.6-luna"] == "low"
+
+
+def test_disabled_model_stays_in_the_catalog_and_is_not_selected(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AZURE_OPENAI_MODEL", "gpt-5.6-luna")
+    base_path = tmp_path / "agent.yaml"
+    monkeypatch.setattr("cctv.config.agent_yaml.agent_config_path", lambda: base_path)
+    models = default_model_catalog()
+    models[0] = models[0].model_copy(update={"enabled": False})
+    save_agent_config(
+        AgentConfig(
+            cameras=[_cam("bridge", "Bridge")],
+            models=models,
+            model="gpt-5.6-luna",
+        )
+    )
+
+    text = base_path.read_text(encoding="utf-8")
+    assert "enabled: false" in text
+    assert "enabled: true" not in text
+    loaded = load_agent_config()
+    assert loaded.models[0].id == "gpt-5.6-luna"
+    assert loaded.models[0].enabled is False
+    assert loaded.model == "gpt-4o"
+
+    with pytest.raises(ValueError, match="disabled"):
+        config_with_server_catalog(AgentConfig(model="gpt-5.6-luna"))
 
 
 def test_luna_catalog_uses_responses_with_explicit_reasoning_default() -> None:

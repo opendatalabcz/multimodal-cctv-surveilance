@@ -10,7 +10,7 @@ make up            # API :8000 and UI :5173
 make api           # API only
 make ui            # UI only
 make test          # pytest, mocked HTTP, no live network
-make eval          # one fresh chat per question, model, and verbosity
+make eval          # one fresh chat per question, enabled model, and verbosity
 make eval-report   # rewrite outputs/end_to_end_eval/grading.csv, no model calls
 ```
 
@@ -19,7 +19,7 @@ The UI proxies `/api` to port 8000. `make eval` writes `outputs/end_to_end_eval/
 ## Config and secrets
 
 - Camera catalog, including scene analysis: [`configs/cameras.yaml`](configs/cameras.yaml).
-- Agent settings (models, selected model, tool flags): [`configs/agent.yaml`](configs/agent.yaml).
+- Agent settings (models, which of those are enabled, selected model, tool flags): [`configs/agent.yaml`](configs/agent.yaml).
 - Evaluation questions: [`configs/eval_questions.yaml`](configs/eval_questions.yaml).
 - The Config panel writes those two files.
 - Azure OpenAI, OpenRouter, and other secrets stay in the environment / FastAPI. Never put keys in the frontend.

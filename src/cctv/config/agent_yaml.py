@@ -19,6 +19,7 @@ from cctv.config.models import (
     ModelOption,
     clamp_control,
     default_model_catalog,
+    enabled_models,
     model_by_id,
 )
 from cctv.utils.paths import project_root
@@ -165,12 +166,23 @@ def _camera_document(config: AgentConfig) -> dict[str, Any]:
     }
 
 
+def _catalog_document(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Omit ``enabled: true``. A missing flag means the model is in use."""
+    written: list[dict[str, Any]] = []
+    for item in models:
+        record = dict(item)
+        if record.get("enabled") is True:
+            record.pop("enabled")
+        written.append(record)
+    return written
+
+
 def _agent_document(config: AgentConfig) -> dict[str, Any]:
     """Tools, model catalog, selection, and non-default reasoning or verbosity."""
     data = config.model_dump(mode="json", exclude_none=True)
     payload: dict[str, Any] = {
         "tools": data.get("tools", {}),
-        "models": data.get("models", []),
+        "models": _catalog_document(data.get("models", [])),
         "model": data.get("model"),
     }
     reasoning = _setting_overrides(config.models, config.models, config.reasoning, "reasoning")
@@ -185,19 +197,23 @@ def _agent_document(config: AgentConfig) -> dict[str, Any]:
 def with_effective_models(config: AgentConfig) -> AgentConfig:
     """Catalog from config, plus the env deployment when it is not listed.
 
-    The selected id is the config value when it is in that list, otherwise the
-    env deployment, otherwise the first catalog entry.
+    The selected id is the config value when that model is enabled. Otherwise
+    it is the env deployment when that one is enabled, then the first enabled
+    catalog entry.
     """
     load_dotenv()
     models = list(config.models) or default_model_catalog()
     env_model = (os.getenv("AZURE_OPENAI_MODEL") or "").strip()
     if env_model and all(item.id != env_model for item in models):
         models.append(ModelOption(id=env_model, label=env_model, provider="azure"))
-    ids = {item.id for item in models}
+    selectable = enabled_models(models)
+    selectable_ids = {item.id for item in selectable}
     selected = config.model
-    if selected not in ids:
-        if env_model and env_model in ids:
+    if selected not in selectable_ids:
+        if env_model and env_model in selectable_ids:
             selected = env_model
+        elif selectable:
+            selected = selectable[0].id
         else:
             selected = models[0].id
     reasoning = _filled_settings(models, config.reasoning, "reasoning")
@@ -215,13 +231,17 @@ def with_effective_models(config: AgentConfig) -> AgentConfig:
 def config_with_server_catalog(incoming: AgentConfig) -> AgentConfig:
     """Drop any client-supplied model list and keep the committed catalog.
 
-    ``incoming.model`` must be in the effective list (catalog plus env deployment).
+    ``incoming.model`` must be an enabled id in the effective list (catalog plus
+    env deployment).
     """
     base = load_base_config()
     effective = with_effective_models(base)
-    allowed = {item.id for item in effective.models}
-    if incoming.model not in allowed:
+    known = {item.id for item in effective.models}
+    if incoming.model not in known:
         raise ValueError(f"Unknown model: {incoming.model}")
+    selected = model_by_id(effective.models, incoming.model)
+    if selected is None or not selected.enabled:
+        raise ValueError(f"Model is disabled: {incoming.model}")
     _validate_setting_map(effective.models, incoming.reasoning, "reasoning", "reasoning effort")
     _validate_setting_map(effective.models, incoming.verbosity, "verbosity", "verbosity")
     return incoming.model_copy(update={"models": list(base.models)})

@@ -62,6 +62,7 @@ models:
 - id: google/gemma-4-31b-it:free
   label: Gemma 4 31B (free)
   provider: openrouter
+  enabled: false
   transport: chat_completions
   max_images_per_request: 32
   reasoning:
@@ -75,6 +76,7 @@ models:
 - id: google/gemma-4-26b-a4b-it:free
   label: Gemma 4 26B A4B (free)
   provider: openrouter
+  enabled: false
   transport: chat_completions
   max_images_per_request: 32
   reasoning:
@@ -88,6 +90,7 @@ models:
 - id: google/gemma-4-31b-it
   label: Gemma 4 31B (paid)
   provider: openrouter
+  enabled: false
   transport: chat_completions
   max_images_per_request: 32
   reasoning:
@@ -98,4 +101,4 @@ models:
     choices: []
     default: medium
     locked: true
-model: google/gemma-4-26b-a4b-it:free
+model: gpt-5.6-luna

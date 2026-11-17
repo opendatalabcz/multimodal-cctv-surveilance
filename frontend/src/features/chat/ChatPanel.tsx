@@ -16,6 +16,7 @@ import {
   controlForModel,
   modelLabel,
   reasoningLabel,
+  selectableModels,
   type ModelOption,
   type ModelReasoning,
 } from '../../shared/models/config'
@@ -97,6 +98,7 @@ export function ChatPanel({
   onOpenConfig,
   showAnnotations = false,
 }: ChatPanelProps) {
+  const offeredModels = selectableModels(models)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -132,15 +134,15 @@ export function ChatPanel({
           CCTV Agent
         </Typography>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, ml: 'auto' }}>
-          <FormControl size="small" sx={{ minWidth: 160 }} disabled={!ready || isSending || models.length === 0}>
+          <FormControl size="small" sx={{ minWidth: 160 }} disabled={!ready || isSending || offeredModels.length === 0}>
             <InputLabel id="chat-model-label">Model</InputLabel>
             <Select
               labelId="chat-model-label"
               label="Model"
-              value={models.some((item) => item.id === selectedModel) ? selectedModel : ''}
+              value={offeredModels.some((item) => item.id === selectedModel) ? selectedModel : ''}
               onChange={(event) => onSelectModel(event.target.value)}
             >
-              {models.map((item) => (
+              {offeredModels.map((item) => (
                 <MenuItem key={item.id} value={item.id}>
                   {item.label}
                 </MenuItem>

@@ -97,9 +97,12 @@ def run_chat_turn(
     saved for the model that actually runs.
     """
     agent_config = load_agent_config()
-    if model is not None and model_by_id(agent_config.models, model) is None:
-        return conversation, {"success": False, "error": f"Unknown model: {model}"}
     if model is not None:
+        chosen = model_by_id(agent_config.models, model)
+        if chosen is None:
+            return conversation, {"success": False, "error": f"Unknown model: {model}"}
+        if not chosen.enabled:
+            return conversation, {"success": False, "error": f"Model is disabled: {model}"}
         agent_config = agent_config.model_copy(update={"model": model})
     system_prompt = build_system_prompt(agent_config)
     active_tools = tool_schemas_for_config(agent_config.tools)

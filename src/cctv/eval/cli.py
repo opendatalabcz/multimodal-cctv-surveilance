@@ -11,7 +11,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Ask each evaluation question once per model and verbosity.",
     )
-    parser.add_argument("--model", help="Catalog model id. Default: every model.")
+    parser.add_argument("--model", help="Catalog model id. Default: every enabled model.")
     parser.add_argument("--verbosity", help="One verbosity level. Default: every level the model allows.")
     parser.add_argument("--question", help="Question id from configs/eval_questions.yaml.")
     parser.add_argument("--force", action="store_true", help="Replace folders that already have result.json.")

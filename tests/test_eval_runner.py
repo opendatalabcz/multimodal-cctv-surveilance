@@ -72,6 +72,21 @@ def test_verbosity_filter_skips_models_that_cannot_set_it() -> None:
     assert {case.verbosity for case in cases} == {"low"}
 
 
+def test_matrix_skips_disabled_models() -> None:
+    config = AgentConfig()
+    config.models[0] = config.models[0].model_copy(update={"enabled": False})
+    cases = build_cases(config, load_questions())
+    assert "gpt-5.6-luna" not in {case.model_id for case in cases}
+    assert len(cases) == 20
+
+
+def test_explicit_disabled_model_is_an_error() -> None:
+    config = AgentConfig()
+    config.models[1] = config.models[1].model_copy(update={"enabled": False})
+    with pytest.raises(ValueError, match="disabled"):
+        build_cases(config, load_questions(), model="gpt-4o")
+
+
 def test_unknown_verbosity_for_the_selected_model_is_an_error() -> None:
     with pytest.raises(ValueError, match="Verbosity"):
         build_cases(AgentConfig(), load_questions(), model="gpt-4o", verbosity="low")

@@ -83,12 +83,16 @@ class ModelOption(BaseModel):
 
     ``transport`` is ``chat_completions`` or ``responses``. GPT-6 Astra tool
     calls require the Responses API.
+
+    ``enabled`` keeps a deployment in the catalog without offering it. The
+    chat header and ``make eval`` skip ``enabled: false``.
     """
 
     id: str
     label: str
     provider: str = "azure"
     transport: Literal["chat_completions", "responses"] = "chat_completions"
+    enabled: bool = True
     max_images_per_request: int = Field(default=DEFAULT_MAX_IMAGES_PER_REQUEST, ge=1)
     reasoning: ModelReasoning = Field(default_factory=ModelReasoning)
     verbosity: ModelReasoning = Field(
@@ -148,6 +152,10 @@ def default_model_catalog() -> list[ModelOption]:
 
 def model_by_id(models: list[ModelOption], model_id: str) -> ModelOption | None:
     return next((item for item in models if item.id == model_id), None)
+
+
+def enabled_models(models: list[ModelOption]) -> list[ModelOption]:
+    return [item for item in models if item.enabled]
 
 
 def clamp_control(control: ModelReasoning | None, requested: str | None, fallback: str) -> str:
