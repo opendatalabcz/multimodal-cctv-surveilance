@@ -429,7 +429,7 @@ cameras:
     preview_path: camera_images/previews/da490759-e272-4e76-893d-4388db48d909.jpg
 - id: tokachi_obihiro_live
   name: Live
-  source: https://www.youtube.com/watch?v=IDXRscHtp2s
+  source: https://www.youtube.com/watch?v=3nsYPW9PtDY
   sector_id: japan
   location_id: tokachi_obihiro
   enabled: true
@@ -443,7 +443,7 @@ cameras:
     preview_path: camera_images/previews/tokachi_obihiro.jpg
 - id: tokyo_airport_live
   name: Live
-  source: https://www.youtube.com/watch?v=3w4zEyFamuA
+  source: https://www.youtube.com/watch?v=2PIdi3Xa7TY
   sector_id: japan
   location_id: tokyo_airport
   enabled: true

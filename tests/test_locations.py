@@ -226,7 +226,7 @@ def test_committed_catalog_counts_and_entries() -> None:
     )
     assert any(
         camera.id == "tokachi_obihiro_live"
-        and "youtube.com/watch?v=IDXRscHtp2s" in camera.source
+        and "youtube.com/watch?v=3nsYPW9PtDY" in camera.source
         for camera in config.cameras
     )
     assert all(sector.enabled for sector in config.sectors if sector.id != UNASSIGNED_SECTOR_ID)

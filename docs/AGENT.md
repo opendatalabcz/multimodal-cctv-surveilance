@@ -144,7 +144,7 @@ Committed catalog counts:
 | Locations | 19 | 14 Prague + 2 Japan + 3 Namibia |
 | Cameras | 27 | 22 Prague portal stills + 5 YouTube livestreams |
 
-Prague locations: Charles Bridge (2), Holešovičky (2), Budějovická (1), Nuselský most (2), Barrandovský most (2), Hybernská (1), Bělocerkevská (`410034`), Ječná (1), Mariánské náměstí (1), Argentinská (3), Strahovský tunel (2), Tunel Mrázovka (2), Náměstí Kinských (1), Malostranská (`101046`). Japan is Tokachi-Obihiro (`IDXRscHtp2s`) and Tokyo Airport (`3w4zEyFamuA`). Namibia is three watering-hole livestreams: Desert (`AeMUdOPFcXI`), Small Pond (`ydYDqZQpim8`), and River (`qwvk5hbEJnY`).
+Prague locations: Charles Bridge (2), Holešovičky (2), Budějovická (1), Nuselský most (2), Barrandovský most (2), Hybernská (1), Bělocerkevská (`410034`), Ječná (1), Mariánské náměstí (1), Argentinská (3), Strahovský tunel (2), Tunel Mrázovka (2), Náměstí Kinských (1), Malostranská (`101046`). Japan is Tokachi-Obihiro (`3nsYPW9PtDY`) and Tokyo Airport (`2PIdi3Xa7TY`). Namibia is three watering-hole livestreams: Desert (`AeMUdOPFcXI`), Small Pond (`ydYDqZQpim8`), and River (`qwvk5hbEJnY`).
 
 A Prague camera id is `{location_id}_{portal id}` and its name is that portal id. A livestream id ends in `_live`.
 
