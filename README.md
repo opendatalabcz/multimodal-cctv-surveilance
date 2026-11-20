@@ -57,13 +57,16 @@ make up
 make eval
 ```
 
-`make eval` asks each question in `configs/eval_questions.yaml` once per enabled catalog model and verbosity, each in a fresh chat, and writes `outputs/end_to_end_eval/`. A model with unlocked verbosity gets a folder per level (`low`, `medium`, `high`). GPT-4o has verbosity locked, so its question folders sit directly under the model. A folder that already contains `result.json` is skipped. The API does not need to be running. Azure credentials and reachable cameras do. The command does not change `configs/agent.yaml`.
+`make eval` asks each question in `configs/eval_questions.yaml` once per enabled catalog model and verbosity, each in a fresh chat. Every invocation starts a new run folder under `outputs/end_to_end_eval/`, named with the local time (`2026-11-17T113445`). A second call does not skip or overwrite the previous run. `run.json` in that folder records the id and start time. A model with unlocked verbosity gets a folder per level (`low`, `medium`, `high`). GPT-4o has verbosity locked, so its question folders sit directly under the model. The API does not need to be running. Azure credentials and reachable cameras do. The command does not change `configs/agent.yaml`.
 
 ```bash
 uv run cctv-eval --model gpt-4o --question charles-bridge-walk
-uv run cctv-eval --verbosity low --force
+uv run cctv-eval --run 2026-11-17T113445
+uv run cctv-eval --run 2026-11-17T113445 --verbosity low --force
 uv run cctv-eval --screenshot
 ```
+
+`--run` continues that folder. A question that already has `result.json` is skipped. `--force` replaces those finished questions, and it only applies together with `--run`.
 
 `--screenshot` also saves `screenshot.png` from the UI. That needs `make up` and a one-time `uv run playwright install chromium`. The browser asks the question again, and the header's model and verbosity selects save `configs/agent.yaml` for that turn. The runner restores the file afterward. If the browser step fails, the answer files stay and the error is recorded in `result.json`.
 
@@ -73,7 +76,7 @@ uv run cctv-eval --screenshot
 make eval-report
 ```
 
-`make eval-report` makes no model calls. It rewrites `outputs/end_to_end_eval/grading.csv` from every `result.json`, with one row per answer. Token counts and `model_calls` cover the whole turn. `retrieval_precision` and `retrieval_recall` compare the cameras the model fetched during the turn with `expected_cameras` in `configs/eval_questions.yaml`. `selection_precision` and `selection_recall` do the same for the cameras the answer showed. Rewriting the sheet reads that file again, so changing a list updates the scores without another model run. A question with no list stays blank. Fill in `correctness_1_to_5`, `clarity_1_to_5`, and `notes` by hand. Regenerating the sheet keeps those three columns.
+`make eval-report` makes no model calls. It rewrites `grading.csv` inside the latest run folder from that run's `result.json` files, with one row per answer. `uv run cctv-eval --report --run 2026-11-17T113445` rewrites one earlier run. Token counts and `model_calls` cover the whole turn. `retrieval_precision` and `retrieval_recall` compare the cameras the model fetched during the turn with `expected_cameras` in `configs/eval_questions.yaml`. `selection_precision` and `selection_recall` do the same for the cameras the answer showed. Rewriting the sheet reads that file again, so changing a list updates the scores without another model run. A question with no list stays blank. Fill in `correctness_1_to_5`, `clarity_1_to_5`, and `notes` by hand. Regenerating the sheet keeps those three columns.
 
 - **Correctness (1–5):** 5 means every claim matches the frames the answer showed, and nothing it says is missing from the question's scope. 1 means it describes something the frames do not show.
 - **Clarity (1–5):** 5 means a reader can act on the answer without re-reading it. 1 means it is hard to follow or repeats itself.

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -21,6 +23,7 @@ from cctv.config.models import (
     model_by_id,
 )
 from cctv.eval.questions import EvalQuestion, load_questions
+from cctv.eval.report import SHEET_NAME
 from cctv.eval.screenshot import UI_URL, capture_chat_screenshot
 from cctv.utils.paths import data_root, project_root
 
@@ -44,6 +47,139 @@ class EvalSummary:
 
 def default_output_dir() -> Path:
     return project_root() / "outputs" / "end_to_end_eval"
+
+
+# 2026-11-17T113445 or 2026-11-17T113445-2 when that second already has a folder.
+_RUN_ID = re.compile(r"\d{4}-\d{2}-\d{2}T\d{6}(?:-\d+)?")
+
+
+def new_run_id(moment: datetime | None = None) -> str:
+    current = moment.astimezone() if moment is not None else datetime.now().astimezone()
+    return current.strftime("%Y-%m-%dT%H%M%S")
+
+
+def allocate_run_dir(root: Path, moment: datetime | None = None) -> Path:
+    """Create a new run folder named with the local time. Adopts a pre-run layout first."""
+    root.mkdir(parents=True, exist_ok=True)
+    adopt_legacy_run(root)
+    current = moment.astimezone() if moment is not None else datetime.now().astimezone()
+    destination = _unique_run_dir(root, new_run_id(current))
+    destination.mkdir()
+    _write_run_meta(destination, current.isoformat(timespec="seconds"))
+    return destination
+
+
+def resolve_run_dir(root: Path, run_id: str | None) -> Path:
+    """Return one run folder. ``None`` is the latest. A missing id is an error."""
+    adopt_legacy_run(root)
+    if run_id is None:
+        runs = list_run_dirs(root)
+        if not runs:
+            raise ValueError(f"No eval runs in {root}")
+        return runs[-1]
+    if _RUN_ID.fullmatch(run_id) is None or not (root / run_id).is_dir():
+        raise ValueError(f"Unknown eval run: {run_id}")
+    return root / run_id
+
+
+def list_run_dirs(root: Path) -> list[Path]:
+    if not root.is_dir():
+        return []
+    return sorted(
+        (path for path in root.iterdir() if path.is_dir() and _RUN_ID.fullmatch(path.name)),
+        key=lambda path: path.name,
+    )
+
+
+def open_eval_run(
+    root: Path,
+    *,
+    run_id: str | None = None,
+    model: str | None = None,
+    verbosity: str | None = None,
+    question: str | None = None,
+    config: AgentConfig | None = None,
+    questions: list[EvalQuestion] | None = None,
+) -> Path:
+    """Validate the matrix, then open a new run or an existing one.
+
+    Validation happens before any folder is created, so a bad model or question
+    does not leave an empty run behind.
+    """
+    agent = config if config is not None else load_agent_config()
+    loaded_questions = questions if questions is not None else load_questions()
+    build_cases(agent, loaded_questions, model=model, verbosity=verbosity, question=question)
+    if run_id is not None:
+        return resolve_run_dir(root, run_id)
+    return allocate_run_dir(root)
+
+
+def adopt_legacy_run(root: Path) -> Path | None:
+    """Move a flat ``model/question`` tree into the dated folder it belongs to.
+
+    Earlier evals wrote model folders and ``grading.csv`` directly under
+    ``outputs/end_to_end_eval/``. The folder name comes from the earliest
+    result timestamp, so that run stays identifiable next to later ones.
+    """
+    if not root.is_dir():
+        return None
+    legacy_dirs = [
+        path for path in root.iterdir() if path.is_dir() and _RUN_ID.fullmatch(path.name) is None
+    ]
+    has_results = any(any(folder.rglob("result.json")) for folder in legacy_dirs)
+    if not legacy_dirs or not has_results:
+        return None
+    started_at = _legacy_started_at(legacy_dirs)
+    destination = _unique_run_dir(root, _run_id_from_timestamp(started_at))
+    destination.mkdir()
+    for folder in legacy_dirs:
+        shutil.move(str(folder), str(destination / folder.name))
+    sheet = root / SHEET_NAME
+    if sheet.is_file():
+        shutil.move(str(sheet), str(destination / sheet.name))
+    _write_run_meta(destination, started_at)
+    return destination
+
+
+def _unique_run_dir(root: Path, run_id: str) -> Path:
+    candidate = root / run_id
+    suffix = 2
+    while candidate.exists():
+        candidate = root / f"{run_id}-{suffix}"
+        suffix += 1
+    return candidate
+
+
+def _run_id_from_timestamp(stamp: str) -> str:
+    match = re.match(r"(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2}):(\d{2})", stamp)
+    if match is None:
+        return new_run_id()
+    return f"{match.group(1)}T{match.group(2)}{match.group(3)}{match.group(4)}"
+
+
+def _legacy_started_at(folders: list[Path]) -> str:
+    earliest: str | None = None
+    for folder in folders:
+        for result_file in folder.rglob("result.json"):
+            try:
+                data = json.loads(result_file.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            stamp = data.get("timestamp") if isinstance(data, dict) else None
+            if isinstance(stamp, str) and stamp and (earliest is None or stamp < earliest):
+                earliest = stamp
+    if earliest is not None:
+        return earliest
+    oldest = min(folder.stat().st_mtime for folder in folders)
+    return datetime.fromtimestamp(oldest).astimezone().isoformat(timespec="seconds")
+
+
+def _write_run_meta(destination: Path, started_at: str) -> None:
+    payload = {"id": destination.name, "started_at": started_at}
+    (destination / "run.json").write_text(
+        json.dumps(payload, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def build_cases(
