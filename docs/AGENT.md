@@ -264,7 +264,7 @@ make up
 
 `make up` starts the API on port 8000 and the UI on http://localhost:5173. Vite proxies `/api` to the API. `make api` and `make ui` start one process. Set Azure OpenAI env vars for the API process. Set `OPENROUTER_API_KEY` too if you select an OpenRouter model.
 
-`make eval` runs `cctv-eval` and writes a new `outputs/end_to_end_eval/<local time>/` folder. It does not need the API process. It does need Azure credentials and reachable cameras. `--screenshot` is the exception: it opens the UI, so `make up` has to be running, and it asks the question a second time in the browser. The UI saves the selected model and verbosity for that turn; the runner puts `configs/agent.yaml` back afterward.
+`make eval` runs `cctv-eval` and writes a new `outputs/end_to_end_eval/<local time>/` folder. It does not need the API process. It does need Azure credentials and reachable cameras. `--screenshot` is the exception: it opens the UI, so `make up` has to be running, and it asks the question a second time in the browser. The UI saves the selected model and verbosity for that turn; the runner puts `configs/agent.yaml` back afterward. `cctv-eval --report` and `--charts` read the saved `result.json` files and call no model. Retrieval precision and recall use the cameras the model tried: each requested id or name is mapped to a catalog id with `resolve_camera`, then joined with the fetched ids.
 
 ## Tests
 

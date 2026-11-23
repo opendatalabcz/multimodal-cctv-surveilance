@@ -12,6 +12,8 @@ make ui            # UI only
 make test          # pytest, mocked HTTP, no live network
 make eval          # one fresh chat per question, enabled model, and verbosity
 make eval-report   # rewrite grading.csv for the latest run under outputs/end_to_end_eval/, no model calls
+make eval-charts   # PNG charts and summary.csv in the latest run's charts/ folder, no model calls
+uv run cctv-eval --charts --all-runs   # pool every run into outputs/charts/
 ```
 
 The UI proxies `/api` to port 8000. `make eval` starts a new folder `outputs/end_to_end_eval/<local time>/` and does not change `configs/agent.yaml`. `--run <id>` continues that folder. It needs Azure credentials and reachable cameras. `--screenshot` (`uv run cctv-eval --screenshot`) also needs `make up` and `uv run playwright install chromium`. Questions live in `configs/eval_questions.yaml`.

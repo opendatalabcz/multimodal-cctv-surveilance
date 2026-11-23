@@ -66,6 +66,66 @@ def test_sheet_has_selection_metrics_and_token_columns(tmp_path: Path) -> None:
     assert locked["selection_recall"] == ""
 
 
+def test_chat_completion_token_names_fill_the_token_columns(tmp_path: Path) -> None:
+    _write_result(
+        tmp_path,
+        "gemma",
+        None,
+        "walk",
+        usage={"prompt_tokens": 7, "completion_tokens": 3, "total_tokens": 10},
+    )
+
+    write_grading_sheet(tmp_path)
+
+    row = _rows(tmp_path / "grading.csv")[0]
+    assert (row["input_tokens"], row["output_tokens"], row["total_tokens"]) == ("7", "3", "10")
+
+
+def test_failed_case_still_gets_a_row(tmp_path: Path) -> None:
+    _write_result(
+        tmp_path,
+        "qwen",
+        None,
+        "walk",
+        success=False,
+        error="boom",
+        usage={},
+        requested_camera_ids=[],
+        fetched_camera_ids=[],
+        shown_camera_ids=[],
+    )
+
+    _, count, _ = write_grading_sheet(tmp_path)
+
+    row = _rows(tmp_path / "grading.csv")[0]
+    assert count == 1
+    assert row["success"] == "False"
+    assert row["total_tokens"] == ""
+    # Nothing tried against an expected set is a real zero, not a blank.
+    assert row["retrieval_precision"] == "0.0"
+    assert row["retrieval_recall"] == "0.0"
+
+
+def test_retrieval_counts_cameras_the_model_tried(tmp_path: Path) -> None:
+    # "Camera A" is a display name for a, and the fetch of b failed. "ghost" matches nothing.
+    _write_result(
+        tmp_path,
+        "gpt-4o",
+        None,
+        "walk",
+        requested_camera_ids=["Camera A", "b", "ghost"],
+        fetched_camera_ids=["a"],
+    )
+
+    write_grading_sheet(tmp_path, resolve={"Camera A": "a"}.get)
+
+    row = _rows(tmp_path / "grading.csv")[0]
+    assert row["attempted_camera_ids"] == "a;b;ghost"
+    # Tried {a, b, ghost} against expected {a, b}: two of three right, both expected tried.
+    assert row["retrieval_precision"] == "0.67"
+    assert row["retrieval_recall"] == "1.0"
+
+
 def test_regenerating_keeps_manual_scores(tmp_path: Path) -> None:
     _write_result(tmp_path, "gpt-4o", None, "airports")
     target, _, _ = write_grading_sheet(tmp_path)

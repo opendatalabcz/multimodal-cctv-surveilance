@@ -76,10 +76,29 @@ uv run cctv-eval --screenshot
 make eval-report
 ```
 
-`make eval-report` makes no model calls. It rewrites `grading.csv` inside the latest run folder from that run's `result.json` files, with one row per answer. `uv run cctv-eval --report --run 2026-11-17T113445` rewrites one earlier run. Token counts and `model_calls` cover the whole turn. `retrieval_precision` and `retrieval_recall` compare the cameras the model fetched during the turn with `expected_cameras` in `configs/eval_questions.yaml`. `selection_precision` and `selection_recall` do the same for the cameras the answer showed. Rewriting the sheet reads that file again, so changing a list updates the scores without another model run. A question with no list stays blank. Fill in `correctness_1_to_5`, `clarity_1_to_5`, and `notes` by hand. Regenerating the sheet keeps those three columns.
+`make eval-report` makes no model calls. It rewrites `grading.csv` inside the latest run folder from that run's `result.json` files, with one row per answer. `uv run cctv-eval --report --run 2026-11-17T113445` rewrites one earlier run. Token counts and `model_calls` cover the whole turn, and the token columns read both Azure names (`input_tokens`) and chat-completions names (`prompt_tokens`). `retrieval_precision` and `retrieval_recall` compare the cameras the model tried during the turn with `expected_cameras` in `configs/eval_questions.yaml`. Tried (`attempted_camera_ids`) means every camera it requested, mapped to its catalog id, plus every camera that was fetched, so a camera whose fetch failed still counts. A requested name that matches no camera stays as typed and counts as a wrong pick. `selection_precision` and `selection_recall` do the same for the cameras the answer showed. Rewriting the sheet reads that file again, so changing a list updates the scores without another model run. A question with no list stays blank. Fill in `correctness_1_to_5`, `clarity_1_to_5`, and `notes` by hand. Regenerating the sheet keeps those three columns.
 
 - **Correctness (1–5):** 5 means every claim matches the frames the answer showed, and nothing it says is missing from the question's scope. 1 means it describes something the frames do not show.
 - **Clarity (1–5):** 5 means a reader can act on the answer without re-reading it. 1 means it is hard to follow or repeats itself.
+
+### Charts
+
+```bash
+make eval-charts
+uv run cctv-eval --charts --run 2026-11-17T113445
+uv run cctv-eval --charts --all-runs
+```
+
+`make eval-charts` makes no model calls. It writes PNG charts and `summary.csv` into `charts/` inside the latest run folder (`--run` picks another). `--all-runs` pools every run under `outputs/end_to_end_eval/` and writes to `outputs/charts/`, which sits outside that folder because the runner treats any folder there that is not a run id as old results. The charts need matplotlib, which `make install_dev` installs.
+
+- `duration.png` and `duration_per_call.png` plot one dot per case, colored by run, with the median as a black line. Duration includes camera fetches.
+- `tokens.png` and `model_calls.png` show mean input and output tokens and mean model calls per case.
+- `retrieval.png` and `selection.png` show mean precision and recall against `expected_cameras`. Selection reads low when a model correctly leaves out a camera that returned a placeholder image.
+- `correctness.png` shows the hand-entered scores from each run's `grading.csv`. It stays empty until those columns are filled in.
+- `duration_by_run.png` (only with `--all-runs`) draws a median line per model over the runs in which it appears.
+- `summary.csv` holds the numbers behind the charts: case count, failed count, medians, means, and run count per model and verbosity.
+
+Only successful cases are charted. A model with no verbosity setting is labeled `default`. Each label carries its case count, and a model seen in one run is marked `1 run`. `outputs/` is gitignored, so back up the run folders yourself: the pooled charts only cover the runs still on disk.
 
 ## Tests
 

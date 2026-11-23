@@ -4,8 +4,16 @@ import argparse
 import sys
 from pathlib import Path
 
+from cctv.config.agent_yaml import load_agent_config
+from cctv.eval.charts import ChartsUnavailable, write_charts
 from cctv.eval.report import write_grading_sheet
-from cctv.eval.runner import default_output_dir, open_eval_run, resolve_run_dir, run_eval
+from cctv.eval.runner import (
+    default_output_dir,
+    list_run_dirs,
+    open_eval_run,
+    resolve_run_dir,
+    run_eval,
+)
 from cctv.utils.paths import project_root
 
 
@@ -35,8 +43,29 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Rewrite grading.csv for one run. Default: the latest run. No model calls.",
     )
+    parser.add_argument(
+        "--charts",
+        action="store_true",
+        help=(
+            "Write PNG charts and summary.csv into charts/ in one run folder "
+            "(default: the latest; see --run). No model calls."
+        ),
+    )
+    parser.add_argument(
+        "--all-runs",
+        action="store_true",
+        help="With --charts: pool every run and write to outputs/charts/ instead.",
+    )
     args = parser.parse_args(argv)
     root = default_output_dir()
+    if args.all_runs and not args.charts:
+        print("--all-runs only applies together with --charts.", file=sys.stderr)
+        return 2
+    if args.charts and args.report:
+        print("--charts and --report cannot be combined.", file=sys.stderr)
+        return 2
+    if args.charts:
+        return _write_charts(root, run_id=args.run, all_runs=args.all_runs)
     if args.report:
         try:
             run_path = resolve_run_dir(root, args.run)
@@ -77,6 +106,33 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
     return 1 if summary.failures else 0
+
+
+def _write_charts(root: Path, *, run_id: str | None, all_runs: bool) -> int:
+    if all_runs and run_id is not None:
+        print("--all-runs pools every run, so it cannot be combined with --run.", file=sys.stderr)
+        return 2
+    try:
+        if all_runs:
+            run_paths = list_run_dirs(root)
+            if not run_paths:
+                raise ValueError(f"No eval runs in {root}")
+            # Outside end_to_end_eval/: a folder there that is not a run id looks like old results.
+            out_dir = root.parent / "charts"
+        else:
+            run_paths = [resolve_run_dir(root, run_id)]
+            out_dir = run_paths[0] / "charts"
+        written = write_charts(
+            run_paths,
+            out_dir,
+            model_order=[model.id for model in load_agent_config().models],
+        )
+    except (ChartsUnavailable, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    scope = f"{len(run_paths)} runs" if all_runs else run_paths[0].name
+    print(f"{_display(out_dir)}: {len(written)} files from {scope}")
+    return 0
 
 
 def _display(path: Path) -> str:

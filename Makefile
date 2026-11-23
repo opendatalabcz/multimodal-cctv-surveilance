@@ -1,4 +1,4 @@
-.PHONY: help install_dev api ui up run test eval eval-report
+.PHONY: help install_dev api ui up run test eval eval-report eval-charts
 
 FRONTEND := frontend
 
@@ -10,6 +10,7 @@ help:
 	@echo "test         Run pytest (mocked HTTP)"
 	@echo "eval         Start a new dated eval run under outputs/end_to_end_eval/"
 	@echo "eval-report  Rewrite grading.csv for the latest eval run (no model calls)"
+	@echo "eval-charts  Write charts and summary.csv for the latest eval run (no model calls)"
 
 install_dev:
 	uv sync --group dev
@@ -34,3 +35,6 @@ eval:
 
 eval-report:
 	uv run cctv-eval --report
+
+eval-charts:
+	uv run cctv-eval --charts

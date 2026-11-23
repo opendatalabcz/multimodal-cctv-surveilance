@@ -24,6 +24,7 @@ cctv-eval = "cctv.eval.cli:main"
 [dependency-groups]
 dev = [
     "httpx",
+    "matplotlib>=3.11.2",
     "playwright",
     "pytest",
 ]
