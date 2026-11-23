@@ -196,6 +196,14 @@ def _token_limit_field(config: ChatConfig, max_tokens: int) -> dict[str, int]:
     return {"max_completion_tokens": max_tokens}
 
 
+def _with_text_content(message: dict[str, Any]) -> dict[str, Any]:
+    """Send ``content: ""`` on tool-call turns. Some providers (Alibaba via OpenRouter)
+    reject a ``null`` content field even when ``tool_calls`` is present."""
+    if message.get("role") == "assistant" and message.get("content") is None:
+        return {**message, "content": ""}
+    return message
+
+
 def _chat_completion_payload(
     messages: list[dict[str, Any]],
     config: ChatConfig,
@@ -209,7 +217,10 @@ def _chat_completion_payload(
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": config.model,
-        "messages": materialize_for_azure(messages, max_images=max_images),
+        "messages": [
+            _with_text_content(message)
+            for message in materialize_for_azure(messages, max_images=max_images)
+        ],
         **_token_limit_field(config, max_tokens),
     }
     if reasoning and reasoning != "default":
