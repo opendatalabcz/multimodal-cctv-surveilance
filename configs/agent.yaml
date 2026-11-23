@@ -90,7 +90,21 @@ models:
 - id: google/gemma-4-31b-it
   label: Gemma 4 31B (paid)
   provider: openrouter
-  enabled: false
+  enabled: true
+  transport: chat_completions
+  max_images_per_request: 32
+  reasoning:
+    choices: []
+    default: default
+    locked: true
+  verbosity:
+    choices: []
+    default: medium
+    locked: true
+- id: qwen/qwen3.8-flash
+  label: Qwen3.8 Flash
+  provider: openrouter
+  enabled: true
   transport: chat_completions
   max_images_per_request: 32
   reasoning:
