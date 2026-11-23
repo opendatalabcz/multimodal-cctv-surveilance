@@ -1,4 +1,4 @@
-"""Sample apron frames, score GPT-4o and GPT-5.6 Luna, and record a Langfuse experiment."""
+"""Sample apron frames, score the selected models, and record a Langfuse experiment."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from eval.azure_client import AzureVisionClient
+from eval.azure_client import KNOWN_MODELS, AzureVisionClient, is_openrouter, openrouter_key
 from eval.cost import cost_usd, summarize_usage, token_counts
 from eval.few_shot import EXAMPLES, few_shot_id, held_out_keys, prepare_examples, write_example_page
 from eval.frames import extract_frames, frame_path, video_duration_s, write_contact_sheet
@@ -20,8 +20,14 @@ from eval.prompt import get_prompt, prompt_id
 from eval.scoring import prediction_row, summarize
 
 SMOKE_SIZE = 8
+SMOKE_MODEL = "gpt-5.6-luna"
 REQUEST_TIMEOUT_S = 180
 MAX_CONCURRENCY = 4
+
+# Each level includes the one before it. Azure models first, then the OpenRouter models.
+DEFAULT_MODELS = ["gpt-5.6-luna", "gpt-6-luna", "gpt-4o"]
+MID_MODELS = [*DEFAULT_MODELS, "gpt-6.1-terra", "gpt-6.2-sol"]
+HIGH_MODELS = [*MID_MODELS, "gpt-6-astra", "google/gemma-4-31b-it", "qwen/qwen3.8-flash"]
 
 
 def project_root() -> Path:
@@ -68,18 +74,43 @@ def select_smoke(samples: list[Sample], size: int = SMOKE_SIZE) -> list[Sample]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Evaluate stand-state recognition on sampled frames.")
     parser.add_argument("--interval-seconds", type=int, default=60)
-    parser.add_argument("--models", default="gpt-4o,gpt-5.6-luna")
+    parser.add_argument(
+        "--models",
+        help="Comma-separated model ids. Replaces the level's list; cannot be combined with --mid or --high.",
+    )
+    levels = parser.add_mutually_exclusive_group()
+    levels.add_argument(
+        "--mid",
+        action="store_true",
+        help="Default models plus gpt-6.1-terra and gpt-6.2-sol.",
+    )
+    levels.add_argument(
+        "--high",
+        action="store_true",
+        help="Every registered model: --mid plus gpt-6-astra, Gemma 4 31B (paid), and Qwen3.8 Flash.",
+    )
     parser.add_argument("--prompt-version", choices=("basic", "detailed"), default="detailed")
     parser.add_argument("--few-shot", action="store_true", help="Send the held-out open-door and closed-door examples with each frame.")
     args = parser.parse_args(argv)
     if args.interval_seconds <= 0:
         parser.error("--interval-seconds must be positive")
-    models = [model.strip() for model in args.models.split(",") if model.strip()]
-    if not models:
-        parser.error("--models must name at least one deployment")
+    if args.models is not None:
+        if args.mid or args.high:
+            parser.error("--models cannot be combined with --mid or --high")
+        models = [model.strip() for model in args.models.split(",") if model.strip()]
+        if not models:
+            parser.error("--models must name at least one deployment")
+    else:
+        models = HIGH_MODELS if args.high else MID_MODELS if args.mid else DEFAULT_MODELS
+    unknown = [model for model in models if model not in KNOWN_MODELS]
+    if unknown:
+        parser.error(f"Unknown model(s): {', '.join(unknown)}")
 
     root = project_root()
     load_dotenv(root / ".env")
+    if any(is_openrouter(model) for model in models) and not openrouter_key():
+        parser.error("OPENROUTER_API_KEY (or OPEN_ROUTER_API_KEY) is required for the OpenRouter models")
+    print(f"models: {', '.join(models)}")
     output_dir = root / "outputs" / "vlm_eval"
     frames_dir = output_dir / "frames"
     videos_dir = root / "raw_videos"
@@ -129,11 +160,11 @@ def main(argv: list[str] | None = None) -> int:
         few_shot_id=active_few_shot_id,
     )
     smoke = select_smoke(samples)
-    print("Smoke check on GPT-4o:")
+    print(f"Smoke check on {SMOKE_MODEL}:")
     smoke_failed = False
     for sample in smoke:
         record = client.predict(
-            model="gpt-4o",
+            model=SMOKE_MODEL,
             image_path=frame_path(frames_dir, sample),
             frame_id=sample.frame_id,
             interval_seconds=sample.interval_seconds,

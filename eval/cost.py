@@ -1,8 +1,9 @@
 """Turn Azure token usage into a dollar cost.
 
-Prices are Azure OpenAI Global standard, USD per 1M tokens. Cached input is the
-prompt-cache rate: half of the input price for gpt-4o, one tenth for the GPT-5
-deployments. Reasoning tokens are already included in the output count.
+Prices are Azure OpenAI Global standard, short-context, USD per 1M tokens. Cached
+input is the prompt-cache rate listed for each model. Reasoning tokens are already
+included in the output count. Models without an entry (the OpenRouter models) get
+no dollar figure; their token counts are still recorded.
 """
 
 from __future__ import annotations
@@ -10,6 +11,9 @@ from __future__ import annotations
 PRICES_PER_MILLION = {
     "gpt-4o": {"input": 2.50, "cached_input": 1.25, "output": 10.0},
     "gpt-5.6-luna": {"input": 0.20, "cached_input": 0.02, "output": 1.20},
+    "gpt-6-luna": {"input": 0.10, "cached_input": 0.01, "output": 0.50},
+    "gpt-6.1-terra": {"input": 1.00, "cached_input": 0.05, "output": 5.00},
+    "gpt-6.2-sol": {"input": 2.00, "cached_input": 0.10, "output": 10.00},
     "gpt-6-astra": {"input": 10.0, "cached_input": 1.0, "output": 50.0},
 }
 

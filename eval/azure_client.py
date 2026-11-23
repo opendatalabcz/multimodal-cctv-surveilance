@@ -1,4 +1,4 @@
-"""Azure vision calls for gpt-4o and the Responses-API deployments."""
+"""Vision calls for the Azure OpenAI deployments and the OpenRouter models."""
 
 from __future__ import annotations
 
@@ -15,13 +15,33 @@ from dotenv import load_dotenv
 from eval.cost import cost_usd
 from eval.prompt import parse_state_json, prompt_id, repair_prompt
 
-# gpt-4o uses Chat Completions. Luna and Astra use the Responses API.
+# gpt-4o uses Chat Completions. The GPT-5.6 and GPT-6 deployments use the Responses
+# API. Gemma and Qwen are served by OpenRouter over chat completions.
 _TRANSPORT = {
     "gpt-4o": "chat_completions",
     "gpt-5.6-luna": "responses",
+    "gpt-6-luna": "responses",
+    "gpt-6.1-terra": "responses",
+    "gpt-6.2-sol": "responses",
     "gpt-6-astra": "responses",
+    "google/gemma-4-31b-it": "openrouter",
+    "qwen/qwen3.8-flash": "openrouter",
 }
+KNOWN_MODELS = frozenset(_TRANSPORT)
+OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
+# Reasoning models on OpenRouter can spend the 800-token budget used for gpt-4o
+# before writing any text, so the OpenRouter budget matches the Responses one.
+OPENROUTER_MAX_TOKENS = 8000
 _RETRY_STATUSES = {429, 500, 502, 503, 504}
+
+
+def is_openrouter(model: str) -> bool:
+    return _TRANSPORT.get(model) == "openrouter"
+
+
+def openrouter_key() -> str | None:
+    """Read after the .env file is loaded. OPENROUTER_API_KEY is the documented name."""
+    return os.getenv("OPENROUTER_API_KEY") or os.getenv("OPEN_ROUTER_API_KEY") or None
 
 
 class AzureVisionClient:
@@ -44,6 +64,7 @@ class AzureVisionClient:
         if not base.endswith("/openai/v1"):
             base += "/openai/v1"
         self.api_key = api_key
+        self.openrouter_api_key = openrouter_key()
         self.chat_url = f"{base}/chat/completions"
         self.responses_url = f"{base}/responses"
         self.timeout_s = timeout_s
@@ -118,13 +139,28 @@ class AzureVisionClient:
     def _call(self, model: str, image_path: Path, prompt: str) -> tuple[str | None, dict, str | None]:
         query_url = _data_url(image_path)
         example_parts = [(_data_url(path), caption) for path, caption in self.examples]
-        if _TRANSPORT[model] == "chat_completions":
+        transport = _TRANSPORT[model]
+        if transport == "chat_completions":
             payload = {
                 "model": model,
                 "messages": [{"role": "user", "content": _chat_content(prompt, example_parts, query_url)}],
                 "max_completion_tokens": 800,
             }
             url = self.chat_url
+            headers = self._azure_headers()
+        elif transport == "openrouter":
+            if not self.openrouter_api_key:
+                raise RuntimeError("OPENROUTER_API_KEY (or OPEN_ROUTER_API_KEY) is required for " + model)
+            payload = {
+                "model": model,
+                "messages": [{"role": "user", "content": _chat_content(prompt, example_parts, query_url)}],
+                "max_tokens": OPENROUTER_MAX_TOKENS,
+            }
+            url = OPENROUTER_CHAT_URL
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.openrouter_api_key}",
+            }
         else:
             payload = {
                 "model": model,
@@ -139,14 +175,18 @@ class AzureVisionClient:
                 "reasoning": {"effort": "medium"},
             }
             url = self.responses_url
-        body, error = self._post(url, payload)
+            headers = self._azure_headers()
+        body, error = self._post(url, payload, headers)
         if body is None:
             return None, {}, error
-        text = _message_text(body, _TRANSPORT[model])
+        style = "responses" if transport == "responses" else "chat_completions"
+        text = _message_text(body, style)
         return text, body.get("usage") or {}, None if text else "Model returned no text"
 
-    def _post(self, url: str, payload: dict) -> tuple[dict | None, str | None]:
-        headers = {"Content-Type": "application/json", "api-key": self.api_key}
+    def _azure_headers(self) -> dict[str, str]:
+        return {"Content-Type": "application/json", "api-key": self.api_key}
+
+    def _post(self, url: str, payload: dict, headers: dict[str, str]) -> tuple[dict | None, str | None]:
         delay = 2.0
         last_error = "request failed"
         for attempt in range(5):
