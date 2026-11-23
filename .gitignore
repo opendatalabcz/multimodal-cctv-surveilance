@@ -232,3 +232,4 @@ outputs/
 
 # Local Cursor skills (machine-specific installs and symlinks)
 .cursor/skills/
+frontend/
