@@ -31,6 +31,7 @@ def capture_chat_screenshot(
     model_label: str,
     verbosity: str | None,
     path: Path,
+    reasoning: str | None = None,
     ui_url: str = UI_URL,
 ) -> None:
     try:
@@ -52,6 +53,8 @@ def capture_chat_screenshot(
                 composer = page.get_by_placeholder("Ask about the cameras")
                 composer.wait_for(state="visible", timeout=30_000)
                 _select_combobox(page, "Model", model_label)
+                if reasoning is not None:
+                    _select_combobox(page, "Reasoning", _CHOICE_LABELS.get(reasoning, reasoning))
                 if verbosity is not None:
                     _select_combobox(page, "Verbosity", _CHOICE_LABELS.get(verbosity, verbosity))
                 page.get_by_role("button", name="New chat").click()

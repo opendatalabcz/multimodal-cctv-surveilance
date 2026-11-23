@@ -9,6 +9,7 @@ from cctv.config.models import AgentConfig
 from cctv.eval.cli import main
 from cctv.eval.questions import load_questions
 from cctv.eval.runner import (
+    EVAL_FOCUS_MODEL_ID,
     EvalSummary,
     adopt_legacy_run,
     allocate_run_dir,
@@ -24,6 +25,14 @@ from cctv.api.store import Conversation
 
 def _question():
     return next(item for item in load_questions() if item.id == "charles-bridge-walk")
+
+
+def _with_focus(config: AgentConfig | None = None) -> AgentConfig:
+    """Add the eval focus model. The code default catalog does not list it."""
+    config = config or AgentConfig()
+    donor = next(item for item in config.models if item.id == "gpt-5.6-luna")
+    focus = donor.model_copy(update={"id": EVAL_FOCUS_MODEL_ID, "label": "GPT-6.1 Terra"})
+    return config.model_copy(update={"models": [*config.models, focus]})
 
 
 def _ok_turn(conversation: Conversation, content: str, **kwargs):
@@ -67,20 +76,74 @@ def test_matrix_skips_verbosity_folder_when_locked() -> None:
     cases = build_cases(AgentConfig(), questions)
     gpt4o = [case for case in cases if case.model_id == "gpt-4o"]
     luna = [case for case in cases if case.model_id == "gpt-5.6-luna"]
-    assert len(cases) == 35
+    astra = [case for case in cases if case.model_id == "gpt-6-astra"]
+    assert len(cases) == 15
     assert len(gpt4o) == 5
+    assert len(astra) == 5
+    assert len(luna) == 5
+    assert {case.verbosity for case in astra} == {"medium"}
+    assert {case.reasoning for case in astra} == {None}
+    assert {case.verbosity for case in luna} == {"medium"}
+    assert {case.reasoning for case in luna} == {None}
     assert {case.verbosity for case in gpt4o} == {None}
-    assert {case.verbosity for case in luna} == {"low", "medium", "high"}
+    assert {case.reasoning for case in gpt4o} == {None}
     root = Path("/tmp/eval-layout")
     assert case_dir(root, gpt4o[0]) == root / "gpt-4o" / gpt4o[0].question_id
-    low = next(case for case in luna if case.verbosity == "low" and case.question_id == "charles-bridge-walk")
-    assert case_dir(root, low) == root / "gpt-5.6-luna" / "low" / "charles-bridge-walk"
+    medium = next(case for case in luna if case.question_id == "charles-bridge-walk")
+    assert case_dir(root, medium) == root / "gpt-5.6-luna" / "medium" / "charles-bridge-walk"
+
+
+def test_focus_model_adds_low_and_high_reasoning() -> None:
+    cases = build_cases(_with_focus(), load_questions())
+    terra = [case for case in cases if case.model_id == EVAL_FOCUS_MODEL_ID]
+    walk = [case for case in terra if case.question_id == "charles-bridge-walk"]
+    assert {(case.verbosity, case.reasoning) for case in walk} == {
+        ("medium", None),
+        ("medium", "low"),
+        ("medium", "high"),
+    }
+    others = [case for case in cases if case.model_id != EVAL_FOCUS_MODEL_ID and case.verbosity == "medium"]
+    assert others
+    assert {case.reasoning for case in others} == {None}
+    root = Path("/tmp/eval-layout")
+    effort = next(case for case in walk if case.reasoning == "low")
+    assert case_dir(root, effort) == (
+        root / EVAL_FOCUS_MODEL_ID / "reasoning-low" / "medium" / "charles-bridge-walk"
+    )
+
+
+def test_reasoning_slice_is_sent_at_medium_verbosity(tmp_path, monkeypatch) -> None:
+    seen: list[dict] = []
+
+    def record(conversation, content, **kwargs):
+        seen.append(kwargs)
+        return _ok_turn(conversation, content)
+
+    monkeypatch.setattr("cctv.eval.runner.run_chat_turn", record)
+    question = _question()
+    run_eval(
+        output_dir=tmp_path / "out",
+        model=EVAL_FOCUS_MODEL_ID,
+        question=question.id,
+        config=_with_focus(),
+        questions=[question],
+    )
+    assert [(item.get("verbosity"), item["reasoning"]) for item in seen] == [
+        ("medium", "medium"),
+        ("medium", "low"),
+        ("medium", "high"),
+    ]
+    root = tmp_path / "out" / EVAL_FOCUS_MODEL_ID
+    assert (root / "medium" / question.id / "result.json").is_file()
+    assert (root / "reasoning-low" / "medium" / question.id / "result.json").is_file()
+    assert (root / "reasoning-high" / "medium" / question.id / "result.json").is_file()
 
 
 def test_verbosity_filter_skips_models_that_cannot_set_it() -> None:
     cases = build_cases(AgentConfig(), load_questions(), verbosity="low")
     assert {case.model_id for case in cases} == {"gpt-5.6-luna", "gpt-6-astra"}
     assert {case.verbosity for case in cases} == {"low"}
+    assert {case.reasoning for case in cases} == {None}
 
 
 def test_matrix_skips_disabled_models() -> None:
@@ -88,7 +151,7 @@ def test_matrix_skips_disabled_models() -> None:
     config.models[0] = config.models[0].model_copy(update={"enabled": False})
     cases = build_cases(config, load_questions())
     assert "gpt-5.6-luna" not in {case.model_id for case in cases}
-    assert len(cases) == 20
+    assert len(cases) == 10
 
 
 def test_explicit_disabled_model_is_an_error() -> None:
@@ -112,6 +175,7 @@ def test_run_writes_answer_images_and_skips_existing(tmp_path, monkeypatch) -> N
     def counting(conversation, content, **kwargs):
         calls["n"] += 1
         assert kwargs["model"] == "gpt-4o"
+        assert kwargs["reasoning"] == "default"
         assert "verbosity" not in kwargs
         return _ok_turn(conversation, content)
 

@@ -10,7 +10,7 @@ make up            # API :8000 and UI :5173
 make api           # API only
 make ui            # UI only
 make test          # pytest, mocked HTTP, no live network
-make eval          # one fresh chat per question, enabled model, and verbosity
+make eval          # one fresh chat per question and enabled model at medium verbosity; Terra also runs reasoning low and high
 make eval-report   # rewrite grading.csv for the latest run under outputs/end_to_end_eval/, no model calls
 make eval-charts   # PNG charts and summary.csv in the latest run's charts/ folder, no model calls
 uv run cctv-eval --charts --all-runs   # pool every run into outputs/charts/

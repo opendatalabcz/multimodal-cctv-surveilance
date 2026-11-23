@@ -123,12 +123,51 @@ models:
       choices: [low, medium, high]
       default: medium
       locked: false
+  - id: gpt-6.1-terra
+    label: GPT-6.1 Terra
+    provider: azure
+    transport: responses
+    max_images_per_request: 32
+    reasoning:
+      choices: [none, low, medium, high, xhigh, max]
+      default: medium
+      locked: false
+    verbosity:
+      choices: [low, medium, high]
+      default: medium
+      locked: false
+  - id: gpt-6.2-sol
+    label: GPT-6.2 Sol
+    provider: azure
+    transport: responses
+    max_images_per_request: 32
+    reasoning:
+      choices: [low, medium, high, xhigh, max]
+      default: medium
+      locked: false
+    verbosity:
+      choices: [low, medium, high]
+      default: medium
+      locked: false
+  - id: gpt-6-luna
+    label: GPT-6 Luna
+    provider: azure
+    transport: responses
+    max_images_per_request: 32
+    reasoning:
+      choices: [none, low, medium, high, xhigh, max]
+      default: medium
+      locked: false
+    verbosity:
+      choices: [low, medium, high]
+      default: medium
+      locked: false
 model: gpt-4o
 ```
 
 The chat header selects `model` and, when the model allows it, `reasoning` and `verbosity`. Each model keeps its own values. The model catalog, the selected model, and any reasoning or verbosity value that differs from that model's catalog default are stored in `configs/agent.yaml`. A catalog entry with `enabled: false` stays in the file. The header omits it, a saved selection of that id falls back to the first enabled model, and `make eval` skips it. `cctv-eval --model` rejects a disabled id. A missing `enabled` flag means the model is in use, and a save omits `enabled: true`. `PUT /api/config` ignores a client `models` list and rejects an unknown model id, a disabled model id, or a value that model does not allow. If `AZURE_OPENAI_MODEL` names a deployment missing from the file, that deployment is appended so it stays selectable. A legacy Luna `default` reasoning value is clamped to its explicit catalog default, `medium`.
 
-Luna and Astra use the Responses API (`/openai/v1/responses`) for tool-enabled chat because Azure rejects function tools combined with explicit reasoning on Chat Completions. Their effort is sent as `reasoning.effort`; non-medium verbosity is sent as `text.verbosity`. Each response asks for `reasoning.encrypted_content`. Those reasoning items are stored only on the in-memory Azure transcript and replayed before the matching function calls, so the model can continue the thought without writing it into the visible answer. Luna supports `none`, `low`, `medium`, `high`, `xhigh`, and `max`; Astra supports the same list except `none`. GPT-4o stays on Chat Completions with no reasoning or verbosity control, and those fields are omitted. Camera metadata analysis sends no tools and neither setting, so it stays on Chat Completions for every model. Each assistant reply stores the deployment id, and the UI shows its catalog label. The welcome message is unlabeled. `provider` is `azure` for the Azure deployments and `openrouter` for the free Gemma entries. `cctv.utils.providers.resolve_model_config` picks the client for the selected model; an unknown provider is rejected before any request is made.
+GPT-5.6 Luna, GPT-6 Astra, GPT-6.1 Terra, GPT-6.2 Sol, and GPT-6 Luna use the Responses API (`/openai/v1/responses`) for tool-enabled chat because Azure rejects function tools combined with explicit reasoning on Chat Completions. Their effort is sent as `reasoning.effort`; non-medium verbosity is sent as `text.verbosity`. Each response asks for `reasoning.encrypted_content`. Those reasoning items are stored only on the in-memory Azure transcript and replayed before the matching function calls, so the model can continue the thought without writing it into the visible answer. GPT-5.6 Luna, GPT-6.1 Terra, and GPT-6 Luna support `none`, `low`, `medium`, `high`, `xhigh`, and `max`; Astra and GPT-6.2 Sol support the same list except `none`. GPT-4o stays on Chat Completions with no reasoning or verbosity control, and those fields are omitted. Camera metadata analysis sends no tools and neither setting, so it stays on Chat Completions for every model. Each assistant reply stores the deployment id, and the UI shows its catalog label. The welcome message is unlabeled. `provider` is `azure` for the Azure deployments and `openrouter` for the free Gemma entries. `cctv.utils.providers.resolve_model_config` picks the client for the selected model; an unknown provider is rejected before any request is made.
 
 OpenRouter models (`provider: openrouter`) use chat completions at `https://openrouter.ai/api/v1/chat/completions` with `Authorization: Bearer` from `OPENROUTER_API_KEY` (`OPEN_ROUTER_API_KEY` is also read). The payload sends `max_tokens`, not `max_completion_tokens`, because the free endpoints do not accept the Azure name. Reasoning and verbosity are locked to their defaults and omitted. The two free Gemma entries are `enabled: false`. Gemma 4 31B (paid) and Qwen3.8 Flash are enabled, so the header and `make eval` offer them. Qwen3.8 Flash's default thinking is left on because reasoning is locked to the default. Camera metadata analysis uses the selected model, so it goes to OpenRouter too when one of these models is selected. OpenRouter endpoints can route frames to third-party providers that may log them, free or paid; check the OpenRouter privacy settings before sending live footage.
 
@@ -188,7 +227,7 @@ The system prompt (`src/cctv/config/prompt.py`) instructs the model to:
 - Use `web_search` for news/context when Internet search is on — **not** as a weather API.
 - Never claim Internet or weather capabilities when those toggles are off.
 
-`run_chat_turn` reloads config before every user message and passes `max_tool_rounds=16` so a generous camera batch plus optional external calls can complete. Optional `model` and `verbosity` arguments apply to that call only and are not written to `configs/agent.yaml`. `cctv-eval` uses them to ask each question in `configs/eval_questions.yaml` once per enabled catalog model and verbosity.
+`run_chat_turn` reloads config before every user message and passes `max_tool_rounds=16` so a generous camera batch plus optional external calls can complete. Optional `model`, `reasoning`, and `verbosity` arguments apply to that call only and are not written to `configs/agent.yaml`. `cctv-eval` asks each question in `configs/eval_questions.yaml` once per enabled model at verbosity medium and the model's catalog reasoning default. GPT-6.1 Terra also runs reasoning `low` and `high` at verbosity `medium`. `--verbosity` forces that one level on every model that allows it. `none`, `xhigh`, and `max` stay header choices.
 
 ## Model-facing tools
 
@@ -264,7 +303,7 @@ make up
 
 `make up` starts the API on port 8000 and the UI on http://localhost:5173. Vite proxies `/api` to the API. `make api` and `make ui` start one process. Set Azure OpenAI env vars for the API process. Set `OPENROUTER_API_KEY` too if you select an OpenRouter model.
 
-`make eval` runs `cctv-eval` and writes a new `outputs/end_to_end_eval/<local time>/` folder. It does not need the API process. It does need Azure credentials and reachable cameras. `--screenshot` is the exception: it opens the UI, so `make up` has to be running, and it asks the question a second time in the browser. The UI saves the selected model and verbosity for that turn; the runner puts `configs/agent.yaml` back afterward. `cctv-eval --report` and `--charts` read the saved `result.json` files and call no model. Retrieval precision and recall use the cameras the model tried: each requested id or name is mapped to a catalog id with `resolve_camera`, then joined with the fetched ids.
+`make eval` runs `cctv-eval` and writes a new `outputs/end_to_end_eval/<local time>/` folder. It does not need the API process. It does need Azure credentials and reachable cameras. `--screenshot` is the exception: it opens the UI, so `make up` has to be running, and it asks the question a second time in the browser. The UI saves the selected model, reasoning, and verbosity for that turn; the runner puts `configs/agent.yaml` back afterward. `cctv-eval --report` and `--charts` read the saved `result.json` files and call no model. Retrieval precision and recall use the cameras the model tried: each requested id or name is mapped to a catalog id with `resolve_camera`, then joined with the fetched ids.
 
 ## Tests
 

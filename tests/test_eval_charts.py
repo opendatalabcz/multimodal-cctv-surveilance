@@ -50,9 +50,12 @@ def _result(
     (folder / "result.json").write_text(json.dumps(payload), encoding="utf-8")
 
 
-def _summary(path: Path) -> dict[tuple[str, str], dict[str, str]]:
+def _summary(path: Path) -> dict[tuple[str, str, str], dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as handle:
-        return {(row["model"], row["verbosity"]): row for row in csv.DictReader(handle)}
+        return {
+            (row["model"], row["verbosity"], row["reasoning"]): row
+            for row in csv.DictReader(handle)
+        }
 
 
 def _charts(roots: list[Path], out_dir: Path) -> list[Path]:
@@ -78,7 +81,7 @@ def test_one_run_writes_charts_and_a_summary(tmp_path: Path) -> None:
 
     assert {path.name for path in written} == SINGLE_RUN_FILES
     assert all(path.stat().st_size > 0 for path in written)
-    row = _summary(run / "charts" / SUMMARY_NAME)[("gpt-4o", "")]
+    row = _summary(run / "charts" / SUMMARY_NAME)[("gpt-4o", "", "")]
     assert (row["runs"], row["n"], row["failed"]) == ("1", "2", "1")
     assert row["median_duration_ms"] == "2000.0"
     # prompt_tokens and completion_tokens count the same as input and output tokens.
@@ -104,12 +107,12 @@ def test_pooled_runs_add_the_cross_run_chart(tmp_path: Path) -> None:
 
     assert {path.name for path in written} == SINGLE_RUN_FILES | {"duration_by_run.png"}
     rows = _summary(tmp_path / "charts" / SUMMARY_NAME)
-    luna = rows[("gpt-5.6-luna", "low")]
+    luna = rows[("gpt-5.6-luna", "low", "")]
     assert (luna["runs"], luna["n"]) == ("2", "2")
     assert luna["median_duration_ms"] == "2000.0"
     # Azure token names and chat-completions token names are pooled together.
     assert luna["mean_input_tokens"] == "75.0"
-    assert rows[("qwen/qwen3.8-flash", "")]["runs"] == "1"
+    assert rows[("qwen/qwen3.8-flash", "", "")]["runs"] == "1"
 
 
 def test_retrieval_and_manual_scores_reach_the_summary(tmp_path: Path) -> None:
@@ -122,7 +125,7 @@ def test_retrieval_and_manual_scores_reach_the_summary(tmp_path: Path) -> None:
 
     _charts([run], run / "charts")
 
-    row = _summary(run / "charts" / SUMMARY_NAME)[("gpt-4o", "")]
+    row = _summary(run / "charts" / SUMMARY_NAME)[("gpt-4o", "", "")]
     # Tried {a, ghost} against expected {a, b}: half were right, half of the expected were tried.
     assert row["mean_retrieval_precision"] == "0.5"
     assert row["mean_retrieval_recall"] == "0.5"
@@ -162,7 +165,19 @@ def test_cli_all_runs_writes_outside_the_run_folder(tmp_path: Path, monkeypatch)
     assert (tmp_path / "charts" / "duration_by_run.png").is_file()
     # A folder inside end_to_end_eval that is not a run id would be mistaken for old results.
     assert not (root / "charts").exists()
-    assert _summary(tmp_path / "charts" / SUMMARY_NAME)[("gpt-4o", "")]["runs"] == "2"
+    assert _summary(tmp_path / "charts" / SUMMARY_NAME)[("gpt-4o", "", "")]["runs"] == "2"
+
+
+def test_reasoning_efforts_stay_separate_bars(tmp_path: Path) -> None:
+    run = tmp_path / RUN_A
+    _result(run, "gpt-5.6-luna", "medium", "walk", reasoning="medium", duration_ms=1000)
+    _result(run, "gpt-5.6-luna", "medium", "traffic", reasoning="low", duration_ms=3000)
+
+    _charts([run], run / "charts")
+
+    rows = _summary(run / "charts" / SUMMARY_NAME)
+    assert rows[("gpt-5.6-luna", "medium", "medium")]["median_duration_ms"] == "1000.0"
+    assert rows[("gpt-5.6-luna", "medium", "low")]["median_duration_ms"] == "3000.0"
 
 
 @pytest.mark.parametrize(

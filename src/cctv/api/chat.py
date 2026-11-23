@@ -88,13 +88,13 @@ def run_chat_turn(
     config: AzureOpenAIConfig | None = None,
     on_progress: ProgressCallback | None = None,
     model: str | None = None,
+    reasoning: str | None = None,
     verbosity: str | None = None,
 ) -> tuple[Conversation, dict[str, Any]]:
     """Run one user message.
 
-    ``model`` and ``verbosity`` override the saved selection for this call only.
-    They are not written to ``configs/agent.yaml``. Reasoning stays on the value
-    saved for the model that actually runs.
+    ``model``, ``reasoning``, and ``verbosity`` override the saved selection for
+    this call only. They are not written to ``configs/agent.yaml``.
     """
     agent_config = load_agent_config()
     if model is not None:
@@ -125,7 +125,8 @@ def run_chat_turn(
         if option is not None
         else DEFAULT_MAX_IMAGES_PER_REQUEST
     )
-    reasoning = clamp_reasoning(option, agent_config.reasoning.get(selected_model))
+    requested_reasoning = reasoning if reasoning is not None else agent_config.reasoning.get(selected_model)
+    reasoning_setting = clamp_reasoning(option, requested_reasoning)
     requested_verbosity = verbosity if verbosity is not None else agent_config.verbosity.get(selected_model)
     verbosity_setting = clamp_verbosity(option, requested_verbosity)
 
@@ -138,7 +139,7 @@ def run_chat_turn(
         metadata={
             "model": selected_model,
             "transport": transport,
-            "reasoning": reasoning,
+            "reasoning": reasoning_setting,
             "verbosity": verbosity_setting,
             "tools": [
                 tool["function"]["name"]
@@ -154,7 +155,7 @@ def run_chat_turn(
             tools=active_tools,
             max_tool_rounds=MAX_TOOL_ROUNDS,
             on_progress=on_progress,
-            reasoning=reasoning,
+            reasoning=reasoning_setting,
             verbosity=verbosity_setting,
             transport=transport,
             max_images=max_images,

@@ -20,6 +20,7 @@ MANUAL_COLUMNS = ["correctness_1_to_5", "clarity_1_to_5", "notes"]
 COLUMNS = [
     "model",
     "verbosity",
+    "reasoning",
     "question_id",
     "success",
     "duration_ms",
@@ -99,11 +100,17 @@ def load_rows(
             folder = result_file.parent
             row = _row(data, folder.relative_to(root), expected_by_id, resolve)
             row["run"] = root.name
-            key = (row["model"], row["verbosity"], row["question_id"])
+            key = (row["model"], row["verbosity"], row["reasoning"], row["question_id"])
             row.update(manual.get(key, {column: "" for column in MANUAL_COLUMNS}))
             rows.append(row)
     rows.sort(
-        key=lambda item: (item["run"], item["model"], item["verbosity"], item["question_id"])
+        key=lambda item: (
+            item["run"],
+            item["model"],
+            item["verbosity"],
+            item["reasoning"],
+            item["question_id"],
+        )
     )
     return rows, skipped
 
@@ -161,6 +168,7 @@ def _row(
     return {
         "model": data.get("model") or "",
         "verbosity": data.get("verbosity_folder") or "",
+        "reasoning": data.get("reasoning") or "",
         "question_id": data.get("question_id") or "",
         "success": data.get("success"),
         "duration_ms": data.get("duration_ms", ""),
@@ -201,12 +209,22 @@ def _ids(value: Any) -> list[str]:
     return [str(item) for item in value if str(item).strip()]
 
 
-def _existing_manual_scores(target: Path) -> dict[tuple[str, str, str], dict[str, str]]:
+def _existing_manual_scores(target: Path) -> dict[tuple[str, str, str, str], dict[str, str]]:
     if not target.is_file():
         return {}
-    scores: dict[tuple[str, str, str], dict[str, str]] = {}
+    scores: dict[tuple[str, str, str, str], dict[str, str]] = {}
     with target.open(newline="", encoding="utf-8") as handle:
-        for row in csv.DictReader(handle):
-            key = (row.get("model", ""), row.get("verbosity", ""), row.get("question_id", ""))
-            scores[key] = {column: row.get(column, "") for column in MANUAL_COLUMNS}
+        reader = csv.DictReader(handle)
+        # Sheets written before the reasoning column scored the default-effort row.
+        legacy = "reasoning" not in (reader.fieldnames or [])
+        for row in reader:
+            saved = {column: row.get(column, "") for column in MANUAL_COLUMNS}
+            model = row.get("model", "")
+            verbosity = row.get("verbosity", "")
+            question_id = row.get("question_id", "")
+            # A sheet from before the column scored the default-effort answer.
+            # Results record that effort as "medium"; fixtures that omit it are blank.
+            efforts = ("", "medium") if legacy else (row.get("reasoning", ""),)
+            for effort in efforts:
+                scores[(model, verbosity, effort, question_id)] = saved
     return scores

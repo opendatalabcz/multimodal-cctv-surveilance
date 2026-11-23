@@ -126,6 +126,36 @@ def test_retrieval_counts_cameras_the_model_tried(tmp_path: Path) -> None:
     assert row["retrieval_recall"] == "1.0"
 
 
+def test_sheet_without_reasoning_keeps_scores_on_the_default_effort(tmp_path: Path) -> None:
+    _write_result(tmp_path, "gpt-5.6-luna", "medium", "walk", reasoning="medium")
+    _write_result(tmp_path, "gpt-5.6-luna", "medium", "traffic", reasoning="low")
+    legacy = tmp_path / "grading.csv"
+    with legacy.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[column for column in COLUMNS if column != "reasoning"],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "model": "gpt-5.6-luna",
+                "verbosity": "medium",
+                "question_id": "walk",
+                "correctness_1_to_5": "4",
+                "clarity_1_to_5": "3",
+                "notes": "Default effort.",
+            }
+        )
+
+    write_grading_sheet(tmp_path)
+
+    by_question = {row["question_id"]: row for row in _rows(legacy)}
+    assert by_question["walk"]["reasoning"] == "medium"
+    assert by_question["walk"]["correctness_1_to_5"] == "4"
+    assert by_question["traffic"]["reasoning"] == "low"
+    assert by_question["traffic"]["correctness_1_to_5"] == ""
+
+
 def test_regenerating_keeps_manual_scores(tmp_path: Path) -> None:
     _write_result(tmp_path, "gpt-4o", None, "airports")
     target, _, _ = write_grading_sheet(tmp_path)

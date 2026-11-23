@@ -357,12 +357,16 @@ def test_run_chat_turn_routes_luna_reasoning_and_tools_to_responses() -> None:
 
 def test_run_chat_turn_overrides_model_and_verbosity_for_one_call() -> None:
     conversation = Conversation(id="conv-override")
-    seen: dict = {}
+    seen: list[dict] = []
 
     def fake_chat(messages, *, config=None, **kwargs):
-        seen["model"] = config.model
-        seen["reasoning"] = kwargs["reasoning"]
-        seen["verbosity"] = kwargs["verbosity"]
+        seen.append(
+            {
+                "model": config.model,
+                "reasoning": kwargs["reasoning"],
+                "verbosity": kwargs["verbosity"],
+            }
+        )
         return {
             "success": True,
             "analysis": "ok",
@@ -389,11 +393,22 @@ def test_run_chat_turn_overrides_model_and_verbosity_for_one_call() -> None:
             model="gpt-5.6-luna",
             verbosity="low",
         )
+        run_chat_turn(
+            conversation,
+            "again",
+            config=azure,
+            model="gpt-5.6-luna",
+            reasoning="low",
+        )
 
     save_config.assert_not_called()
     assert result["success"] is True
-    assert seen == {"model": "gpt-5.6-luna", "reasoning": "high", "verbosity": "low"}
+    assert seen == [
+        {"model": "gpt-5.6-luna", "reasoning": "high", "verbosity": "low"},
+        {"model": "gpt-5.6-luna", "reasoning": "low", "verbosity": "high"},
+    ]
     assert agent.model == "gpt-4o"
+    assert agent.reasoning["gpt-5.6-luna"] == "high"
 
 
 def test_run_chat_turn_does_not_call_azure_for_unsupported_provider() -> None:

@@ -5,9 +5,10 @@ several runs pooled together, and writes PNG charts plus ``summary.csv``. Only
 successful cases are charted; failed ones are counted in the summary. No model
 is called.
 
-One color and one position per model and verbosity are used in every chart, so a
-bar can be followed from chart to chart. A model with no verbosity setting is
-labeled "default".
+One color and one position per model, verbosity, and reasoning effort are used in
+every chart, so a bar can be followed from chart to chart. A model with no
+verbosity setting is labeled "default". The catalog-default effort is unlabeled;
+low and high reasoning are named on the bar.
 """
 
 from __future__ import annotations
@@ -29,11 +30,13 @@ VERBOSITY_ORDER = ["low", "medium", "high"]
 # Lighter for low verbosity so levels of one model read as one family.
 _VERBOSITY_SHADE = {"low": 0.55, "medium": 0.78, "high": 1.0, "": 1.0}
 
-GroupKey = tuple[str, str]
+GroupKey = tuple[str, str, str]
+REASONING_ORDER = ["low", "medium", "high"]
 
 SUMMARY_COLUMNS = [
     "model",
     "verbosity",
+    "reasoning",
     "runs",
     "n",
     "failed",
@@ -211,37 +214,47 @@ def _pyplot() -> Any:
 
 
 def _key(row: dict[str, Any]) -> GroupKey:
-    return (str(row["model"]), str(row["verbosity"]))
+    return (str(row["model"]), str(row["verbosity"]), str(row.get("reasoning") or ""))
 
 
 def _ordered_keys(rows: list[dict[str, Any]], order: dict[str, int]) -> list[GroupKey]:
     keys = {_key(row) for row in rows}
 
-    def sort_key(key: GroupKey) -> tuple[int, str, int]:
-        model, verbosity = key
+    def sort_key(key: GroupKey) -> tuple[int, str, int, int]:
+        model, verbosity, reasoning = key
         verbosity_rank = (
             VERBOSITY_ORDER.index(verbosity) if verbosity in VERBOSITY_ORDER else len(VERBOSITY_ORDER)
         )
-        return (order.get(model, len(order)), model, verbosity_rank)
+        reasoning_rank = (
+            REASONING_ORDER.index(reasoning) if reasoning in REASONING_ORDER else len(REASONING_ORDER)
+        )
+        return (order.get(model, len(order)), model, verbosity_rank, reasoning_rank)
 
     return sorted(keys, key=sort_key)
 
 
 def _label(key: GroupKey, rows: list[dict[str, Any]], pooled: bool) -> str:
-    model, verbosity = key
+    model, verbosity, reasoning = key
     runs = len({row["run"] for row in rows})
     detail = f"n={len(rows)}"
     if pooled and runs == 1:
         detail += ", 1 run"
-    return f"{model.split('/')[-1]} {verbosity or 'default'} ({detail})"
+    name = f"{model.split('/')[-1]} {verbosity or 'default'}"
+    if reasoning and reasoning != "medium":
+        name = f"{name} reasoning {reasoning}"
+    return f"{name} ({detail})"
 
 
 def _group_color(plt: Any, key: GroupKey, order: dict[str, int]) -> tuple[float, float, float]:
-    model, verbosity = key
+    model, verbosity, reasoning = key
     palette = plt.get_cmap("tab10")
     index = order.get(model, len(order) + sum(ord(char) for char in model))
     red, green, blue = palette(index % 10)[:3]
     shade = _VERBOSITY_SHADE.get(verbosity, 1.0)
+    if reasoning == "low":
+        shade = max(0.35, shade - 0.18)
+    elif reasoning == "high":
+        shade = min(1.0, shade + 0.12)
     return tuple(channel * shade + (1 - shade) for channel in (red, green, blue))  # type: ignore[return-value]
 
 
@@ -482,6 +495,7 @@ def _write_summary(
                 {
                     "model": key[0],
                     "verbosity": key[1],
+                    "reasoning": key[2],
                     "runs": len({row["run"] for row in group}),
                     "n": len(group),
                     "failed": failed[key],

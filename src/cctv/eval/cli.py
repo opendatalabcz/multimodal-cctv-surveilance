@@ -19,10 +19,16 @@ from cctv.utils.paths import project_root
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Ask each evaluation question once per model and verbosity.",
+        description=(
+            "Ask each evaluation question once per enabled model at medium verbosity. "
+            "GPT-6.1 Terra also runs low and high reasoning at medium verbosity."
+        ),
     )
     parser.add_argument("--model", help="Catalog model id. Default: every enabled model.")
-    parser.add_argument("--verbosity", help="One verbosity level. Default: every level the model allows.")
+    parser.add_argument(
+        "--verbosity",
+        help="One verbosity level for every model that allows it. Default: medium.",
+    )
     parser.add_argument("--question", help="Question id from configs/eval_questions.yaml.")
     parser.add_argument(
         "--run",

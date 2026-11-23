@@ -28,6 +28,14 @@ from cctv.eval.screenshot import UI_URL, capture_chat_screenshot
 from cctv.utils.paths import data_root, project_root
 
 
+# Every model runs once, at medium verbosity and its catalog reasoning default.
+# GPT-6.1 Terra also runs low and high reasoning at that same verbosity. It is the
+# visual-reasoning model, so the effort check sits there. An explicit --verbosity
+# still applies to every model that allows that level.
+EVAL_FOCUS_MODEL_ID = "gpt-6.1-terra"
+REASONING_SLICE = ("low", "high")
+
+
 @dataclass(frozen=True)
 class EvalCase:
     model_id: str
@@ -35,6 +43,7 @@ class EvalCase:
     verbosity: str | None
     question_id: str
     question: str
+    reasoning: str | None = None
     expected_cameras: tuple[str, ...] | None = None
 
 
@@ -211,21 +220,35 @@ def build_cases(
     for option in models:
         for level in _verbosity_levels(option, verbosity):
             for item in selected_questions:
-                cases.append(
-                    EvalCase(
-                        model_id=option.id,
-                        model_label=option.label,
-                        verbosity=level,
-                        question_id=item.id,
-                        question=item.text,
-                        expected_cameras=item.expected_cameras,
-                    )
-                )
+                cases.append(_case(option, item, verbosity=level, reasoning=None))
+        for effort in _reasoning_slice(option, verbosity):
+            for item in selected_questions:
+                cases.append(_case(option, item, verbosity="medium", reasoning=effort))
     return cases
+
+
+def _case(
+    option: ModelOption,
+    item: EvalQuestion,
+    *,
+    verbosity: str | None,
+    reasoning: str | None,
+) -> EvalCase:
+    return EvalCase(
+        model_id=option.id,
+        model_label=option.label,
+        verbosity=verbosity,
+        reasoning=reasoning,
+        question_id=item.id,
+        question=item.text,
+        expected_cameras=item.expected_cameras,
+    )
 
 
 def case_dir(output_dir: Path, case: EvalCase) -> Path:
     path = output_dir / case.model_id
+    if case.reasoning is not None:
+        path = path / f"reasoning-{case.reasoning}"
     if case.verbosity is not None:
         path = path / case.verbosity
     return path / case.question_id
@@ -285,11 +308,12 @@ def _run_case(
     option = model_by_id(config.models, case.model_id)
     requested = case.verbosity if case.verbosity is not None else config.verbosity.get(case.model_id)
     applied_verbosity = clamp_verbosity(option, requested)
-    applied_reasoning = clamp_reasoning(option, config.reasoning.get(case.model_id))
+    baseline = option.reasoning.default if option is not None else None
+    applied_reasoning = case.reasoning if case.reasoning is not None else clamp_reasoning(option, baseline)
     started = time.perf_counter()
     try:
         conversation = Conversation(id=uuid.uuid4().hex)
-        kwargs: dict[str, Any] = {"model": case.model_id}
+        kwargs: dict[str, Any] = {"model": case.model_id, "reasoning": applied_reasoning}
         if case.verbosity is not None:
             kwargs["verbosity"] = case.verbosity
         _, result = run_chat_turn(conversation, case.question, **kwargs)
@@ -340,6 +364,11 @@ def _run_case(
                     question=case.question,
                     model_label=case.model_label,
                     verbosity=case.verbosity,
+                    reasoning=(
+                        applied_reasoning
+                        if option is not None and option.reasoning.choices and not option.reasoning.locked
+                        else None
+                    ),
                     path=destination / "screenshot.png",
                     ui_url=ui_url,
                 )
@@ -369,13 +398,38 @@ def _verbosity_levels(option: ModelOption, requested: str | None) -> list[str | 
         return [None]
     if requested is not None:
         return [requested]
-    return list(control.choices)
+    if control.default in control.choices:
+        return [control.default]
+    return [control.choices[0]]
+
+
+def _reasoning_slice(option: ModelOption, verbosity: str | None) -> list[str]:
+    """Low and high effort at verbosity medium, for the focus model only."""
+    if option.id != EVAL_FOCUS_MODEL_ID:
+        return []
+    control = option.reasoning
+    if control.locked or not control.choices:
+        return []
+    if verbosity is not None and verbosity != "medium":
+        return []
+    verbosity_control = option.verbosity
+    if verbosity_control.locked or "medium" not in verbosity_control.choices:
+        return []
+    return [
+        effort
+        for effort in REASONING_SLICE
+        if effort in control.choices and effort != control.default
+    ]
 
 
 def _case_label(case: EvalCase) -> str:
-    if case.verbosity is None:
-        return f"{case.model_id}/{case.question_id}"
-    return f"{case.model_id}/{case.verbosity}/{case.question_id}"
+    parts = [case.model_id]
+    if case.reasoning is not None:
+        parts.append(f"reasoning-{case.reasoning}")
+    if case.verbosity is not None:
+        parts.append(case.verbosity)
+    parts.append(case.question_id)
+    return "/".join(parts)
 
 
 def _copy_presented_images(images: Any, destination: Path) -> list[dict[str, Any]]:
