@@ -75,9 +75,11 @@ def test_prompt_levels() -> None:
     # Levels 2, 3 and 4 share one prompt text. Level 1 has no advice.
     assert prompt_text_for_level(3) == prompt_text_for_level(4) == level_2
     assert prompt_id(level_1) != prompt_id(level_2)
-    assert "Avoid:" not in level_1 and "Focus on" not in level_1
-    assert "Avoid:" in level_2 and "Focus on" in level_2
-    assert "front or the rear hold" in level_2
+    assert "Judge each state independently" in level_1
+    assert "Judge each state independently" in level_2
+    assert "nose wheel" in level_1 and "nose wheel" in level_2
+    assert "physically and fully docked" in level_2
+    assert "front or rear cargo hold" in level_2
     assert "rear hold" not in level_1
     for text in (level_1, level_2):
         for key in ("parked", "tunnel_attached", "doors_open", "description"):

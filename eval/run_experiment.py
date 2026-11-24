@@ -75,6 +75,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Evaluate stand-state recognition on sampled frames.")
     parser.add_argument("--interval-seconds", type=int, default=60)
     parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="Directory for generated frames, caches, manifests, and reports (default: outputs/vlm_eval).",
+    )
+    parser.add_argument(
         "--langfuse",
         action="store_true",
         help="Create Langfuse dataset items and experiments (disabled by default).",
@@ -124,7 +129,9 @@ def main(argv: list[str] | None = None) -> int:
     if any(is_openrouter(model) for model in models) and not openrouter_key():
         parser.error("OPENROUTER_API_KEY (or OPEN_ROUTER_API_KEY) is required for the OpenRouter models")
     print(f"models: {', '.join(models)}")
-    output_dir = root / "outputs" / "vlm_eval"
+    output_dir = args.output_dir or root / "outputs" / "vlm_eval"
+    if not output_dir.is_absolute():
+        output_dir = root / output_dir
     frames_dir = output_dir / "frames"
     videos_dir = root / "raw_videos"
     timestamps_path = _timestamps_path(root)
@@ -209,7 +216,8 @@ def _run_prompt_level(
     smoke = select_smoke(samples)
     print(f"Smoke check on {SMOKE_MODEL}:")
     smoke_failed = False
-    for sample in smoke:
+    for index, sample in enumerate(smoke, start=1):
+        print(f"Smoke {SMOKE_MODEL} {index}/{len(smoke)} {sample.frame_id} ...", end="", flush=True)
         record = client.predict(
             model=SMOKE_MODEL,
             image_path=frame_path(frames_dir, sample),
@@ -218,6 +226,7 @@ def _run_prompt_level(
             video=sample.video,
             timestamp_s=sample.timestamp_s,
         )
+        print(f" {'cache hit' if record.get('cache_hit') else 'done'}", flush=True)
         status = "ok" if record["parse_ok"] else "PARSE FAILED"
         print(f"  {sample.frame_id} {sample.phase} truth={sample.truth()} {status}")
         if not record["parse_ok"]:
@@ -258,7 +267,8 @@ def _run_prompt_level(
     for model in models:
         rows = []
         records = []
-        for sample in samples:
+        for index, sample in enumerate(samples, start=1):
+            print(f"{model} {index}/{len(samples)} {sample.frame_id} ...", end="", flush=True)
             record = client.predict(
                 model=model,
                 image_path=frame_path(frames_dir, sample),
@@ -267,6 +277,7 @@ def _run_prompt_level(
                 video=sample.video,
                 timestamp_s=sample.timestamp_s,
             )
+            print(f" {'cache hit' if record.get('cache_hit') else 'done'}", flush=True)
             records.append(record)
             rows.append(prediction_row(sample, record))
         summary = summarize(rows, interval_seconds=interval_seconds, model=model)

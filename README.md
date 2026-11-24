@@ -25,6 +25,7 @@ The default grid is one frame every 60 seconds, starting at 0, while the timesta
 ## Prompt levels and examples
 
 The model must return one JSON object with `parked`, `tunnel_attached`, `doors_open`, and `description`. By default, `eval/run_experiment.py` runs all four levels in order; `--prompt-level` selects only the specified level. The prompt text is in `eval/prompt.py`, and the example frames are in `eval/few_shot.py`.
+Use `--output-dir` to write a run's frames, cache, manifest, and reports to a separate directory instead of the default `outputs/vlm_eval`.
 
 | Level | Prompt | Examples sent with each frame |
 | --- | --- | --- |
