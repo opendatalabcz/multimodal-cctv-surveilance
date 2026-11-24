@@ -94,6 +94,7 @@ Put these in `.env` at the project root. The endpoint may be the Azure resource 
 
 ```bash
 python -m eval.test_labels
+python -m eval.test_visualizations
 python -m eval.run_experiment                                  # levels 1–4, default models; no Langfuse
 python -m eval.run_experiment --langfuse                       # enable Langfuse dataset experiments and traces
 python -m eval.run_experiment --prompt-level 1
@@ -101,6 +102,18 @@ python -m eval.run_experiment --prompt-level 3 --mid
 python -m eval.run_experiment --prompt-level 4 --high --interval-seconds 60
 python -m eval.run_experiment --prompt-level 4 --models gpt-4o,gpt-5.6-luna
 ```
+
+## Visualize results
+
+After generating experiment reports, create static accuracy plots without sending model requests or Langfuse traces:
+
+```bash
+uv pip install --python .venv/bin/python -r eval/requirements.txt
+uv run --python .venv/bin/python python -m eval.visualize_results
+uv run --python .venv/bin/python python -m eval.visualize_results --model gpt-4o --prompt-level 3
+```
+
+The default command plots exact-match and per-state accuracy across prompt levels for each interval/model tier found in the reports. Add `--model` and `--prompt-level` together to also generate four confusion matrices (combined across all three state decisions, then one per state). The combined and per-state matrices use Yes/No axes and count annotations; parse failures are excluded and noted. Use `--model-level` and/or `--interval-seconds` to filter reports or resolve an ambiguous model selection. PNGs are written to `outputs/vlm_eval/plots/` by default; `--output-dir` changes the destination.
 
 ## Outputs
 
@@ -112,5 +125,6 @@ All of these are under `outputs/vlm_eval/`:
 - `few_shot/` — example JPEGs, plus `2-shot.html` and `10-shot.html` for levels 3 and 4
 - `cache/` — raw model replies
 - `report_level{n}_{model_level}.json` — one summary per prompt level and model level. `model_level` is `default`, `mid`, `high`, or `custom` for `--models`. Runs at different levels no longer overwrite each other. Earlier `report.json` and `report_previous.json` files are not written any more.
+- `plots/` — accuracy-comparison PNGs and, when selected with `--model` and `--prompt-level`, confusion-matrix PNGs.
 
 `raw_videos/` and `outputs/` are gitignored. `camera_images/` is earlier collected stills and is not read by this evaluation.
