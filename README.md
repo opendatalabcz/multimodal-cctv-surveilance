@@ -6,7 +6,7 @@ This evaluation scores vision models on single frames from a fixed airport apron
 - `tunnel_attached` — the passenger jet bridge is fully docked
 - `doors_open` — a cargo hold is open (passenger doors do not count)
 
-Ground truth is `timestamps.csv`. `eval/run_experiment.py` samples the videos in `raw_videos/`, calls Azure OpenAI (and OpenRouter for the Gemma and Qwen models), and writes accuracy, flicker, and cost under `outputs/vlm_eval/`. The same items are recorded as a Langfuse dataset experiment.
+Ground truth is `timestamps.csv`. `eval/run_experiment.py` samples the videos in `raw_videos/`, calls Azure OpenAI (and OpenRouter for the Gemma and Qwen models), and writes accuracy, flicker, and cost under `outputs/vlm_eval/`. Langfuse dataset experiments and traces are disabled by default; pass `--langfuse` to enable them.
 
 ## Data
 
@@ -87,16 +87,15 @@ Put these in `.env` at the project root. The endpoint may be the Azure resource 
 - `AZURE_OPENAI_API_KEY`
 - `AZURE_OPENAI_ENDPOINT`
 - `OPENROUTER_API_KEY` — only for `--high` or `--models` that include Gemma or Qwen
-- `LANGFUSE_PUBLIC_KEY`
-- `LANGFUSE_SECRET_KEY`
-- `LANGFUSE_BASE_URL` (or `LANGFUSE_HOST`)
-- `LANGFUSE_CAPTURE_IMAGES` — set to `true` to attach the JPEGs to the Langfuse trace
+- `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL` (or `LANGFUSE_HOST`) — only when using `--langfuse`
+- `LANGFUSE_CAPTURE_IMAGES` — set to `true` to attach the JPEGs to Langfuse traces
 
 ## Run
 
 ```bash
 python -m eval.test_labels
-python -m eval.run_experiment                                  # levels 1–4, default models
+python -m eval.run_experiment                                  # levels 1–4, default models; no Langfuse
+python -m eval.run_experiment --langfuse                       # enable Langfuse dataset experiments and traces
 python -m eval.run_experiment --prompt-level 1
 python -m eval.run_experiment --prompt-level 3 --mid
 python -m eval.run_experiment --prompt-level 4 --high --interval-seconds 60

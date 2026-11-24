@@ -75,6 +75,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Evaluate stand-state recognition on sampled frames.")
     parser.add_argument("--interval-seconds", type=int, default=60)
     parser.add_argument(
+        "--langfuse",
+        action="store_true",
+        help="Create Langfuse dataset items and experiments (disabled by default).",
+    )
+    parser.add_argument(
         "--models",
         help="Comma-separated model ids. Replaces the level's list; cannot be combined with --mid or --high.",
     )
@@ -136,6 +141,7 @@ def main(argv: list[str] | None = None) -> int:
             model_level=model_level,
             interval_seconds=args.interval_seconds,
             prompt_level=prompt_level,
+            langfuse_enabled=args.langfuse,
         )
         if result:
             return result
@@ -153,6 +159,7 @@ def _run_prompt_level(
     model_level: str,
     interval_seconds: int,
     prompt_level: int,
+    langfuse_enabled: bool,
 ) -> int:
     prompt_text = prompt_text_for_level(prompt_level)
     active_prompt_id = prompt_id(prompt_text)
@@ -221,19 +228,21 @@ def _run_prompt_level(
         return 1
 
     dataset_name = f"stand-state-frames-{interval_seconds}s-level{prompt_level}"
-    experiment_urls = _run_langfuse(
-        dataset_name=dataset_name,
-        samples=samples,
-        models=models,
-        frames_dir=frames_dir,
-        client=client,
-        interval_seconds=interval_seconds,
-        prompt_text=prompt_text,
-        prompt_level=prompt_level,
-        prompt_fingerprint=active_prompt_id,
-        example_set=set_name,
-        few_shot_fingerprint=active_few_shot_id,
-    )
+    experiment_urls: dict[str, str] = {}
+    if langfuse_enabled:
+        experiment_urls = _run_langfuse(
+            dataset_name=dataset_name,
+            samples=samples,
+            models=models,
+            frames_dir=frames_dir,
+            client=client,
+            interval_seconds=interval_seconds,
+            prompt_text=prompt_text,
+            prompt_level=prompt_level,
+            prompt_fingerprint=active_prompt_id,
+            example_set=set_name,
+            few_shot_fingerprint=active_few_shot_id,
+        )
     report = {
         "interval_seconds": interval_seconds,
         "prompt_level": prompt_level,
@@ -242,7 +251,7 @@ def _run_prompt_level(
         "example_set": set_name,
         "few_shot_id": active_few_shot_id,
         "few_shot_examples": [example.example_id for example in example_set],
-        "dataset": dataset_name,
+        "dataset": dataset_name if langfuse_enabled else None,
         "experiments": experiment_urls,
         "models": {},
     }
