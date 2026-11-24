@@ -13,10 +13,10 @@ from dotenv import load_dotenv
 
 from eval.azure_client import KNOWN_MODELS, AzureVisionClient, is_openrouter, openrouter_key
 from eval.cost import cost_usd, summarize_usage, token_counts
-from eval.few_shot import EXAMPLES, few_shot_id, held_out_keys, prepare_examples, write_example_page
+from eval.few_shot import EXAMPLE_SETS, example_set_for_level, few_shot_id, held_out_keys, prepare_examples
 from eval.frames import extract_frames, frame_path, video_duration_s, write_contact_sheet
 from eval.labels import STATES, Sample, build_samples
-from eval.prompt import get_prompt, prompt_id
+from eval.prompt import PROMPT_LEVELS, prompt_id, prompt_text_for_level, selected_prompt_levels
 from eval.scoring import prediction_row, summarize
 
 SMOKE_SIZE = 8
@@ -89,8 +89,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Every registered model: --mid plus gpt-6-astra, Gemma 4 31B (paid), and Qwen3.8 Flash.",
     )
-    parser.add_argument("--prompt-version", choices=("basic", "detailed"), default="detailed")
-    parser.add_argument("--few-shot", action="store_true", help="Send the held-out open-door and closed-door examples with each frame.")
+    parser.add_argument(
+        "--prompt-level",
+        type=int,
+        choices=PROMPT_LEVELS,
+        default=None,
+        help=(
+            "1: simple prompt. 2: descriptive prompt. 3: descriptive prompt with 2 examples. "
+            "4: descriptive prompt with 10 examples. Default: run all levels (1–4)."
+        ),
+    )
     args = parser.parse_args(argv)
     if args.interval_seconds <= 0:
         parser.error("--interval-seconds must be positive")
@@ -116,26 +124,58 @@ def main(argv: list[str] | None = None) -> int:
     videos_dir = root / "raw_videos"
     timestamps_path = _timestamps_path(root)
 
-    prompt_text = get_prompt(args.prompt_version)
+    model_level = "custom" if args.models is not None else "high" if args.high else "mid" if args.mid else "default"
+    for prompt_level in selected_prompt_levels(args.prompt_level):
+        result = _run_prompt_level(
+            root=root,
+            output_dir=output_dir,
+            frames_dir=frames_dir,
+            videos_dir=videos_dir,
+            timestamps_path=timestamps_path,
+            models=models,
+            model_level=model_level,
+            interval_seconds=args.interval_seconds,
+            prompt_level=prompt_level,
+        )
+        if result:
+            return result
+    return 0
+
+
+def _run_prompt_level(
+    *,
+    root: Path,
+    output_dir: Path,
+    frames_dir: Path,
+    videos_dir: Path,
+    timestamps_path: Path,
+    models: list[str],
+    model_level: str,
+    interval_seconds: int,
+    prompt_level: int,
+) -> int:
+    prompt_text = prompt_text_for_level(prompt_level)
     active_prompt_id = prompt_id(prompt_text)
-    examples = prepare_examples(videos_dir, output_dir) if args.few_shot else []
-    active_few_shot_id = few_shot_id() if args.few_shot else None
-    example_page = write_example_page(output_dir)
+    set_name = example_set_for_level(prompt_level)
+    example_set = EXAMPLE_SETS[set_name] if set_name else ()
+    examples = prepare_examples(videos_dir, output_dir, set_name) if set_name else []
+    active_few_shot_id = few_shot_id(example_set) if set_name else None
     print(
-        f"prompt version={args.prompt_version} id={active_prompt_id} "
-        f"few_shot={'on' if args.few_shot else 'off'}"
-        + (f" examples={active_few_shot_id}" if active_few_shot_id else "")
+        f"prompt level={prompt_level} id={active_prompt_id} "
+        f"examples={set_name or 'none'}"
+        + (f" ({active_few_shot_id})" if active_few_shot_id else "")
     )
-    print(f"Few-shot images: {example_page}")
+    if set_name:
+        print(f"Example images: {output_dir / 'few_shot' / (set_name + '.html')}")
     for path, _caption in examples:
         print(f"  sending {path}")
 
     durations = {path.stem: video_duration_s(path) for path in sorted(videos_dir.glob("*.mp4"))}
-    samples = build_samples(timestamps_path, durations, args.interval_seconds)
-    if args.few_shot:
-        held_out = held_out_keys()
+    samples = build_samples(timestamps_path, durations, interval_seconds)
+    if example_set:
+        held_out = held_out_keys(example_set)
         samples = [sample for sample in samples if (sample.video, sample.timestamp_s) not in held_out]
-    manifest_path = output_dir / f"manifest_{args.interval_seconds}s.json"
+    manifest_path = output_dir / f"manifest_{interval_seconds}s.json"
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(
         json.dumps([sample.to_dict() for sample in samples], indent=2),
@@ -144,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
     counts: dict[str, int] = {}
     for sample in samples:
         counts[sample.video] = counts.get(sample.video, 0) + 1
-    print(f"{len(samples)} frames at every {args.interval_seconds}s: {counts}")
+    print(f"{len(samples)} frames at every {interval_seconds}s: {counts}")
 
     extract_frames(samples, videos_dir, frames_dir)
     sheet_path = output_dir / "contact_sheet.html"
@@ -180,29 +220,28 @@ def main(argv: list[str] | None = None) -> int:
         print("Stopping before the full run because the smoke frames did not return valid JSON.")
         return 1
 
-    dataset_name = f"stand-state-frames-{args.interval_seconds}s-{args.prompt_version}"
-    if args.few_shot:
-        dataset_name += "-fewshot"
+    dataset_name = f"stand-state-frames-{interval_seconds}s-level{prompt_level}"
     experiment_urls = _run_langfuse(
         dataset_name=dataset_name,
         samples=samples,
         models=models,
         frames_dir=frames_dir,
         client=client,
-        interval_seconds=args.interval_seconds,
+        interval_seconds=interval_seconds,
         prompt_text=prompt_text,
-        prompt_version=args.prompt_version,
+        prompt_level=prompt_level,
         prompt_fingerprint=active_prompt_id,
-        few_shot=args.few_shot,
+        example_set=set_name,
         few_shot_fingerprint=active_few_shot_id,
     )
     report = {
-        "interval_seconds": args.interval_seconds,
-        "prompt_version": args.prompt_version,
+        "interval_seconds": interval_seconds,
+        "prompt_level": prompt_level,
+        "model_level": model_level,
         "prompt_id": active_prompt_id,
-        "few_shot": args.few_shot,
+        "example_set": set_name,
         "few_shot_id": active_few_shot_id,
-        "few_shot_examples": [example.example_id for example in EXAMPLES] if args.few_shot else [],
+        "few_shot_examples": [example.example_id for example in example_set],
         "dataset": dataset_name,
         "experiments": experiment_urls,
         "models": {},
@@ -221,21 +260,14 @@ def main(argv: list[str] | None = None) -> int:
             )
             records.append(record)
             rows.append(prediction_row(sample, record))
-        summary = summarize(rows, interval_seconds=args.interval_seconds, model=model)
+        summary = summarize(rows, interval_seconds=interval_seconds, model=model)
         summary.update(summarize_usage(model, records))
         summary["api_calls_this_process"] = client.api_calls.get(model, 0)
         summary["cache_hits_this_process"] = client.cache_hits.get(model, 0)
         summary["azure_spend_this_process_usd"] = client.spend_usd.get(model, 0.0)
         report["models"][model] = summary
-    report_path = output_dir / "report.json"
-    archive_path = output_dir / "report_previous.json"
-    if report_path.exists() and not archive_path.exists():
-        archive_path.write_bytes(report_path.read_bytes())
+    report_path = output_dir / f"report_level{prompt_level}_{model_level}.json"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    report_tag = f"report_{args.prompt_version}_{active_prompt_id}"
-    if args.few_shot:
-        report_tag += f"_fewshot_{active_few_shot_id}"
-    (output_dir / f"{report_tag}.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"Report: {report_path}")
     _print_summary(report)
     return 0
@@ -250,9 +282,9 @@ def _run_langfuse(
     client: AzureVisionClient,
     interval_seconds: int,
     prompt_text: str,
-    prompt_version: str,
+    prompt_level: int,
     prompt_fingerprint: str,
-    few_shot: bool,
+    example_set: str | None,
     few_shot_fingerprint: str | None,
 ) -> dict[str, str]:
     from langfuse import Evaluation, get_client
@@ -267,9 +299,9 @@ def _run_langfuse(
             description="Apron frames labeled from timestamps.csv for parked, tunnel attached, and cargo doors open.",
             metadata={
                 "interval_seconds": interval_seconds,
-                "prompt_version": prompt_version,
+                "prompt_level": prompt_level,
                 "prompt_id": prompt_fingerprint,
-                "few_shot": few_shot,
+                "example_set": example_set or "none",
                 "few_shot_id": few_shot_fingerprint or "",
             },
         )
@@ -282,9 +314,9 @@ def _run_langfuse(
                 "frame_id": sample.frame_id,
                 "video": sample.video,
                 "timestamp_s": sample.timestamp_s,
-                "prompt_version": prompt_version,
+                "prompt_level": prompt_level,
                 "prompt_id": prompt_fingerprint,
-                "few_shot": few_shot,
+                "example_set": example_set or "none",
                 "few_shot_id": few_shot_fingerprint or "",
                 "prompt": prompt_text,
                 "image_path": frame_path(frames_dir, sample).relative_to(project_root()).as_posix(),
@@ -298,9 +330,9 @@ def _run_langfuse(
                 "timestamp_s": sample.timestamp_s,
                 "seconds_to_boundary": sample.seconds_to_boundary,
                 "near_boundary": sample.near_boundary,
-                "prompt_version": prompt_version,
+                "prompt_level": prompt_level,
                 "prompt_id": prompt_fingerprint,
-                "few_shot": few_shot,
+                "example_set": example_set or "none",
                 "few_shot_id": few_shot_fingerprint or "",
             },
         )
@@ -362,11 +394,11 @@ def _run_langfuse(
 
         result = dataset.run_experiment(
             name="Stand state recognition",
-            run_name=_run_name(model, interval_seconds, prompt_version, prompt_fingerprint, few_shot, few_shot_fingerprint),
+            run_name=_run_name(model, interval_seconds, prompt_level, prompt_fingerprint, example_set, few_shot_fingerprint),
             description=(
                 f"{model} on one frame every {interval_seconds} seconds. "
-                f"Prompt version {prompt_version} ({prompt_fingerprint}). "
-                f"Few-shot {'on' if few_shot else 'off'}."
+                f"Prompt level {prompt_level} ({prompt_fingerprint}). "
+                f"Examples: {example_set or 'none'}."
             ),
             task=model_task,
             evaluators=evaluators,
@@ -374,9 +406,9 @@ def _run_langfuse(
             metadata={
                 "model": model,
                 "interval_seconds": str(interval_seconds),
-                "prompt_version": prompt_version,
+                "prompt_level": prompt_level,
                 "prompt_id": prompt_fingerprint,
-                "few_shot": "true" if few_shot else "false",
+                "example_set": example_set or "none",
                 "few_shot_id": few_shot_fingerprint or "",
             },
         )
@@ -439,10 +471,17 @@ def _trace_call(langfuse, *, model: str, image_path: Path, examples: list[tuple[
         print(f"Could not record usage for {image_path.name}: {exc}")
 
 
-def _run_name(model: str, interval_seconds: int, prompt_version: str, prompt_fingerprint: str, few_shot: bool, few_shot_fingerprint: str | None) -> str:
-    name = f"{model}-every-{interval_seconds}s-{prompt_version}-{prompt_fingerprint}"
-    if few_shot:
-        name += f"-fewshot-{few_shot_fingerprint}"
+def _run_name(
+    model: str,
+    interval_seconds: int,
+    prompt_level: int,
+    prompt_fingerprint: str,
+    example_set: str | None,
+    few_shot_fingerprint: str | None,
+) -> str:
+    name = f"{model}-every-{interval_seconds}s-level{prompt_level}-{prompt_fingerprint}"
+    if example_set:
+        name += f"-{example_set}-{few_shot_fingerprint}"
     return name
 
 
@@ -455,7 +494,7 @@ def _print_summary(report: dict) -> None:
     for model, summary in report["models"].items():
         overall = summary["overall"]
         print(
-            f"\n{model}  version={report['prompt_version']}  few_shot={report['few_shot']}  "
+            f"\n{model}  level={report['prompt_level']}  examples={report['example_set'] or 'none'}  "
             f"exact_match={overall['exact_match']}  parse_failures={overall['parse_failures']}"
         )
         for state, metrics in overall["states"].items():

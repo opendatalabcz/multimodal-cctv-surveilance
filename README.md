@@ -22,16 +22,20 @@ Four clips, named by weather: `cloudy_6`, `night_6`, `rainy_6`, `sunny_6`.
 
 The default grid is one frame every 60 seconds, starting at 0, while the timestamp is at least one second inside the file. A frame within 20 seconds of a state change is marked `near_boundary`.
 
-## Prompt and examples
+## Prompt levels and examples
 
-The model must return one JSON object with `parked`, `tunnel_attached`, `doors_open`, and `description`. Two wordings live in `eval/prompt.py`:
+The model must return one JSON object with `parked`, `tunnel_attached`, `doors_open`, and `description`. By default, `eval/run_experiment.py` runs all four levels in order; `--prompt-level` selects only the specified level. The prompt text is in `eval/prompt.py`, and the example frames are in `eval/few_shot.py`.
 
-- `basic` — cargo-door rule only
-- `detailed` — also says either the front or rear hold counts, and that the rear hold can sit partly behind the wing
+| Level | Prompt | Examples sent with each frame |
+| --- | --- | --- |
+| 1 | Simple: the three states and the output format, no visual hints | none |
+| 2 | Descriptive: adds what to focus on and what to avoid for each state | none |
+| 3 | Descriptive | `2-shot`: one all-false frame and one all-true frame |
+| 4 | Descriptive | `10-shot`: two frames for each of the five state combinations in `timestamps.csv` |
 
-`--prompt-version` selects one. The default is `detailed`. If the first reply is not that JSON object, the frame is sent once more with a repair prompt. A reply that still does not parse counts as wrong.
+The example frames are taken 30 seconds into a minute, so they are off the 60-second grid. They are also more than 20 seconds from any state change. They are never scored, and the scored set stays at 285 frames at every level. The JPEGs and the JSON sent with them are written to `outputs/vlm_eval/few_shot/2-shot.html` and `outputs/vlm_eval/few_shot/10-shot.html`.
 
-`--few-shot` sends two held-out `night_6` frames ahead of the frame being judged: cargo hold open at 1530s, and both holds closed at 2430s while the aircraft is still parked and the bridge is still docked. Those times sit off the 60-second grid. If a chosen interval would score them, they are left out of the scored set. The JPEGs and the JSON sent with them are written to `outputs/vlm_eval/few_shot/index.html`.
+If the first reply is not that JSON object, the frame is sent once more with a repair prompt. A reply that still does not parse counts as wrong.
 
 ## Models
 
@@ -92,11 +96,11 @@ Put these in `.env` at the project root. The endpoint may be the Azure resource 
 
 ```bash
 python -m eval.test_labels
-python -m eval.run_experiment
-python -m eval.run_experiment --few-shot
-python -m eval.run_experiment --mid
-python -m eval.run_experiment --high --interval-seconds 60 --prompt-version detailed
-python -m eval.run_experiment --interval-seconds 60 --prompt-version detailed --models gpt-4o,gpt-5.6-luna
+python -m eval.run_experiment                                  # levels 1–4, default models
+python -m eval.run_experiment --prompt-level 1
+python -m eval.run_experiment --prompt-level 3 --mid
+python -m eval.run_experiment --prompt-level 4 --high --interval-seconds 60
+python -m eval.run_experiment --prompt-level 4 --models gpt-4o,gpt-5.6-luna
 ```
 
 ## Outputs
@@ -106,9 +110,8 @@ All of these are under `outputs/vlm_eval/`:
 - `frames/{interval}s/` — one JPEG per scored timestamp
 - `manifest_{interval}s.json` — the scored samples and their labels
 - `contact_sheet.html` — every frame with its label; near-boundary frames are highlighted
-- `few_shot/` — example JPEGs and `index.html` when `--few-shot` is on
+- `few_shot/` — example JPEGs, plus `2-shot.html` and `10-shot.html` for levels 3 and 4
 - `cache/` — raw model replies
-- `report.json` — the latest summary
-- `report_{version}_{prompt_id}[_fewshot_{id}].json` — a copy that does not overwrite an earlier prompt or example set
+- `report_level{n}_{model_level}.json` — one summary per prompt level and model level. `model_level` is `default`, `mid`, `high`, or `custom` for `--models`. Runs at different levels no longer overwrite each other. Earlier `report.json` and `report_previous.json` files are not written any more.
 
 `raw_videos/` and `outputs/` are gitignored. `camera_images/` is earlier collected stills and is not read by this evaluation.

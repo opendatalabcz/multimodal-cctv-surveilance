@@ -1,60 +1,82 @@
-"""Prompt versions and JSON parsing for the three stand states."""
+"""Prompt levels and JSON parsing for the three stand states.
+
+Prompt level 1 names the states and the output format only. Level 2 adds advice on
+what to look at and what to avoid. Levels 3 and 4 send the level 2 text with a
+held-out example set (see eval/few_shot.py).
+"""
 
 from __future__ import annotations
 
 import hashlib
 import json
 
-_SHARED_INTRO = """You are looking at one frame from a fixed airport apron camera. Judge only what is visible in this frame.
-
-Return a single JSON object and nothing else, with exactly these keys:
-- parked: true only if an aircraft nose wheel is stopped on the yellow parking cross painted on the apron. An aircraft that is merely visible, taxiing, or waiting away from the cross is false.
-- tunnel_attached: true only if the passenger jet bridge is fully docked to the aircraft, with its canopy down and the bridge head against the fuselage. A bridge that is only nearby or still moving is false.
-"""
-
-_DOOR_BASIC = (
-    "- doors_open: true only if a cargo hold door is open. On a larger aircraft the door swings "
-    "outward and is visible. On a smaller aircraft the door folds inward and the open hold is a "
-    "dark opening in the fuselage. A closed hold does not count, and passenger doors do not count.\n"
-)
-
-_DOOR_DETAILED = (
-    "- doors_open: true only if a cargo hold door is open. On a larger aircraft the door swings "
-    "outward and is visible. On a smaller aircraft the door folds inward and the open hold is a "
-    "dark opening in the fuselage. The state should be true if either the front or back door is "
-    "open. The view of the back door can be partially obstructed by the wing, so you should pay "
-    "more attention to that area. A closed hold does not count, and passenger doors do not count.\n"
-)
-
-_SHARED_END = """- description: one or two sentences describing the apron, the aircraft if present, the jet bridge, and the cargo doors.
-
-Use JSON booleans.
+_OUTPUT_FORMAT = """Use JSON booleans.
 {"parked": false, "tunnel_attached": false, "doors_open": false, "description": "..."}
 """
 
-PROMPT_VERSIONS = {
-    "basic": _SHARED_INTRO + _DOOR_BASIC + _SHARED_END,
-    "detailed": _SHARED_INTRO + _DOOR_DETAILED + _SHARED_END,
+# Level 1: the three states and the output format. No visual pointers.
+SIMPLE_PROMPT = (
+    """You are looking at one frame from a fixed airport apron camera.
+
+Return a single JSON object and nothing else, with exactly these keys:
+- parked: an aircraft nose wheel is stopped on the yellow parking cross painted on the apron.
+- tunnel_attached: the passenger jet bridge is docked to the aircraft.
+- doors_open: a cargo hold door is open.
+- description: one or two sentences describing the apron, the aircraft if present, the jet bridge, and the cargo doors.
+
+"""
+    + _OUTPUT_FORMAT
+)
+
+# Level 2: the same states, with advice on what to focus on and what to avoid.
+DESCRIPTIVE_PROMPT = (
+    """You are looking at one frame from a fixed airport apron camera. Judge only what is visible in this frame.
+
+Return a single JSON object and nothing else, with exactly these keys:
+- parked: true only if an aircraft nose wheel is stopped on the yellow parking cross painted on the apron.
+  Focus on the nose wheel and where it sits, not on the rest of the fuselage.
+  Avoid: an aircraft that is taxiing, waiting, or standing beside the cross is false.
+- tunnel_attached: true only if the passenger jet bridge is fully docked to the aircraft, with its head against the fuselage and its canopy down.
+  Focus on the contact point between the bridge head and the fuselage.
+  Avoid: a bridge that is near, still moving, or retracting is false, even when it is close to the aircraft.
+- doors_open: true only if a cargo hold door is open. The state is true if either the front or the rear hold is open.
+  On a larger aircraft the door swings outward and is visible. On a smaller aircraft the door folds inward and the open hold is a dark opening in the fuselage.
+  Focus on the whole fuselage, including the rear hold, which the wing can partly hide.
+  Avoid: passenger doors, closed hatches, and ground equipment near the aircraft do not count.
+- description: one or two sentences describing the apron, the aircraft if present, the jet bridge, and the cargo doors.
+
+"""
+    + _OUTPUT_FORMAT
+)
+
+# Prompt level -> prompt text. Levels 3 and 4 use the level 2 text.
+PROMPT_TEXT_BY_LEVEL = {
+    1: SIMPLE_PROMPT,
+    2: DESCRIPTIVE_PROMPT,
+    3: DESCRIPTIVE_PROMPT,
+    4: DESCRIPTIVE_PROMPT,
 }
 
-# The detailed wording is the prompt used for the scored runs.
-PROMPT = PROMPT_VERSIONS["detailed"]
+PROMPT_LEVELS = tuple(PROMPT_TEXT_BY_LEVEL)
 
 _STATES = ("parked", "tunnel_attached", "doors_open")
 
 
-def get_prompt(version: str) -> str:
+def prompt_text_for_level(level: int) -> str:
     try:
-        return PROMPT_VERSIONS[version]
+        return PROMPT_TEXT_BY_LEVEL[level]
     except KeyError as exc:
-        known = ", ".join(PROMPT_VERSIONS)
-        raise ValueError(f"Unknown prompt version {version!r}. Known versions: {known}") from exc
+        known = ", ".join(str(item) for item in PROMPT_LEVELS)
+        raise ValueError(f"Unknown prompt level {level!r}. Known levels: {known}") from exc
 
 
-def prompt_id(text: str | None = None) -> str:
+def selected_prompt_levels(level: int | None = None) -> tuple[int, ...]:
+    return PROMPT_LEVELS if level is None else (level,)
+
+
+def prompt_id(text: str) -> str:
     """Short id that changes when the prompt text changes."""
-    body = PROMPT if text is None else text
-    return hashlib.sha256(body.encode()).hexdigest()[:12]
+    return hashlib.sha256(text.encode()).hexdigest()[:12]
 
 
 def parse_state_json(text: str) -> dict | None:

@@ -64,29 +64,100 @@ def test_grid_and_states() -> None:
     assert night_parked.doors_open is False
 
 
-def test_prompt_versions_and_few_shot_labels() -> None:
-    from eval.few_shot import EXAMPLES
-    from eval.labels import parse_clock
-    from eval.prompt import PROMPT_VERSIONS, prompt_id
+def test_prompt_levels() -> None:
+    from eval.prompt import PROMPT_LEVELS, prompt_id, prompt_text_for_level, selected_prompt_levels
 
-    assert set(PROMPT_VERSIONS) == {"basic", "detailed"}
-    assert prompt_id(PROMPT_VERSIONS["detailed"]) == "b7178b3ab807"
-    assert prompt_id(PROMPT_VERSIONS["basic"]) != prompt_id(PROMPT_VERSIONS["detailed"])
-    assert "front or back door" in PROMPT_VERSIONS["detailed"]
-    assert "front or back door" not in PROMPT_VERSIONS["basic"]
+    assert PROMPT_LEVELS == (1, 2, 3, 4)
+    assert selected_prompt_levels() == (1, 2, 3, 4)
+    assert selected_prompt_levels(3) == (3,)
+    level_1 = prompt_text_for_level(1)
+    level_2 = prompt_text_for_level(2)
+    # Levels 2, 3 and 4 share one prompt text. Level 1 has no advice.
+    assert prompt_text_for_level(3) == prompt_text_for_level(4) == level_2
+    assert prompt_id(level_1) != prompt_id(level_2)
+    assert "Avoid:" not in level_1 and "Focus on" not in level_1
+    assert "Avoid:" in level_2 and "Focus on" in level_2
+    assert "front or the rear hold" in level_2
+    assert "rear hold" not in level_1
+    for text in (level_1, level_2):
+        for key in ("parked", "tunnel_attached", "doors_open", "description"):
+            assert key in text
+    try:
+        prompt_text_for_level(5)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("level 5 should be rejected")
+
+
+def test_example_sets_are_held_out_and_labelled_from_timestamps() -> None:
+    from eval.few_shot import EXAMPLE_SETS, example_set_for_level
+    from eval.labels import NEAR_BOUNDARY_SECONDS, parse_clock
 
     rows = {row["file_name"]: row for row in __import__("csv").DictReader(_timestamps().open())}
-    night = rows["night_6"]
-    bounds = {
-        "parked": (parse_clock(night["parked"]), parse_clock(night["left_parking"])),
-        "tunnel_attached": (parse_clock(night["tunnel_attached"]), parse_clock(night["tunnel_detached"])),
-        "doors_open": (parse_clock(night["doors_open"]), parse_clock(night["doors_closed"])),
-    }
-    for example in EXAMPLES:
-        assert example.video == "night_6"
-        assert example.timestamp_s % 60 != 0
-        for state, (start, end) in bounds.items():
-            assert getattr(example, state) is (start <= example.timestamp_s < end)
+    bounds_by_video = {}
+    boundaries_by_video = {}
+    for video, row in rows.items():
+        bounds = {}
+        boundaries = []
+        for state, start_key, end_key in (
+            ("parked", "parked", "left_parking"),
+            ("tunnel_attached", "tunnel_attached", "tunnel_detached"),
+            ("doors_open", "doors_open", "doors_closed"),
+        ):
+            start = parse_clock(row[start_key])
+            end = parse_clock(row[end_key])
+            boundaries.append(start)
+            # "end" means the state lasts until the video ends; that is not a change point.
+            if end is not None:
+                boundaries.append(end)
+            bounds[state] = (start, DURATIONS[video] if end is None else end)
+        bounds_by_video[video] = bounds
+        boundaries_by_video[video] = boundaries
+    grid_keys = {(sample.video, sample.timestamp_s) for sample in build_samples(_timestamps(), DURATIONS, 60)}
+
+    for name, examples in EXAMPLE_SETS.items():
+        seen = set()
+        for example in examples:
+            key = (example.video, example.timestamp_s)
+            assert key not in seen, f"{name} repeats {key}"
+            seen.add(key)
+            # Off the 60 s grid, so the scored set does not shrink.
+            assert key not in grid_keys, f"{name} example {key} is on the sample grid"
+            assert example.timestamp_s % 60 != 0
+            assert example.timestamp_s + 1 < DURATIONS[example.video]
+            for state, (start, end) in bounds_by_video[example.video].items():
+                assert getattr(example, state) is (start <= example.timestamp_s < end), (name, example.example_id, state)
+            distance = min(abs(example.timestamp_s - boundary) for boundary in boundaries_by_video[example.video])
+            assert distance > NEAR_BOUNDARY_SECONDS, (name, example.example_id, distance)
+
+    two_shot = EXAMPLE_SETS["2-shot"]
+    assert len(two_shot) == 2
+    assert [(e.parked, e.tunnel_attached, e.doors_open) for e in two_shot] == [
+        (False, False, False),
+        (True, True, True),
+    ]
+
+    observed = {sample.phase for sample in build_samples(_timestamps(), DURATIONS, 1)}
+    assert observed == {"empty", "parked", "parked+tunnel", "parked+doors", "parked+tunnel+doors"}
+    ten_shot = EXAMPLE_SETS["10-shot"]
+    assert len(ten_shot) == 10
+    phases = [
+        "+".join(
+            name
+            for name, on in (("parked", e.parked), ("tunnel", e.tunnel_attached), ("doors", e.doors_open))
+            if on
+        )
+        or "empty"
+        for e in ten_shot
+    ]
+    assert {phase for phase in phases} == observed
+    assert all(phases.count(phase) == 2 for phase in observed)
+
+    assert example_set_for_level(1) is None
+    assert example_set_for_level(2) is None
+    assert example_set_for_level(3) == "2-shot"
+    assert example_set_for_level(4) == "10-shot"
 
 
 def test_parse_failure_counts_as_wrong_and_flicker_ignores_real_changes() -> None:
@@ -155,7 +226,8 @@ def test_cost_uses_cached_input_rate_and_both_usage_shapes() -> None:
 
 if __name__ == "__main__":
     test_grid_and_states()
-    test_prompt_versions_and_few_shot_labels()
+    test_prompt_levels()
+    test_example_sets_are_held_out_and_labelled_from_timestamps()
     test_parse_failure_counts_as_wrong_and_flicker_ignores_real_changes()
     test_cost_uses_cached_input_rate_and_both_usage_shapes()
     print("label checks passed")
