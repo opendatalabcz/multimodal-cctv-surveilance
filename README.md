@@ -31,10 +31,10 @@ Use `--output-dir` to write a run's frames, cache, manifest, and reports to a se
 | --- | --- | --- |
 | 1 | Simple: the three states and the output format, no visual hints | none |
 | 2 | Descriptive: adds what to focus on and what to avoid for each state | none |
-| 3 | Descriptive | `2-shot`: one all-false frame and one all-true frame |
-| 4 | Descriptive | `10-shot`: two frames for each of the five state combinations in `timestamps.csv` |
+| 3 | Descriptive | `4-shot`: all-false, parked, parked+tunnel, and all-true frames from `cloudy1.mp4` |
+| 4 | Descriptive | `6-shot`: the four level-3 examples plus all-true and parked-with-tunnel-and-cargo-doors closed frames from `cloudy1.mp4` |
 
-The example frames are taken 30 seconds into a minute, so they are off the 60-second grid. They are also more than 20 seconds from any state change. They are never scored, and the scored set stays at 285 frames at every level. The JPEGs and the JSON sent with them are written to `outputs/vlm_eval/few_shot/2-shot.html` and `outputs/vlm_eval/few_shot/10-shot.html`.
+The example frames are held out from `cloudy1.mp4` and are never scored. The JPEGs and the JSON sent with them are written to `outputs/vlm_eval/few_shot/4-shot.html` and `outputs/vlm_eval/few_shot/6-shot.html`.
 
 If the first reply is not that JSON object, the frame is sent once more with a repair prompt. A reply that still does not parse counts as wrong.
 
@@ -123,7 +123,7 @@ All of these are under `outputs/vlm_eval/`:
 - `frames/{interval}s/` — one JPEG per scored timestamp
 - `manifest_{interval}s.json` — the scored samples and their labels
 - `contact_sheet.html` — every frame with its label; near-boundary frames are highlighted
-- `few_shot/` — example JPEGs, plus `2-shot.html` and `10-shot.html` for levels 3 and 4
+- `few_shot/` — example JPEGs, plus `4-shot.html` and `6-shot.html` for levels 3 and 4
 - `cache/` — raw model replies
 - `report_level{n}_{model_level}.json` — one summary per prompt level and model level. `model_level` is `default`, `mid`, `high`, or `custom` for `--models`. Runs at different levels no longer overwrite each other. Earlier `report.json` and `report_previous.json` files are not written any more.
 - `plots/` — accuracy-comparison PNGs and, when selected with `--model` and `--prompt-level`, confusion-matrix PNGs.

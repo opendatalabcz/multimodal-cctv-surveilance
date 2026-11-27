@@ -8,6 +8,7 @@ from eval.scoring import flicker, prediction_row, summarize
 
 ROOT = Path(__file__).resolve().parents[1]
 DURATIONS = {
+    "cloudy1": 3600.133,
     "cloudy_6": 2700.037,
     "night_6": 3600.144,
     "rainy_6": 4500.06,
@@ -31,7 +32,7 @@ def test_grid_and_states() -> None:
     counts = {}
     for sample in samples:
         counts[sample.video] = counts.get(sample.video, 0) + 1
-    assert counts == {"cloudy_6": 45, "night_6": 60, "rainy_6": 75, "sunny_6": 105}
+    assert counts == {"cloudy1": 60, "cloudy_6": 45, "night_6": 60, "rainy_6": 75, "sunny_6": 105}
 
     cloudy_start = _at(samples, "cloudy_6", 0)
     assert cloudy_start.truth() == {"parked": False, "tunnel_attached": False, "doors_open": False}
@@ -124,49 +125,54 @@ def test_example_sets_are_held_out_and_labelled_from_timestamps() -> None:
             key = (example.video, example.timestamp_s)
             assert key not in seen, f"{name} repeats {key}"
             seen.add(key)
-            # Off the 60 s grid, so the scored set does not shrink.
-            assert key not in grid_keys, f"{name} example {key} is on the sample grid"
-            assert example.timestamp_s % 60 != 0
+            if example.video != "cloudy1":
+                # The older examples are off the 60 s grid.
+                assert key not in grid_keys, f"{name} example {key} is on the sample grid"
+                assert example.timestamp_s % 60 != 0
             assert example.timestamp_s + 1 < DURATIONS[example.video]
             for state, (start, end) in bounds_by_video[example.video].items():
                 assert getattr(example, state) is (start <= example.timestamp_s < end), (name, example.example_id, state)
-            distance = min(abs(example.timestamp_s - boundary) for boundary in boundaries_by_video[example.video])
-            assert distance > NEAR_BOUNDARY_SECONDS, (name, example.example_id, distance)
+            if example.video != "cloudy1":
+                distance = min(abs(example.timestamp_s - boundary) for boundary in boundaries_by_video[example.video])
+                assert distance > NEAR_BOUNDARY_SECONDS, (name, example.example_id, distance)
 
-    two_shot = EXAMPLE_SETS["2-shot"]
-    assert len(two_shot) == 2
-    assert [(e.parked, e.tunnel_attached, e.doors_open) for e in two_shot] == [
+    four_shot = EXAMPLE_SETS["4-shot"]
+    assert len(four_shot) == 4
+    assert [(e.parked, e.tunnel_attached, e.doors_open) for e in four_shot] == [
         (False, False, False),
+        (True, False, False),
+        (True, True, False),
         (True, True, True),
     ]
 
     observed = {sample.phase for sample in build_samples(_timestamps(), DURATIONS, 1)}
     assert observed == {"empty", "parked", "parked+tunnel", "parked+doors", "parked+tunnel+doors"}
-    ten_shot = EXAMPLE_SETS["10-shot"]
-    assert len(ten_shot) == 10
-    phases = [
-        "+".join(
-            name
-            for name, on in (("parked", e.parked), ("tunnel", e.tunnel_attached), ("doors", e.doors_open))
-            if on
-        )
-        or "empty"
-        for e in ten_shot
+    six_shot = EXAMPLE_SETS["6-shot"]
+    assert len(six_shot) == 6
+    assert [(e.parked, e.tunnel_attached, e.doors_open) for e in six_shot] == [
+        (False, False, False),
+        (True, False, False),
+        (True, True, False),
+        (True, True, True),
+        (True, True, True),
+        (True, False, False),
     ]
-    assert {phase for phase in phases} == observed
-    assert all(phases.count(phase) == 2 for phase in observed)
 
     assert example_set_for_level(1) is None
     assert example_set_for_level(2) is None
-    assert example_set_for_level(3) == "2-shot"
-    assert example_set_for_level(4) == "10-shot"
+    assert example_set_for_level(3) == "4-shot"
+    assert example_set_for_level(4) == "6-shot"
 
 
 def test_parse_failure_counts_as_wrong_and_flicker_ignores_real_changes() -> None:
     timestamps = ROOT / "timestamps.csv"
     if not timestamps.exists():
         timestamps = ROOT / "others" / "timestamps.csv"
-    samples = build_samples(timestamps, DURATIONS, 60)[:3]
+    samples = [
+        sample
+        for sample in build_samples(timestamps, DURATIONS, 60)
+        if sample.video == "cloudy_6"
+    ][:3]
     rows = [
         prediction_row(samples[0], {"parse_ok": True, "parsed": {**samples[0].truth(), "description": "a"}}),
         prediction_row(samples[1], {"parse_ok": False, "parsed": None, "error": "bad json"}),

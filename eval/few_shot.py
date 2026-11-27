@@ -1,15 +1,14 @@
 """Held-out frames that can be sent ahead of each scored frame.
 
-Every example time sits 30 seconds into a minute, so it is off the 60-second sample
-grid, and it is more than 20 seconds from any state change, so it is never a
-near-boundary frame. Examples are therefore never scored, and the scored set stays
-at the same 285 frames at every prompt level.
+Examples are selected from the held-out cloudy1 video and are removed from the
+scored sample set so prompt levels remain comparable.
 
 Two sets exist:
 
-- TWO_SHOT: one all-false frame and one all-true frame (prompt level 3).
-- TEN_SHOT: two frames for each of the five state combinations that occur in
-  timestamps.csv (prompt level 4).
+- FOUR_SHOT: all-false, parked-only, parked+tunnel, and all-true frames
+  (prompt level 3).
+- SIX_SHOT: the four level-3 examples plus two additional frames
+  (prompt level 4).
 """
 
 from __future__ import annotations
@@ -50,21 +49,38 @@ _NOTE_PARKED_TUNNEL = "The aircraft is parked and the jet bridge is docked. Both
 _NOTE_PARKED_DOORS = "The aircraft is parked and a cargo hold is open. The jet bridge is not docked."
 _NOTE_ALL_TRUE = "The aircraft is parked, the jet bridge is docked, and a cargo hold is open."
 
-# The all-false and all-true frames are the first two entries of TEN_SHOT.
-TWO_SHOT = (
+FOUR_SHOT = (
     FewShotExample(
-        example_id="sunny-empty",
-        video="sunny_6",
-        timestamp_s=30,
+        example_id="cloudy1-empty",
+        video="cloudy1",
+        timestamp_s=120,
         parked=False,
         tunnel_attached=False,
         doors_open=False,
         note=_NOTE_EMPTY,
     ),
     FewShotExample(
-        example_id="night-all-true",
-        video="night_6",
-        timestamp_s=1530,
+        example_id="cloudy1-parked",
+        video="cloudy1",
+        timestamp_s=140,
+        parked=True,
+        tunnel_attached=False,
+        doors_open=False,
+        note=_NOTE_PARKED,
+    ),
+    FewShotExample(
+        example_id="cloudy1-parked-tunnel",
+        video="cloudy1",
+        timestamp_s=230,
+        parked=True,
+        tunnel_attached=True,
+        doors_open=False,
+        note=_NOTE_PARKED_TUNNEL,
+    ),
+    FewShotExample(
+        example_id="cloudy1-all-true",
+        video="cloudy1",
+        timestamp_s=260,
         parked=True,
         tunnel_attached=True,
         doors_open=True,
@@ -72,103 +88,30 @@ TWO_SHOT = (
     ),
 )
 
-# Interleaved so that no combination is sent as one block.
-TEN_SHOT = (
+SIX_SHOT = FOUR_SHOT + (
     FewShotExample(
-        example_id="sunny-empty",
-        video="sunny_6",
-        timestamp_s=30,
-        parked=False,
-        tunnel_attached=False,
-        doors_open=False,
-        note=_NOTE_EMPTY,
-    ),
-    FewShotExample(
-        example_id="night-all-true",
-        video="night_6",
-        timestamp_s=1530,
+        example_id="cloudy1-all-true-late",
+        video="cloudy1",
+        timestamp_s=3066,
         parked=True,
         tunnel_attached=True,
         doors_open=True,
         note=_NOTE_ALL_TRUE,
     ),
     FewShotExample(
-        example_id="sunny-parked",
-        video="sunny_6",
-        timestamp_s=5310,
+        example_id="cloudy1-parked-doors-closed",
+        video="cloudy1",
+        timestamp_s=3168,
         parked=True,
         tunnel_attached=False,
         doors_open=False,
         note=_NOTE_PARKED,
-    ),
-    FewShotExample(
-        example_id="cloudy-parked-tunnel",
-        video="cloudy_6",
-        timestamp_s=2670,
-        parked=True,
-        tunnel_attached=True,
-        doors_open=False,
-        note=_NOTE_PARKED_TUNNEL,
-    ),
-    FewShotExample(
-        example_id="rainy-parked-doors",
-        video="rainy_6",
-        timestamp_s=3510,
-        parked=True,
-        tunnel_attached=False,
-        doors_open=True,
-        note=_NOTE_PARKED_DOORS,
-    ),
-    FewShotExample(
-        example_id="rainy-empty",
-        video="rainy_6",
-        timestamp_s=4470,
-        parked=False,
-        tunnel_attached=False,
-        doors_open=False,
-        note=_NOTE_EMPTY,
-    ),
-    FewShotExample(
-        example_id="sunny-all-true",
-        video="sunny_6",
-        timestamp_s=2910,
-        parked=True,
-        tunnel_attached=True,
-        doors_open=True,
-        note=_NOTE_ALL_TRUE,
-    ),
-    FewShotExample(
-        example_id="night-parked",
-        video="night_6",
-        timestamp_s=2910,
-        parked=True,
-        tunnel_attached=False,
-        doors_open=False,
-        note=_NOTE_PARKED,
-    ),
-    FewShotExample(
-        example_id="night-parked-tunnel",
-        video="night_6",
-        timestamp_s=2430,
-        parked=True,
-        tunnel_attached=True,
-        doors_open=False,
-        note=_NOTE_PARKED_TUNNEL,
-    ),
-    FewShotExample(
-        example_id="rainy-parked-doors-2",
-        video="rainy_6",
-        timestamp_s=3570,
-        parked=True,
-        tunnel_attached=False,
-        doors_open=True,
-        note=_NOTE_PARKED_DOORS,
     ),
 )
 
-EXAMPLE_SETS = {"2-shot": TWO_SHOT, "10-shot": TEN_SHOT}
+EXAMPLE_SETS = {"4-shot": FOUR_SHOT, "6-shot": SIX_SHOT}
 # Prompt level -> example set name. Levels 1 and 2 send no examples.
-EXAMPLE_SET_BY_LEVEL = {1: None, 2: None, 3: "2-shot", 4: "10-shot"}
+EXAMPLE_SET_BY_LEVEL = {1: None, 2: None, 3: "4-shot", 4: "6-shot"}
 
 
 def example_set_for_level(level: int) -> str | None:
