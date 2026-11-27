@@ -54,6 +54,7 @@ class AzureVisionClient:
         prompt_text: str,
         examples: list[tuple[Path, str]] | None = None,
         few_shot_id: str | None = None,
+        input_fingerprint: str | None = None,
     ) -> None:
         load_dotenv(project_root / ".env")
         api_key = os.getenv("AZURE_OPENAI_API_KEY")
@@ -73,6 +74,7 @@ class AzureVisionClient:
         self.prompt_id = prompt_id(prompt_text)
         self.examples = examples or []
         self.few_shot_id = few_shot_id if self.examples else None
+        self.input_fingerprint = input_fingerprint
         self.api_calls: dict[str, int] = {}
         self.cache_hits: dict[str, int] = {}
         self.spend_usd: dict[str, float] = {}
@@ -215,6 +217,8 @@ class AzureVisionClient:
 
     def _cache_file(self, model: str, interval_seconds: int, frame_id: str) -> Path:
         folder = f"interval-{interval_seconds}-{self.prompt_id}"
+        if self.input_fingerprint:
+            folder += f"-data-{self.input_fingerprint}"
         if self.few_shot_id:
             folder += f"-fs-{self.few_shot_id}"
         return self.cache_dir / model / folder / f"{frame_id}.json"

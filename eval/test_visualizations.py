@@ -13,6 +13,7 @@ from eval.visualize_results import (
     create_confusion_plots,
     load_reports,
     main,
+    resolve_reports_dir,
 )
 
 
@@ -63,6 +64,15 @@ def test_accuracy_and_confusion_plots_are_written_as_pngs() -> None:
         root = Path(temporary)
         reports_dir = root / "reports"
         reports_dir.mkdir()
+        (reports_dir / "run-20261126T120000Z").mkdir()
+        (reports_dir / "run-20261127T120000Z").mkdir()
+        (reports_dir / "run-20261128T120000Z").mkdir()
+        (reports_dir / "run-20261126T120000Z" / "report_level1_default.json").write_text("{}")
+        (reports_dir / "run-20261127T120000Z" / "report_level1_default.json").write_text("{}")
+        (reports_dir / "report_level1_default.json").write_text("{}")
+        assert resolve_reports_dir(reports_dir).name == "run-20261127T120000Z"
+
+        reports_dir = reports_dir / "run-20261127T120000Z"
         report_data = (
             (1, "default", {"model-a": _summary(0.7), "model-b": _summary(0.8)}),
             (2, "default", {"model-a": _summary(0.85), "model-b": _summary(0.9)}),

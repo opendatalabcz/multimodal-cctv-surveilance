@@ -25,7 +25,7 @@ The default grid is one frame every 60 seconds, starting at 0, while the timesta
 ## Prompt levels and examples
 
 The model must return one JSON object with `parked`, `tunnel_attached`, `doors_open`, and `description`. By default, `eval/run_experiment.py` runs all four levels in order; `--prompt-level` selects only the specified level. The prompt text is in `eval/prompt.py`, and the example frames are in `eval/few_shot.py`.
-Use `--output-dir` to write a run's frames, cache, manifest, and reports to a separate directory instead of the default `outputs/vlm_eval`.
+Use `--output-dir` to choose a different base directory for timestamped run folders and the shared cache.
 
 | Level | Prompt | Examples sent with each frame |
 | --- | --- | --- |
@@ -34,9 +34,9 @@ Use `--output-dir` to write a run's frames, cache, manifest, and reports to a se
 | 3 | Descriptive | `4-shot`: all-false, parked, parked+tunnel, and all-true frames from `cloudy1.mp4` |
 | 4 | Descriptive | `6-shot`: the four level-3 examples plus all-true and parked-with-tunnel-and-cargo-doors closed frames from `cloudy1.mp4` |
 
-The example frames are held out from `cloudy1.mp4` and are never scored. The JPEGs and the JSON sent with them are written to `outputs/vlm_eval/few_shot/4-shot.html` and `outputs/vlm_eval/few_shot/6-shot.html`.
+The example frames are held out from `cloudy1.mp4` and are never scored. To inspect them without making model or Langfuse requests, run `python -m eval.run_experiment --prepare-examples-only`. The command prints the generated HTML paths; use `--prompt-level 3` or `--prompt-level 4` to preview one set.
 
-When all prompt levels are selected, the levels run sequentially. Within each level, model runs execute in parallel while each model processes its frames sequentially (one in-flight request per model), including with `--langfuse`.
+When all prompt levels are selected, the levels run sequentially. Within each level, model runs execute in parallel while each model processes its frames sequentially (one in-flight request per model), including with `--langfuse`. At most three models run concurrently by default; `--max-concurrent-models` changes that cap. `--high` includes eight models, so the default cap runs them in several waves.
 
 If the first reply is not that JSON object, the frame is sent once more with a repair prompt. A reply that still does not parse counts as wrong.
 
@@ -67,7 +67,7 @@ Before each run, eight frames are sent to `gpt-5.6-luna`. The full run starts on
 
 The OpenRouter models need `OPENROUTER_API_KEY` in `.env`. `OPEN_ROUTER_API_KEY` is also accepted. The run stops before any frame is sent if a selected model needs the key and it is missing.
 
-Each answer is cached under `outputs/vlm_eval/cache/` by model, interval, prompt id, and few-shot id. A transport failure is not cached, so a later run can retry it. Token cost uses the Azure prices in `eval/cost.py`.
+Each answer is cached under `outputs/vlm_eval/cache/` by model, interval, input fingerprint, prompt id, and few-shot id. A transport failure is not cached, so a later run can retry it. Token cost uses the Azure prices in `eval/cost.py`.
 
 ## Metrics
 
@@ -98,7 +98,10 @@ Put these in `.env` at the project root. The endpoint may be the Azure resource 
 ```bash
 python -m eval.test_labels
 python -m eval.test_visualizations
+python -m eval.run_experiment --prepare-examples-only                # create example JPEGs/HTML only; no model calls
+python -m eval.run_experiment --prepare-examples-only --prompt-level 4
 python -m eval.run_experiment                                  # levels 1–4, default models; no Langfuse
+python -m eval.run_experiment --max-concurrent-models 2        # lower parallel model cap
 python -m eval.run_experiment --langfuse                       # enable Langfuse dataset experiments and traces
 python -m eval.run_experiment --prompt-level 1
 python -m eval.run_experiment --prompt-level 3 --mid
@@ -116,18 +119,22 @@ uv run --python .venv/bin/python python -m eval.visualize_results
 uv run --python .venv/bin/python python -m eval.visualize_results --model gpt-4o --prompt-level 3
 ```
 
-The default command plots exact-match and per-state accuracy across prompt levels for each interval/model tier found in the reports. Add `--model` and `--prompt-level` together to also generate four confusion matrices (combined across all three state decisions, then one per state). The combined and per-state matrices use Yes/No axes and count annotations; parse failures are excluded and noted. Use `--model-level` and/or `--interval-seconds` to filter reports or resolve an ambiguous model selection. PNGs are written to `outputs/vlm_eval/plots/` by default; `--output-dir` changes the destination.
+The default command uses the latest run that contains reports, then plots exact-match and per-state accuracy across prompt levels for each interval/model tier. Pass `--reports-dir outputs/vlm_eval/<run-id>` to select an earlier run. Add `--model` and `--prompt-level` together to also generate four confusion matrices (combined across all three state decisions, then one per state). The combined and per-state matrices use Yes/No axes and count annotations; parse failures are excluded and noted. Use `--model-level` and/or `--interval-seconds` to filter reports or resolve an ambiguous model selection. PNGs are written to that run's `plots/` directory by default; `--output-dir` changes the destination.
 
 ## Outputs
 
-All of these are under `outputs/vlm_eval/`:
+Each experiment or preview gets a unique `run-<UTC timestamp>/` folder under `outputs/vlm_eval/`. `--run-id` can set a readable folder name; existing run folders are never overwritten. Each experiment's `run.json` records its settings, video and timestamp-file SHA-256 hashes, and an input fingerprint.
+
+Within each run folder:
 
 - `frames/{interval}s/` — one JPEG per scored timestamp
 - `manifest_{interval}s.json` — the scored samples and their labels
 - `contact_sheet.html` — every frame with its label; near-boundary frames are highlighted
-- `few_shot/` — example JPEGs, plus `4-shot.html` and `6-shot.html` for levels 3 and 4
-- `cache/` — raw model replies
-- `report_level{n}_{model_level}.json` — one summary per prompt level and model level. `model_level` is `default`, `mid`, `high`, or `custom` for `--models`. Runs at different levels no longer overwrite each other. Earlier `report.json` and `report_previous.json` files are not written any more.
-- `plots/` — accuracy-comparison PNGs and, when selected with `--model` and `--prompt-level`, confusion-matrix PNGs.
+- `few_shot/` — example JPEGs and HTML previews for the sets used by that run
+- `report_level{n}_{model_level}.json` — one summary per prompt level and model level
+- `run.json` — run settings, status, and input fingerprints
+- `plots/` — accuracy-comparison PNGs and optional confusion matrices
+
+The shared `outputs/vlm_eval/cache/` stores raw model replies keyed by the input fingerprint and prompt configuration, so identical inputs can reuse results across runs without mixing changed source videos.
 
 `raw_videos/` and `outputs/` are gitignored. `camera_images/` is earlier collected stills and is not read by this evaluation.

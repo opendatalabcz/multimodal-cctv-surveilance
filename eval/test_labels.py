@@ -6,6 +6,7 @@ from time import sleep
 
 from eval.cost import cost_usd, summarize_usage, token_counts
 from eval.concurrency import run_models_parallel
+from eval.fingerprints import evaluation_fingerprint, sha256_file
 from eval.labels import build_samples
 from eval.scoring import flicker, prediction_row, summarize
 
@@ -259,9 +260,59 @@ def test_models_run_in_parallel_with_sequential_calls_per_model() -> None:
                 active_total -= 1
         return model
 
-    assert run_models_parallel(models, run_model) == [(model, model) for model in models]
+    assert run_models_parallel(models, run_model, max_concurrent_models=3) == [
+        (model, model) for model in models
+    ]
     assert max_active_total == len(models)
     assert max(max_active_by_model.values()) == 1
+
+
+def test_model_concurrency_limit_is_respected() -> None:
+    models = [f"model-{index}" for index in range(5)]
+    lock = Lock()
+    active = 0
+    maximum_active = 0
+
+    def run_model(model: str) -> str:
+        nonlocal active, maximum_active
+        with lock:
+            active += 1
+            maximum_active = max(maximum_active, active)
+        sleep(0.02)
+        with lock:
+            active -= 1
+        return model
+
+    assert run_models_parallel(models, run_model, max_concurrent_models=2) == [
+        (model, model) for model in models
+    ]
+    assert maximum_active == 2
+
+
+def test_model_concurrency_limit_must_be_positive() -> None:
+    try:
+        run_models_parallel([], lambda model: model, max_concurrent_models=0)
+    except ValueError as exc:
+        assert "must be positive" in str(exc)
+    else:
+        raise AssertionError("zero model concurrency must be rejected")
+
+
+def test_evaluation_fingerprint_changes_with_input_content() -> None:
+    from tempfile import TemporaryDirectory
+
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        timestamps = root / "timestamps.csv"
+        video = root / "sample.mp4"
+        timestamps.write_bytes(b"timestamps-v1")
+        video.write_bytes(b"video-v1")
+        first, sources = evaluation_fingerprint(timestamps, [video])
+        assert sources["videos"]["sample.mp4"] == sha256_file(video)
+
+        video.write_bytes(b"video-v2")
+        second, _sources = evaluation_fingerprint(timestamps, [video])
+        assert second != first
 
 
 if __name__ == "__main__":
@@ -271,4 +322,7 @@ if __name__ == "__main__":
     test_parse_failure_counts_as_wrong_and_flicker_ignores_real_changes()
     test_cost_uses_cached_input_rate_and_both_usage_shapes()
     test_models_run_in_parallel_with_sequential_calls_per_model()
+    test_model_concurrency_limit_is_respected()
+    test_model_concurrency_limit_must_be_positive()
+    test_evaluation_fingerprint_changes_with_input_content()
     print("label checks passed")

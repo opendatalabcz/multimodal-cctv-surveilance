@@ -90,6 +90,22 @@ def load_reports(reports_dir: Path) -> list[Report]:
     return reports
 
 
+def resolve_reports_dir(reports_root: Path) -> Path:
+    run_dirs = [
+        path
+        for path in reports_root.iterdir()
+        if path.is_dir() and any(path.glob("report_level*_*.json"))
+    ] if reports_root.exists() else []
+    if run_dirs:
+        return max(
+            run_dirs,
+            key=lambda path: (path / "run.json").stat().st_mtime_ns
+            if (path / "run.json").exists()
+            else path.stat().st_mtime_ns,
+        )
+    return reports_root
+
+
 def _report_integer(data: dict[str, Any], key: str, path: Path) -> int:
     value = data.get(key)
     if type(value) is not int:
@@ -306,7 +322,7 @@ def main(argv: list[str] | None = None) -> int:
         "--reports-dir",
         type=Path,
         default=project_root() / "outputs" / "vlm_eval",
-        help="Directory containing report_level{n}_{model_level}.json files.",
+        help="A run directory, or the output root (default: use the latest run with reports).",
     )
     parser.add_argument("--output-dir", type=Path, help="PNG destination (default: <reports-dir>/plots).")
     parser.add_argument("--model-level", help="Limit plots and matrix selection to a model tier, e.g. default or mid.")
@@ -319,8 +335,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.interval_seconds is not None and args.interval_seconds <= 0:
         parser.error("--interval-seconds must be positive")
 
+    reports_dir = resolve_reports_dir(args.reports_dir)
     try:
-        reports = load_reports(args.reports_dir)
+        reports = load_reports(reports_dir)
     except (FileNotFoundError, ValueError) as exc:
         parser.error(str(exc))
     selected = [
@@ -332,7 +349,7 @@ def main(argv: list[str] | None = None) -> int:
     if not selected:
         parser.error("No reports match the selected model level and interval")
 
-    output_dir = args.output_dir or args.reports_dir / "plots"
+    output_dir = args.output_dir or reports_dir / "plots"
     accuracy_paths = create_accuracy_plots(selected, output_dir)
     for path in accuracy_paths:
         print(f"Accuracy plot: {path}")

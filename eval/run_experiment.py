@@ -6,7 +6,9 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -14,6 +16,7 @@ from dotenv import load_dotenv
 from eval.azure_client import KNOWN_MODELS, AzureVisionClient, is_openrouter, openrouter_key
 from eval.concurrency import run_models_parallel
 from eval.cost import cost_usd, summarize_usage, token_counts
+from eval.fingerprints import evaluation_fingerprint
 from eval.few_shot import EXAMPLE_SETS, example_set_for_level, few_shot_id, held_out_keys, prepare_examples
 from eval.frames import extract_frames, frame_path, video_duration_s, write_contact_sheet
 from eval.labels import STATES, Sample, build_samples
@@ -23,7 +26,8 @@ from eval.scoring import prediction_row, summarize
 SMOKE_SIZE = 8
 SMOKE_MODEL = "gpt-5.6-luna"
 REQUEST_TIMEOUT_S = 180
-MAX_CONCURRENCY = 1
+DEFAULT_MAX_CONCURRENT_MODELS = 3
+MAX_CONCURRENT_REQUESTS_PER_MODEL = 1
 
 # Each level includes the one before it. Azure models first, then the OpenRouter models.
 DEFAULT_MODELS = ["gpt-5.6-luna", "gpt-6-luna", "gpt-4o"]
@@ -72,13 +76,63 @@ def select_smoke(samples: list[Sample], size: int = SMOKE_SIZE) -> list[Sample]:
     return chosen[:size]
 
 
+def _run_id(requested: str | None) -> str:
+    if requested is not None:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", requested) or requested in {".", ".."}:
+            raise ValueError("--run-id may contain only letters, numbers, periods, underscores, and hyphens")
+        return requested
+    return datetime.now(timezone.utc).strftime("run-%Y%m%dT%H%M%S%fZ")
+
+
+def _create_run_dir(output_root: Path, run_id: str) -> Path:
+    run_dir = output_root / run_id
+    run_dir.mkdir(parents=True, exist_ok=False)
+    return run_dir
+
+
+def _write_run_metadata(
+    run_dir: Path,
+    *,
+    run_id: str,
+    settings: dict,
+    input_fingerprint: str,
+    sources: dict,
+    status: str,
+) -> dict:
+    metadata = {
+        "run_id": run_id,
+        "started_at_utc": datetime.now(timezone.utc).isoformat(),
+        "status": status,
+        "settings": settings,
+        "input_fingerprint": input_fingerprint,
+        "sources": sources,
+    }
+    (run_dir / "run.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    return metadata
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Evaluate stand-state recognition on sampled frames.")
     parser.add_argument("--interval-seconds", type=int, default=60)
     parser.add_argument(
         "--output-dir",
         type=Path,
-        help="Directory for generated frames, caches, manifests, and reports (default: outputs/vlm_eval).",
+        help="Base directory for run folders and shared caches (default: outputs/vlm_eval).",
+    )
+    parser.add_argument(
+        "--run-id",
+        help="Run folder name (default: a UTC timestamp). Existing run folders are never overwritten.",
+    )
+    parser.add_argument(
+        "--max-concurrent-models",
+        type=int,
+        default=DEFAULT_MAX_CONCURRENT_MODELS,
+        help=f"Maximum models running at once; each model makes one request at a time (default: {DEFAULT_MAX_CONCURRENT_MODELS}).",
+    )
+    parser.add_argument(
+        "--prepare-examples-only",
+        action="store_true",
+        help="Extract few-shot images and HTML previews, then exit without model/API calls.",
     )
     parser.add_argument(
         "--langfuse",
@@ -113,6 +167,54 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.interval_seconds <= 0:
         parser.error("--interval-seconds must be positive")
+    if args.max_concurrent_models <= 0:
+        parser.error("--max-concurrent-models must be positive")
+    try:
+        run_id = _run_id(args.run_id)
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    root = project_root()
+    output_root = args.output_dir or root / "outputs" / "vlm_eval"
+    if not output_root.is_absolute():
+        output_root = root / output_root
+    videos_dir = root / "raw_videos"
+    timestamps_path = _timestamps_path(root)
+
+    if args.prepare_examples_only:
+        if args.models is not None or args.mid or args.high or args.langfuse:
+            parser.error("--prepare-examples-only cannot be combined with model or Langfuse options")
+        try:
+            run_dir = _create_run_dir(output_root, run_id)
+        except FileExistsError:
+            parser.error(f"Run directory already exists: {output_root / run_id}")
+        levels = selected_prompt_levels(args.prompt_level)
+        example_levels = [level for level in levels if example_set_for_level(level)]
+        set_names = [example_set_for_level(level) for level in example_levels]
+        for set_name in dict.fromkeys(name for name in set_names if name is not None):
+            prepared = prepare_examples(videos_dir, run_dir, set_name)
+            page = run_dir / "few_shot" / f"{set_name}.html"
+            print(f"Preview: {page} ({len(prepared)} examples)")
+        example_video_paths = sorted(
+            {videos_dir / f"{example.video}.mp4" for set_name in set_names if set_name for example in EXAMPLE_SETS[set_name]}
+        )
+        input_fingerprint, sources = evaluation_fingerprint(timestamps_path, example_video_paths)
+        _write_run_metadata(
+            run_dir,
+            run_id=run_id,
+            settings={
+                "mode": "prepare-examples-only",
+                "prompt_levels": list(levels),
+                "example_sets": set_names,
+            },
+            input_fingerprint=input_fingerprint,
+            sources=sources,
+            status="prepared",
+        )
+        if not example_levels:
+            print("The selected prompt level(s) have no few-shot examples to preview.")
+        return 0
+
     if args.models is not None:
         if args.mid or args.high:
             parser.error("--models cannot be combined with --mid or --high")
@@ -127,24 +229,46 @@ def main(argv: list[str] | None = None) -> int:
     if unknown:
         parser.error(f"Unknown model(s): {', '.join(unknown)}")
 
-    root = project_root()
     load_dotenv(root / ".env")
     if any(is_openrouter(model) for model in models) and not openrouter_key():
         parser.error("OPENROUTER_API_KEY (or OPEN_ROUTER_API_KEY) is required for the OpenRouter models")
     print(f"models: {', '.join(models)}")
-    output_dir = args.output_dir or root / "outputs" / "vlm_eval"
-    if not output_dir.is_absolute():
-        output_dir = root / output_dir
-    frames_dir = output_dir / "frames"
-    videos_dir = root / "raw_videos"
-    timestamps_path = _timestamps_path(root)
+    try:
+        output_dir = _create_run_dir(output_root, run_id)
+    except FileExistsError:
+        parser.error(f"Run directory already exists: {output_root / run_id}")
+    video_paths = sorted(videos_dir.glob("*.mp4"))
+    input_fingerprint, sources = evaluation_fingerprint(timestamps_path, video_paths)
+    selected_levels = selected_prompt_levels(args.prompt_level)
 
     model_level = "custom" if args.models is not None else "high" if args.high else "mid" if args.mid else "default"
-    for prompt_level in selected_prompt_levels(args.prompt_level):
+    settings = {
+        "mode": "evaluation",
+        "interval_seconds": args.interval_seconds,
+        "prompt_levels": list(selected_levels),
+        "models": models,
+        "model_level": model_level,
+        "max_concurrent_models": args.max_concurrent_models,
+        "max_concurrent_requests_per_model": MAX_CONCURRENT_REQUESTS_PER_MODEL,
+        "langfuse": args.langfuse,
+    }
+    run_metadata = _write_run_metadata(
+        output_dir,
+        run_id=run_id,
+        settings=settings,
+        input_fingerprint=input_fingerprint,
+        sources=sources,
+        status="running",
+    )
+    frames_dir = output_dir / "frames"
+    cache_dir = output_root / "cache"
+    print(f"Run outputs: {output_dir}")
+    for prompt_level in selected_levels:
         result = _run_prompt_level(
             root=root,
             output_dir=output_dir,
             frames_dir=frames_dir,
+            cache_dir=cache_dir,
             videos_dir=videos_dir,
             timestamps_path=timestamps_path,
             models=models,
@@ -152,9 +276,16 @@ def main(argv: list[str] | None = None) -> int:
             interval_seconds=args.interval_seconds,
             prompt_level=prompt_level,
             langfuse_enabled=args.langfuse,
+            input_fingerprint=input_fingerprint,
+            max_concurrent_models=args.max_concurrent_models,
         )
         if result:
+            run_metadata["status"] = "failed"
+            run_metadata["failed_prompt_level"] = prompt_level
+            (output_dir / "run.json").write_text(json.dumps(run_metadata, indent=2), encoding="utf-8")
             return result
+    run_metadata["status"] = "complete"
+    (output_dir / "run.json").write_text(json.dumps(run_metadata, indent=2), encoding="utf-8")
     return 0
 
 
@@ -163,6 +294,7 @@ def _run_prompt_level(
     root: Path,
     output_dir: Path,
     frames_dir: Path,
+    cache_dir: Path,
     videos_dir: Path,
     timestamps_path: Path,
     models: list[str],
@@ -170,6 +302,8 @@ def _run_prompt_level(
     interval_seconds: int,
     prompt_level: int,
     langfuse_enabled: bool,
+    input_fingerprint: str,
+    max_concurrent_models: int,
 ) -> int:
     prompt_text = prompt_text_for_level(prompt_level)
     active_prompt_id = prompt_id(prompt_text)
@@ -210,11 +344,12 @@ def _run_prompt_level(
 
     client = AzureVisionClient(
         root,
-        output_dir / "cache",
+        cache_dir,
         timeout_s=REQUEST_TIMEOUT_S,
         prompt_text=prompt_text,
         examples=examples,
         few_shot_id=active_few_shot_id,
+        input_fingerprint=input_fingerprint,
     )
     smoke = select_smoke(samples)
     print(f"Smoke check on {SMOKE_MODEL}:")
@@ -254,12 +389,16 @@ def _run_prompt_level(
             prompt_fingerprint=active_prompt_id,
             example_set=set_name,
             few_shot_fingerprint=active_few_shot_id,
+            max_concurrent_models=max_concurrent_models,
         )
     report = {
+        "run_id": output_dir.name,
         "interval_seconds": interval_seconds,
         "prompt_level": prompt_level,
         "model_level": model_level,
         "prompt_id": active_prompt_id,
+        "input_fingerprint": input_fingerprint,
+        "max_concurrent_models": max_concurrent_models,
         "example_set": set_name,
         "few_shot_id": active_few_shot_id,
         "few_shot_examples": [example.example_id for example in example_set],
@@ -291,7 +430,7 @@ def _run_prompt_level(
         summary["azure_spend_this_process_usd"] = client.spend_usd.get(model, 0.0)
         return summary
 
-    for model, summary in run_models_parallel(models, score_model):
+    for model, summary in run_models_parallel(models, score_model, max_concurrent_models):
         report["models"][model] = summary
     report_path = output_dir / f"report_level{prompt_level}_{model_level}.json"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
@@ -313,6 +452,7 @@ def _run_langfuse(
     prompt_fingerprint: str,
     example_set: str | None,
     few_shot_fingerprint: str | None,
+    max_concurrent_models: int,
 ) -> dict[str, str]:
     from langfuse import Evaluation, get_client
 
@@ -429,7 +569,7 @@ def _run_langfuse(
             ),
             task=model_task,
             evaluators=evaluators,
-            max_concurrency=MAX_CONCURRENCY,
+            max_concurrency=MAX_CONCURRENT_REQUESTS_PER_MODEL,
             metadata={
                 "model": model,
                 "interval_seconds": str(interval_seconds),
@@ -442,7 +582,9 @@ def _run_langfuse(
         url = getattr(result, "experiment_url", None) or getattr(result, "dataset_run_url", "")
         return url or "", result.format()
 
-    for model, (url, formatted_result) in run_models_parallel(models, run_model_experiment):
+    for model, (url, formatted_result) in run_models_parallel(
+        models, run_model_experiment, max_concurrent_models
+    ):
         urls[model] = url
         print(formatted_result)
         if url:
