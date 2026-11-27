@@ -12,6 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from eval.azure_client import KNOWN_MODELS, AzureVisionClient, is_openrouter, openrouter_key
+from eval.concurrency import run_models_parallel
 from eval.cost import cost_usd, summarize_usage, token_counts
 from eval.few_shot import EXAMPLE_SETS, example_set_for_level, few_shot_id, held_out_keys, prepare_examples
 from eval.frames import extract_frames, frame_path, video_duration_s, write_contact_sheet
@@ -22,7 +23,7 @@ from eval.scoring import prediction_row, summarize
 SMOKE_SIZE = 8
 SMOKE_MODEL = "gpt-5.6-luna"
 REQUEST_TIMEOUT_S = 180
-MAX_CONCURRENCY = 4
+MAX_CONCURRENCY = 1
 
 # Each level includes the one before it. Azure models first, then the OpenRouter models.
 DEFAULT_MODELS = ["gpt-5.6-luna", "gpt-6-luna", "gpt-4o"]
@@ -105,8 +106,8 @@ def main(argv: list[str] | None = None) -> int:
         choices=PROMPT_LEVELS,
         default=None,
         help=(
-            "1: simple prompt. 2: descriptive prompt. 3: descriptive prompt with 2 examples. "
-            "4: descriptive prompt with 10 examples. Default: run all levels (1–4)."
+            "1: simple prompt. 2: descriptive prompt. 3: descriptive prompt with 4 examples. "
+            "4: descriptive prompt with 6 examples. Default: run all levels (1–4)."
         ),
     )
     args = parser.parse_args(argv)
@@ -118,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
         models = [model.strip() for model in args.models.split(",") if model.strip()]
         if not models:
             parser.error("--models must name at least one deployment")
+        if len(set(models)) != len(models):
+            parser.error("--models must not contain duplicates")
     else:
         models = HIGH_MODELS if args.high else MID_MODELS if args.mid else DEFAULT_MODELS
     unknown = [model for model in models if model not in KNOWN_MODELS]
@@ -264,7 +267,8 @@ def _run_prompt_level(
         "experiments": experiment_urls,
         "models": {},
     }
-    for model in models:
+
+    def score_model(model: str) -> dict:
         rows = []
         records = []
         for index, sample in enumerate(samples, start=1):
@@ -285,6 +289,9 @@ def _run_prompt_level(
         summary["api_calls_this_process"] = client.api_calls.get(model, 0)
         summary["cache_hits_this_process"] = client.cache_hits.get(model, 0)
         summary["azure_spend_this_process_usd"] = client.spend_usd.get(model, 0.0)
+        return summary
+
+    for model, summary in run_models_parallel(models, score_model):
         report["models"][model] = summary
     report_path = output_dir / f"report_level{prompt_level}_{model_level}.json"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
@@ -406,7 +413,7 @@ def _run_langfuse(
         return Evaluation(name="exact_match", value=1.0 if correct else 0.0)
 
     evaluators = [evaluator_for(state) for state in STATES] + [exact_match]
-    for model in models:
+    def run_model_experiment(model: str) -> tuple[str, str]:
         print(f"Experiment {model}")
 
         async def model_task(*, item, _model=model, **kwargs):
@@ -433,8 +440,11 @@ def _run_langfuse(
             },
         )
         url = getattr(result, "experiment_url", None) or getattr(result, "dataset_run_url", "")
-        urls[model] = url or ""
-        print(result.format())
+        return url or "", result.format()
+
+    for model, (url, formatted_result) in run_models_parallel(models, run_model_experiment):
+        urls[model] = url
+        print(formatted_result)
         if url:
             print(url)
     langfuse.flush()

@@ -36,6 +36,8 @@ Use `--output-dir` to write a run's frames, cache, manifest, and reports to a se
 
 The example frames are held out from `cloudy1.mp4` and are never scored. The JPEGs and the JSON sent with them are written to `outputs/vlm_eval/few_shot/4-shot.html` and `outputs/vlm_eval/few_shot/6-shot.html`.
 
+When all prompt levels are selected, the levels run sequentially. Within each level, model runs execute in parallel while each model processes its frames sequentially (one in-flight request per model), including with `--langfuse`.
+
 If the first reply is not that JSON object, the frame is sent once more with a repair prompt. A reply that still does not parse counts as wrong.
 
 ## Models

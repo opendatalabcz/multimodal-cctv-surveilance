@@ -1,8 +1,11 @@
 """Checks for timestamp labels. Run with python -m eval.test_labels."""
 
 from pathlib import Path
+from threading import Barrier, Lock
+from time import sleep
 
 from eval.cost import cost_usd, summarize_usage, token_counts
+from eval.concurrency import run_models_parallel
 from eval.labels import build_samples
 from eval.scoring import flicker, prediction_row, summarize
 
@@ -232,10 +235,40 @@ def test_cost_uses_cached_input_rate_and_both_usage_shapes() -> None:
     assert summary["cost_usd"]["total"] == 0.2
 
 
+def test_models_run_in_parallel_with_sequential_calls_per_model() -> None:
+    models = ["model-a", "model-b", "model-c"]
+    start = Barrier(len(models))
+    lock = Lock()
+    active_by_model = {model: 0 for model in models}
+    max_active_by_model = {model: 0 for model in models}
+    active_total = 0
+    max_active_total = 0
+
+    def run_model(model: str) -> str:
+        nonlocal active_total, max_active_total
+        start.wait(timeout=5)
+        for _ in range(3):
+            with lock:
+                active_by_model[model] += 1
+                active_total += 1
+                max_active_by_model[model] = max(max_active_by_model[model], active_by_model[model])
+                max_active_total = max(max_active_total, active_total)
+            sleep(0.01)
+            with lock:
+                active_by_model[model] -= 1
+                active_total -= 1
+        return model
+
+    assert run_models_parallel(models, run_model) == [(model, model) for model in models]
+    assert max_active_total == len(models)
+    assert max(max_active_by_model.values()) == 1
+
+
 if __name__ == "__main__":
     test_grid_and_states()
     test_prompt_levels()
     test_example_sets_are_held_out_and_labelled_from_timestamps()
     test_parse_failure_counts_as_wrong_and_flicker_ignores_real_changes()
     test_cost_uses_cached_input_rate_and_both_usage_shapes()
+    test_models_run_in_parallel_with_sequential_calls_per_model()
     print("label checks passed")
