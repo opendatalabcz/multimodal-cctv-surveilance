@@ -63,7 +63,7 @@ Levels include the ones before them:
 
 `--models` takes an exact comma-separated list instead of a level. Passing `--models` with `--mid` or `--high`, or passing two level flags, is an error.
 
-Before each run, eight frames are sent to `gpt-5.6-luna`. The full run starts only if every smoke frame returns valid JSON.
+Before each level's full scoring, every selected model is checked against up to eight smoke frames, respecting the model concurrency cap. A model's smoke check stops at its first invalid reply; full scoring starts only if every selected model passes.
 
 The OpenRouter models need `OPENROUTER_API_KEY` in `.env`. `OPEN_ROUTER_API_KEY` is also accepted. The run stops before any frame is sent if a selected model needs the key and it is missing.
 
@@ -98,6 +98,7 @@ Put these in `.env` at the project root. The endpoint may be the Azure resource 
 ```bash
 python -m eval.test_labels
 python -m eval.test_visualizations
+python -m eval.test_azure_client
 python -m eval.run_experiment --prepare-examples-only                # create example JPEGs/HTML only; no model calls
 python -m eval.run_experiment --prepare-examples-only --prompt-level 4
 python -m eval.run_experiment                                  # levels 1–4, default models; no Langfuse
@@ -131,6 +132,7 @@ Within each run folder:
 - `manifest_{interval}s.json` — the scored samples and their labels
 - `contact_sheet.html` — every frame with its label; near-boundary frames are highlighted
 - `few_shot/` — example JPEGs and HTML previews for the sets used by that run
+- `predictions/{model-slug}.jsonl` — per-frame truth, prediction, raw/parsed output, parse/cache status, and usage
 - `report_level{n}_{model_level}.json` — one summary per prompt level and model level
 - `run.json` — run settings, status, and input fingerprints
 - `plots/` — accuracy-comparison PNGs and optional confusion matrices

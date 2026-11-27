@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import base64
+import email.utils
 import json
+import math
 import os
+import random
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -33,6 +37,7 @@ OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 # before writing any text, so the OpenRouter budget matches the Responses one.
 OPENROUTER_MAX_TOKENS = 8000
 _RETRY_STATUSES = {429, 500, 502, 503, 504}
+_MAX_RETRIES = 5
 
 
 def is_openrouter(model: str) -> bool:
@@ -191,22 +196,23 @@ class AzureVisionClient:
     def _post(self, url: str, payload: dict, headers: dict[str, str]) -> tuple[dict | None, str | None]:
         delay = 2.0
         last_error = "request failed"
-        for attempt in range(5):
+        for attempt in range(_MAX_RETRIES):
+            retry_after_s = None
             try:
                 response = requests.post(url, headers=headers, json=payload, timeout=self.timeout_s)
             except requests.RequestException as exc:
                 last_error = str(exc)
-                time.sleep(delay)
+            else:
+                if response.status_code in _RETRY_STATUSES:
+                    last_error = f"{response.status_code} {(response.text or '')[:300]}"
+                    retry_after_s = _retry_after_seconds(response.headers.get("Retry-After"))
+                elif not response.ok:
+                    return None, f"{response.status_code} {(response.text or '')[:500]}"
+                else:
+                    return response.json(), None
+            if attempt + 1 < _MAX_RETRIES:
+                time.sleep(_retry_delay(retry_after_s, delay))
                 delay = min(delay * 2, 30)
-                continue
-            if response.status_code in _RETRY_STATUSES:
-                last_error = f"{response.status_code} {(response.text or '')[:300]}"
-                time.sleep(delay)
-                delay = min(delay * 2, 30)
-                continue
-            if not response.ok:
-                return None, f"{response.status_code} {(response.text or '')[:500]}"
-            return response.json(), None
         return None, last_error
 
     def _lock(self, key: str) -> threading.Lock:
@@ -235,6 +241,31 @@ class AzureVisionClient:
         temporary = path.with_suffix(".json.tmp")
         temporary.write_text(json.dumps(record, indent=2), encoding="utf-8")
         temporary.replace(path)
+
+
+def _retry_after_seconds(value: str | None, *, now: datetime | None = None) -> float | None:
+    if not value:
+        return None
+    try:
+        seconds = float(value)
+    except ValueError:
+        try:
+            retry_at = email.utils.parsedate_to_datetime(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        current_time = now or datetime.now(timezone.utc)
+        seconds = (retry_at - current_time).total_seconds()
+    if not math.isfinite(seconds):
+        return None
+    return max(0.0, seconds)
+
+
+def _retry_delay(retry_after_s: float | None, backoff_s: float) -> float:
+    if retry_after_s is not None:
+        return retry_after_s + random.uniform(0.0, 1.0)
+    return random.uniform(0.0, backoff_s)
 
 
 def _empty_result(error: str, raw_response: str | None = None, usage: dict | None = None) -> dict:

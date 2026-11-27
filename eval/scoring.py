@@ -25,6 +25,16 @@ def prediction_row(sample: Sample, record: dict | None) -> Row:
     }
 
 
+def detailed_prediction_row(sample: Sample, model: str, record: dict | None) -> Row:
+    row = prediction_row(sample, record)
+    row["model"] = model
+    row["cache_hit"] = bool(record and record.get("cache_hit"))
+    row["usage"] = (record.get("usage") or {}) if record else {}
+    row["raw_response"] = record.get("raw_response") if record else None
+    row["repair_raw_response"] = record.get("repair_raw_response") if record else None
+    return row
+
+
 def summarize(rows: list[Row], *, interval_seconds: int, model: str) -> dict:
     return {
         "model": model,

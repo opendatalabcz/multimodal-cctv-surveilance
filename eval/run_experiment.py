@@ -21,10 +21,9 @@ from eval.few_shot import EXAMPLE_SETS, example_set_for_level, few_shot_id, held
 from eval.frames import extract_frames, frame_path, video_duration_s, write_contact_sheet
 from eval.labels import STATES, Sample, build_samples
 from eval.prompt import PROMPT_LEVELS, prompt_id, prompt_text_for_level, selected_prompt_levels
-from eval.scoring import prediction_row, summarize
+from eval.scoring import detailed_prediction_row, prediction_row, summarize
 
 SMOKE_SIZE = 8
-SMOKE_MODEL = "gpt-5.6-luna"
 REQUEST_TIMEOUT_S = 180
 DEFAULT_MAX_CONCURRENT_MODELS = 3
 MAX_CONCURRENT_REQUESTS_PER_MODEL = 1
@@ -82,6 +81,10 @@ def _run_id(requested: str | None) -> str:
             raise ValueError("--run-id may contain only letters, numbers, periods, underscores, and hyphens")
         return requested
     return datetime.now(timezone.utc).strftime("run-%Y%m%dT%H%M%S%fZ")
+
+
+def _model_slug(model: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", model).strip("-") or "model"
 
 
 def _create_run_dir(output_root: Path, run_id: str) -> Path:
@@ -352,26 +355,32 @@ def _run_prompt_level(
         input_fingerprint=input_fingerprint,
     )
     smoke = select_smoke(samples)
-    print(f"Smoke check on {SMOKE_MODEL}:")
-    smoke_failed = False
-    for index, sample in enumerate(smoke, start=1):
-        print(f"Smoke {SMOKE_MODEL} {index}/{len(smoke)} {sample.frame_id} ...", end="", flush=True)
-        record = client.predict(
-            model=SMOKE_MODEL,
-            image_path=frame_path(frames_dir, sample),
-            frame_id=sample.frame_id,
-            interval_seconds=sample.interval_seconds,
-            video=sample.video,
-            timestamp_s=sample.timestamp_s,
+
+    def smoke_model(model: str) -> bool:
+        for index, sample in enumerate(smoke, start=1):
+            print(f"Smoke {model} {index}/{len(smoke)} {sample.frame_id} ...", end="", flush=True)
+            record = client.predict(
+                model=model,
+                image_path=frame_path(frames_dir, sample),
+                frame_id=sample.frame_id,
+                interval_seconds=sample.interval_seconds,
+                video=sample.video,
+                timestamp_s=sample.timestamp_s,
+            )
+            print(f" {'cache hit' if record.get('cache_hit') else 'done'}", flush=True)
+            if not record["parse_ok"]:
+                print(f"  {model} smoke failed: {sample.frame_id} {sample.phase}")
+                print(f"    raw: {(record.get('raw_response') or record.get('error') or '')[:400]}")
+                return False
+        return True
+
+    smoke_results = run_models_parallel(models, smoke_model, max_concurrent_models)
+    failed_smoke_models = [model for model, passed in smoke_results if not passed]
+    if failed_smoke_models:
+        print(
+            "Stopping before the full run because smoke checks failed for: "
+            + ", ".join(failed_smoke_models)
         )
-        print(f" {'cache hit' if record.get('cache_hit') else 'done'}", flush=True)
-        status = "ok" if record["parse_ok"] else "PARSE FAILED"
-        print(f"  {sample.frame_id} {sample.phase} truth={sample.truth()} {status}")
-        if not record["parse_ok"]:
-            smoke_failed = True
-            print(f"    raw: {(record.get('raw_response') or record.get('error') or '')[:400]}")
-    if smoke_failed:
-        print("Stopping before the full run because the smoke frames did not return valid JSON.")
         return 1
 
     dataset_name = f"stand-state-frames-{interval_seconds}s-level{prompt_level}"
@@ -410,24 +419,33 @@ def _run_prompt_level(
     def score_model(model: str) -> dict:
         rows = []
         records = []
-        for index, sample in enumerate(samples, start=1):
-            print(f"{model} {index}/{len(samples)} {sample.frame_id} ...", end="", flush=True)
-            record = client.predict(
-                model=model,
-                image_path=frame_path(frames_dir, sample),
-                frame_id=sample.frame_id,
-                interval_seconds=sample.interval_seconds,
-                video=sample.video,
-                timestamp_s=sample.timestamp_s,
-            )
-            print(f" {'cache hit' if record.get('cache_hit') else 'done'}", flush=True)
-            records.append(record)
-            rows.append(prediction_row(sample, record))
+        predictions_dir = output_dir / "predictions"
+        predictions_dir.mkdir(parents=True, exist_ok=True)
+        prediction_path = predictions_dir / f"{_model_slug(model)}.jsonl"
+        print(f"{model} predictions: {prediction_path}")
+        with prediction_path.open("w", encoding="utf-8") as ledger:
+            for index, sample in enumerate(samples, start=1):
+                print(f"{model} {index}/{len(samples)} {sample.frame_id} ...", end="", flush=True)
+                record = client.predict(
+                    model=model,
+                    image_path=frame_path(frames_dir, sample),
+                    frame_id=sample.frame_id,
+                    interval_seconds=sample.interval_seconds,
+                    video=sample.video,
+                    timestamp_s=sample.timestamp_s,
+                )
+                print(f" {'cache hit' if record.get('cache_hit') else 'done'}", flush=True)
+                row = prediction_row(sample, record)
+                ledger.write(json.dumps(detailed_prediction_row(sample, model, record)) + "\n")
+                ledger.flush()
+                records.append(record)
+                rows.append(row)
         summary = summarize(rows, interval_seconds=interval_seconds, model=model)
         summary.update(summarize_usage(model, records))
         summary["api_calls_this_process"] = client.api_calls.get(model, 0)
         summary["cache_hits_this_process"] = client.cache_hits.get(model, 0)
         summary["azure_spend_this_process_usd"] = client.spend_usd.get(model, 0.0)
+        summary["predictions_file"] = prediction_path.relative_to(output_dir).as_posix()
         return summary
 
     for model, summary in run_models_parallel(models, score_model, max_concurrent_models):

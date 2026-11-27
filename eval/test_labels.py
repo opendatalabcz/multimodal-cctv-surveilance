@@ -8,7 +8,7 @@ from eval.cost import cost_usd, summarize_usage, token_counts
 from eval.concurrency import run_models_parallel
 from eval.fingerprints import evaluation_fingerprint, sha256_file
 from eval.labels import build_samples
-from eval.scoring import flicker, prediction_row, summarize
+from eval.scoring import detailed_prediction_row, flicker, prediction_row, summarize
 
 ROOT = Path(__file__).resolve().parents[1]
 DURATIONS = {
@@ -210,6 +210,27 @@ def test_parse_failure_counts_as_wrong_and_flicker_ignores_real_changes() -> Non
     assert flips["by_state"]["parked"]["flips"] == 1
 
 
+def test_detailed_prediction_row_records_model_and_cache_status() -> None:
+    sample = _at(build_samples(_timestamps(), DURATIONS, 60), "cloudy_6", 0)
+    record = {
+        "parse_ok": True,
+        "parsed": {**sample.truth(), "description": "Visible apron."},
+        "cache_hit": True,
+        "usage": {"input_tokens": 10, "output_tokens": 2},
+        "raw_response": '{"parked": false}',
+        "repair_raw_response": None,
+    }
+
+    row = detailed_prediction_row(sample, "gpt-4o", record)
+    assert row["model"] == "gpt-4o"
+    assert row["cache_hit"] is True
+    assert row["truth"] == sample.truth()
+    assert row["pred"] == sample.truth()
+    assert row["parse_ok"] is True
+    assert row["usage"] == record["usage"]
+    assert row["raw_response"] == record["raw_response"]
+
+
 def test_cost_uses_cached_input_rate_and_both_usage_shapes() -> None:
     chat = token_counts(
         {
@@ -320,6 +341,7 @@ if __name__ == "__main__":
     test_prompt_levels()
     test_example_sets_are_held_out_and_labelled_from_timestamps()
     test_parse_failure_counts_as_wrong_and_flicker_ignores_real_changes()
+    test_detailed_prediction_row_records_model_and_cache_status()
     test_cost_uses_cached_input_rate_and_both_usage_shapes()
     test_models_run_in_parallel_with_sequential_calls_per_model()
     test_model_concurrency_limit_is_respected()
